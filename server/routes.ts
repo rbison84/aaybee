@@ -12,11 +12,6 @@ async function updatePersonalRankings(
   winnerId: number,
   loserId: number,
   userId: string,
-  winnerRating: number,
-  loserRating: number,
-  winnerSigma: number,
-  loserSigma: number,
-  crowdBT: CrowdBT
 ): Promise<void> {
   try {
     // Get or create personal rankings for both restaurants
@@ -25,19 +20,14 @@ async function updatePersonalRankings(
     const loserRanking = await storage.getPersonalRanking(userId, loserId) ||
       await storage.createPersonalRanking(userId, loserId);
 
-    console.log(`Updating personal rankings for user ${userId}:`, {
-      winner: { id: winnerId, currentScore: winnerRating },
-      loser: { id: loserId, currentScore: loserRating }
-    });
-
-    // Use the same CrowdBT instance and ratings as global
-    const [newWinnerScore, newWinnerSigma, newLoserScore, newLoserSigma] =
-      crowdBT.updateRatings(
-        winnerRating,
-        winnerSigma,
-        loserRating,
-        loserSigma
-      );
+    // Use a separate CrowdBT instance for personal rankings
+    const crowdBT = new CrowdBT();
+    const [newWinnerScore, , newLoserScore] = crowdBT.updateRatings(
+      winnerRanking.score,
+      1, // Fixed sigma for personal rankings
+      loserRanking.score,
+      1
+    );
 
     // Update both rankings
     await Promise.all([
@@ -103,7 +93,7 @@ export function registerRoutes(app: Express) {
       notTried: notTried ?? false
     });
 
-    // Only update ratings if the user made an actual choice
+    // Only update ratings if the user made an actual choice and is authenticated
     if (!notTried) {
       const winner = await storage.getRestaurantById(comparison.winnerId);
       const loser = await storage.getRestaurantById(comparison.loserId);
@@ -112,7 +102,7 @@ export function registerRoutes(app: Express) {
         return res.status(404).json({ error: "Restaurant not found" });
       }
 
-      // Use a single CrowdBT instance for both updates
+      // Update global rankings
       const crowdBT = new CrowdBT();
       const winnerRating = winner.rating ?? 0;
       const loserRating = loser.rating ?? 0;
@@ -127,28 +117,21 @@ export function registerRoutes(app: Express) {
           loserSigma
         );
 
-      console.log('Updating rankings:', {
+      console.log('Updating global rankings:', {
         winner: { id: winner.id, oldRating: winnerRating, newRating: newWinnerRating },
         loser: { id: loser.id, oldRating: loserRating, newRating: newLoserRating }
       });
 
-      // Update both global and personal rankings using the same parameters
+      // Update global rankings
       await Promise.all([
         storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
-        storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma),
-        // Update personal rankings with the same ratings
-        updatePersonalRankings(
-          storage,
-          winner.id,
-          loser.id,
-          userId,
-          winnerRating,
-          loserRating,
-          winnerSigma,
-          loserSigma,
-          crowdBT
-        )
+        storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma)
       ]);
+
+      // Only update personal rankings if user is authenticated (not anonymous)
+      if (userId !== 'anonymous') {
+        await updatePersonalRankings(storage, winner.id, loser.id, userId);
+      }
     }
 
     res.json(comparison);
@@ -182,40 +165,40 @@ export function registerRoutes(app: Express) {
     // Calculate cuisine preferences
     const preferences = new Map<string, number>();
     for (const comparison of comparisons) {
-      if (comparison.notTried) continue; // Skip comparisons where user hasn't tried the restaurants
+      if (comparison.notTried) continue;
 
       const winner = await storage.getRestaurantById(comparison.winnerId);
       const loser = await storage.getRestaurantById(comparison.loserId);
 
       if (winner && loser) {
-        // Increase score for winner's cuisines
         winner.cuisineTypes.forEach(cuisine => {
           preferences.set(cuisine, (preferences.get(cuisine) || 0) + 1);
         });
-        // Slightly decrease score for loser's cuisines
         loser.cuisineTypes.forEach(cuisine => {
           preferences.set(cuisine, (preferences.get(cuisine) || 0) - 0.5);
         });
       }
     }
 
-    // Get all restaurants and sort by preference score and rating
+    // Get all restaurants and sort by preference score and personal rating
     const restaurants = await storage.getRestaurants();
-    const recommendations = restaurants
-      .map(restaurant => {
+    const recommendations = await Promise.all(
+      restaurants.map(async (restaurant) => {
         const preferenceScore = restaurant.cuisineTypes.reduce(
           (score, cuisine) => score + (preferences.get(cuisine) || 0),
           0
         );
-        return { ...restaurant, preferenceScore };
+        const personalRanking = await storage.getPersonalRanking(userId, restaurant.id);
+        return {
+          ...restaurant,
+          preferenceScore: preferenceScore + (personalRanking?.score || 0)
+        };
       })
-      .sort((a, b) =>
-        // Combine preference score with rating for final ranking
-        (b.preferenceScore + (b.rating || 0)) - (a.preferenceScore + (a.rating || 0))
-      )
-      .slice(0, 5); // Return top 5 recommendations
+    );
 
-    res.json(recommendations);
+    // Sort by combined score and return top 5
+    recommendations.sort((a, b) => b.preferenceScore - a.preferenceScore);
+    res.json(recommendations.slice(0, 5));
   });
 
   // Mark restaurants as tried
