@@ -37,7 +37,15 @@ export default function Rankings() {
   }
 
   const sortedRestaurants = restaurants
-    ?.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)) || [];
+    ?.sort((a, b) => {
+      // First sort by rating
+      const ratingDiff = (b.rating ?? 0) - (a.rating ?? 0);
+      // If ratings are equal (e.g., both 0), sort alphabetically
+      if (ratingDiff === 0) {
+        return a.name.localeCompare(b.name);
+      }
+      return ratingDiff;
+    }) || [];
 
   return (
     <div className="max-w-4xl mx-auto">

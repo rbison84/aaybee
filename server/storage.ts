@@ -455,7 +455,7 @@ export class DatabaseStorage implements IStorage {
         .from(personalRankings)
         .where(eq(personalRankings.userId, userId))
         .innerJoin(restaurants, eq(personalRankings.restaurantId, restaurants.id))
-        .orderBy(desc(personalRankings.score)); // Use desc from drizzle-orm
+        .orderBy(desc(personalRankings.score), restaurants.name); // Add secondary sort by name
       return rankings;
     } catch (error) {
       console.error('Error fetching personal rankings:', error);
