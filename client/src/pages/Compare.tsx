@@ -28,7 +28,10 @@ export default function Compare() {
           restaurantIds: [pair[0].id, pair[1].id],
           userId: user?.id || 'anonymous',
           context: { timeOfDay: new Date().getHours() },
-          notTried: true
+          notTried: true,
+          // Remove winner/loser IDs for "not tried" case
+          winnerId: null,
+          loserId: null
         });
       } else if (winnerId) {
         const loserId = pair.find(r => r.id !== winnerId)?.id;
@@ -111,7 +114,7 @@ export default function Compare() {
           onClick={handleNotTried}
           className="text-muted-foreground"
         >
-          I don't know
+          I don't know these restaurants
         </Button>
       </div>
     </div>

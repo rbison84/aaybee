@@ -449,7 +449,7 @@ export class DatabaseStorage implements IStorage {
       const userComparisons = await this.getComparisons(userId);
 
       // Filter out "not tried" comparisons
-      const validComparisons = userComparisons.filter(c => !c.notTried);
+      const validComparisons = userComparisons.filter(c => !c.notTried && c.winnerId !== null && c.loserId !== null);
 
       // Create or get personal rankings for all restaurants
       const rankings = await Promise.all(
