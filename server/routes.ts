@@ -11,7 +11,12 @@ async function updatePersonalRankings(
   storage: IStorage,
   winnerId: number,
   loserId: number,
-  userId: string
+  userId: string,
+  winnerRating: number,
+  loserRating: number,
+  winnerSigma: number,
+  loserSigma: number,
+  crowdBT: CrowdBT
 ): Promise<void> {
   try {
     // Get or create personal rankings for both restaurants
@@ -21,18 +26,17 @@ async function updatePersonalRankings(
       await storage.createPersonalRanking(userId, loserId);
 
     console.log(`Updating personal rankings for user ${userId}:`, {
-      winner: { id: winnerId, currentScore: winnerRanking.score },
-      loser: { id: loserId, currentScore: loserRanking.score }
+      winner: { id: winnerId, currentScore: winnerRating },
+      loser: { id: loserId, currentScore: loserRating }
     });
 
-    // Use CrowdBT for personal rankings
-    const crowdBT = new CrowdBT();
+    // Use the same CrowdBT instance and ratings as global
     const [newWinnerScore, newWinnerSigma, newLoserScore, newLoserSigma] =
       crowdBT.updateRatings(
-        winnerRanking.score,
-        winnerRanking.totalChoices > 0 ? 1 : 1,  // Match sigma behavior with global rankings
-        loserRanking.score,
-        loserRanking.totalChoices > 0 ? 1 : 1
+        winnerRating,
+        winnerSigma,
+        loserRating,
+        loserSigma
       );
 
     // Update both rankings
@@ -49,7 +53,10 @@ async function updatePersonalRankings(
       )
     ]);
 
-    console.log('Personal rankings updated successfully');
+    console.log('Personal rankings updated successfully', {
+      winner: { id: winnerId, newScore: newWinnerScore },
+      loser: { id: loserId, newScore: newLoserScore }
+    });
   } catch (error) {
     console.error('Error updating personal rankings:', error);
     throw error;
@@ -107,20 +114,40 @@ export function registerRoutes(app: Express) {
 
       // Use a single CrowdBT instance for both updates
       const crowdBT = new CrowdBT();
+      const winnerRating = winner.rating ?? 0;
+      const loserRating = loser.rating ?? 0;
+      const winnerSigma = winner.sigma ?? 1;
+      const loserSigma = loser.sigma ?? 1;
+
       const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] =
         crowdBT.updateRatings(
-          winner.rating ?? 0,
-          winner.sigma ?? 1,
-          loser.rating ?? 0,
-          loser.sigma ?? 1
+          winnerRating,
+          winnerSigma,
+          loserRating,
+          loserSigma
         );
 
-      // Update both global and personal rankings using the same CrowdBT parameters
+      console.log('Updating rankings:', {
+        winner: { id: winner.id, oldRating: winnerRating, newRating: newWinnerRating },
+        loser: { id: loser.id, oldRating: loserRating, newRating: newLoserRating }
+      });
+
+      // Update both global and personal rankings using the same parameters
       await Promise.all([
         storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
         storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma),
-        // Update personal rankings in parallel
-        updatePersonalRankings(storage, winner.id, loser.id, userId)
+        // Update personal rankings with the same ratings
+        updatePersonalRankings(
+          storage,
+          winner.id,
+          loser.id,
+          userId,
+          winnerRating,
+          loserRating,
+          winnerSigma,
+          loserSigma,
+          crowdBT
+        )
       ]);
     }
 
