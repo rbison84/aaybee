@@ -30,9 +30,9 @@ async function updatePersonalRankings(
     const [newWinnerScore, newWinnerSigma, newLoserScore, newLoserSigma] =
       crowdBT.updateRatings(
         winnerRanking.score,
-        1, // Using constant sigma for personal rankings for simplicity
+        winnerRanking.totalChoices > 0 ? 1 : 1,  // Match sigma behavior with global rankings
         loserRanking.score,
-        1
+        loserRanking.totalChoices > 0 ? 1 : 1
       );
 
     // Update both rankings

@@ -453,8 +453,7 @@ export class DatabaseStorage implements IStorage {
         .from(personalRankings)
         .where(eq(personalRankings.userId, userId))
         .innerJoin(restaurants, eq(personalRankings.restaurantId, restaurants.id))
-        .orderBy(personalRankings.score, "desc"); // Add desc to order by score in descending order
-
+        .orderBy(personalRankings.score, "desc"); 
       return rankings;
     } catch (error) {
       console.error('Error fetching personal rankings:', error);
@@ -464,6 +463,19 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+async function initializePersonalRankings(userId: string) {
+  const restaurants = await storage.getRestaurants();
+  console.log(`Initializing personal rankings for user ${userId} with ${restaurants.length} restaurants`);
+
+  for (const restaurant of restaurants) {
+    const existing = await storage.getPersonalRanking(userId, restaurant.id);
+    if (!existing) {
+      await storage.createPersonalRanking(userId, restaurant.id);
+      console.log(`Created personal ranking for restaurant ${restaurant.id}`);
+    }
+  }
+}
 
 (async () => {
   try {
@@ -476,6 +488,8 @@ export const storage = new DatabaseStorage();
       }
       console.log('Seeding complete');
     }
+
+    await initializePersonalRankings('anonymous');
   } catch (error) {
     console.error('Error during seeding:', error);
   }
