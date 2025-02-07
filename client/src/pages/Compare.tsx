@@ -99,7 +99,7 @@ export default function Compare() {
           onClick={handleNotTried}
           className="text-muted-foreground"
         >
-          Haven't tried both
+          I don't know
         </Button>
       </div>
     </div>

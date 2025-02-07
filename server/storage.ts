@@ -185,6 +185,186 @@ const initialRestaurants: InsertRestaurant[] = [
     name: "Ethiopic",
     area: "H Street",
     cuisineTypes: ["Ethiopian", "African"],
+  },
+  {
+    name: "Pineapple and Pearls",
+    area: "Capitol Hill",
+    cuisineTypes: ["American", "Fine Dining"],
+  },
+  {
+    name: "Queen's English",
+    area: "Columbia Heights",
+    cuisineTypes: ["Hong Kong", "Asian"],
+  },
+  {
+    name: "Albi",
+    area: "Navy Yard",
+    cuisineTypes: ["Middle Eastern", "Mediterranean"],
+  },
+  {
+    name: "Imperfecto",
+    area: "West End",
+    cuisineTypes: ["Mediterranean", "Latin"],
+  },
+  {
+    name: "L'Ardente",
+    area: "East End",
+    cuisineTypes: ["Italian", "Contemporary"],
+  },
+  {
+    name: "Moon Rabbit",
+    area: "Wharf",
+    cuisineTypes: ["Vietnamese", "Asian"],
+  },
+  {
+    name: "Reveler's Hour",
+    area: "Adams Morgan",
+    cuisineTypes: ["Italian", "Wine Bar"],
+  },
+  {
+    name: "Daru",
+    area: "H Street",
+    cuisineTypes: ["Indian", "Contemporary"],
+  },
+  {
+    name: "Oyster Oyster",
+    area: "Shaw",
+    cuisineTypes: ["Vegetarian", "Contemporary"],
+  },
+  {
+    name: "Rooster & Owl",
+    area: "14th Street",
+    cuisineTypes: ["Contemporary", "American"],
+  },
+  {
+    name: "Chercher Ethiopian",
+    area: "Shaw",
+    cuisineTypes: ["Ethiopian", "African"],
+  },
+  {
+    name: "Caruso's Grocery",
+    area: "Capitol Hill",
+    cuisineTypes: ["Italian", "Traditional"],
+  },
+  {
+    name: "Maketto",
+    area: "H Street",
+    cuisineTypes: ["Cambodian", "Taiwanese"],
+  },
+  {
+    name: "Little Pearl",
+    area: "Capitol Hill",
+    cuisineTypes: ["American", "Cafe"],
+  },
+  {
+    name: "The Duck & The Peach",
+    area: "Capitol Hill",
+    cuisineTypes: ["New American", "Mediterranean"],
+  },
+  {
+    name: "Muchas Gracias",
+    area: "Georgetown",
+    cuisineTypes: ["Mexican", "Latin American"],
+  },
+  {
+    name: "Yellow",
+    area: "Georgetown",
+    cuisineTypes: ["Mediterranean", "Middle Eastern"],
+  },
+  {
+    name: "La Tejana",
+    area: "Mount Pleasant",
+    cuisineTypes: ["Mexican", "Breakfast"],
+  },
+  {
+    name: "Makan",
+    area: "Columbia Heights",
+    cuisineTypes: ["Malaysian", "Asian"],
+  },
+  {
+    name: "Elle",
+    area: "Mount Pleasant",
+    cuisineTypes: ["American", "Bakery"],
+  },
+  {
+    name: "Daikaya",
+    area: "Penn Quarter",
+    cuisineTypes: ["Japanese", "Ramen"],
+  },
+  {
+    name: "Bistro Bis",
+    area: "Capitol Hill",
+    cuisineTypes: ["French", "Traditional"],
+  },
+  {
+    name: "St. Anselm",
+    area: "Union Market",
+    cuisineTypes: ["American", "Steakhouse"],
+  },
+  {
+    name: "Fancy Radish",
+    area: "H Street",
+    cuisineTypes: ["Vegan", "Contemporary"],
+  },
+  {
+    name: "Ambar",
+    area: "Capitol Hill",
+    cuisineTypes: ["Balkan", "European"],
+  },
+  {
+    name: "Bantam King",
+    area: "Penn Quarter",
+    cuisineTypes: ["Japanese", "Chicken"],
+  },
+  {
+    name: "The Salt Line",
+    area: "Navy Yard",
+    cuisineTypes: ["Seafood", "New England"],
+  },
+  {
+    name: "All Purpose",
+    area: "Shaw",
+    cuisineTypes: ["Pizza", "Italian"],
+  },
+  {
+    name: "Chiko",
+    area: "Capitol Hill",
+    cuisineTypes: ["Korean", "Chinese"],
+  },
+  {
+    name: "Nina May",
+    area: "Logan Circle",
+    cuisineTypes: ["American", "Farm to Table"],
+  },
+  {
+    name: "Lucky Danger",
+    area: "Mount Vernon",
+    cuisineTypes: ["Chinese", "American Chinese"],
+  },
+  {
+    name: "Tonari",
+    area: "Penn Quarter",
+    cuisineTypes: ["Japanese", "Italian"],
+  },
+  {
+    name: "Residents Cafe",
+    area: "Dupont Circle",
+    cuisineTypes: ["American", "Cafe"],
+  },
+  {
+    name: "Estuary",
+    area: "Downtown",
+    cuisineTypes: ["Seafood", "American"],
+  },
+  {
+    name: "Unconventional Diner",
+    area: "Shaw",
+    cuisineTypes: ["American", "Diner"],
+  },
+  {
+    name: "La Collina",
+    area: "Capitol Hill",
+    cuisineTypes: ["Italian", "Traditional"],
   }
 ];
 
