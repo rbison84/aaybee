@@ -14,30 +14,42 @@ async function updatePersonalRankings(
   loserId: number,
   userId: string
 ): Promise<void> {
-  // Get or create personal rankings for both restaurants
-  const winnerRanking = await storage.getPersonalRanking(userId, winnerId) ||
-    await storage.createPersonalRanking(userId, winnerId);
-  const loserRanking = await storage.getPersonalRanking(userId, loserId) ||
-    await storage.createPersonalRanking(userId, loserId);
+  try {
+    // Get or create personal rankings for both restaurants
+    const winnerRanking = await storage.getPersonalRanking(userId, winnerId) ||
+      await storage.createPersonalRanking(userId, winnerId);
+    const loserRanking = await storage.getPersonalRanking(userId, loserId) ||
+      await storage.createPersonalRanking(userId, loserId);
 
-  // Calculate new ELO scores
-  const expectedScore = 1 / (1 + Math.pow(10, (loserRanking.score - winnerRanking.score) / 400));
-  const kFactor = 32;
-  const updateAmount = kFactor * (1 - expectedScore);
+    console.log(`Updating personal rankings for user ${userId}:`, {
+      winner: { id: winnerId, currentScore: winnerRanking.score },
+      loser: { id: loserId, currentScore: loserRanking.score }
+    });
 
-  // Update both rankings
-  await Promise.all([
-    storage.updatePersonalRanking(
-      winnerRanking.id,
-      winnerRanking.score + updateAmount,
-      winnerRanking.totalChoices + 1
-    ),
-    storage.updatePersonalRanking(
-      loserRanking.id,
-      loserRanking.score - updateAmount,
-      loserRanking.totalChoices + 1
-    )
-  ]);
+    // Calculate new ELO scores
+    const expectedScore = 1 / (1 + Math.pow(10, (loserRanking.score - winnerRanking.score) / 400));
+    const kFactor = 32;
+    const updateAmount = kFactor * (1 - expectedScore);
+
+    // Update both rankings
+    await Promise.all([
+      storage.updatePersonalRanking(
+        winnerRanking.id,
+        winnerRanking.score + updateAmount,
+        winnerRanking.totalChoices + 1
+      ),
+      storage.updatePersonalRanking(
+        loserRanking.id,
+        loserRanking.score - updateAmount,
+        loserRanking.totalChoices + 1
+      )
+    ]);
+
+    console.log('Personal rankings updated successfully');
+  } catch (error) {
+    console.error('Error updating personal rankings:', error);
+    throw error;
+  }
 }
 
 export function registerRoutes(app: Express) {

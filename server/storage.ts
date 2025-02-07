@@ -453,7 +453,7 @@ export class DatabaseStorage implements IStorage {
         .from(personalRankings)
         .where(eq(personalRankings.userId, userId))
         .innerJoin(restaurants, eq(personalRankings.restaurantId, restaurants.id))
-        .orderBy(personalRankings.score);
+        .orderBy(personalRankings.score, "desc"); // Add desc to order by score in descending order
 
       return rankings;
     } catch (error) {
