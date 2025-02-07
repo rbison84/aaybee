@@ -365,6 +365,16 @@ const initialRestaurants: InsertRestaurant[] = [
     name: "La Collina",
     area: "Capitol Hill",
     cuisineTypes: ["Italian", "Traditional"],
+  },
+  {
+    name: "Convivial",
+    area: "Shaw",
+    cuisineTypes: ["French", "Contemporary"],
+  },
+  {
+    name: "Federalist Pig",
+    area: "Adams Morgan",
+    cuisineTypes: ["BBQ", "American"],
   }
 ];
 
