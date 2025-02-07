@@ -45,10 +45,30 @@ export const insertRestaurantSchema = createInsertSchema(restaurants).omit({
   createdAt: true,
 });
 
-export const insertComparisonSchema = createInsertSchema(comparisons).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertComparisonSchema = createInsertSchema(comparisons)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    // Make winnerId and loserId optional when notTried is true
+    winnerId: z.number().nullable(),
+    loserId: z.number().nullable(),
+    notTried: z.boolean().default(false),
+  })
+  .refine(
+    (data) => {
+      // When notTried is true, both IDs should be null
+      if (data.notTried) {
+        return data.winnerId === null && data.loserId === null;
+      }
+      // When notTried is false, both IDs should be numbers
+      return data.winnerId !== null && data.loserId !== null;
+    },
+    {
+      message: "Winner and loser IDs must be provided for valid comparisons, or both null for not tried",
+    }
+  );
 
 export const insertTriedRestaurantSchema = createInsertSchema(triedRestaurants).omit({
   id: true,

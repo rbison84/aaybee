@@ -29,7 +29,6 @@ export default function Compare() {
           userId: user?.id || 'anonymous',
           context: { timeOfDay: new Date().getHours() },
           notTried: true,
-          // Remove winner/loser IDs for "not tried" case
           winnerId: null,
           loserId: null
         });
@@ -114,7 +113,7 @@ export default function Compare() {
           onClick={handleNotTried}
           className="text-muted-foreground"
         >
-          I don't know these restaurants
+          I don't know
         </Button>
       </div>
     </div>
