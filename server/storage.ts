@@ -109,7 +109,7 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-// Initialize with seed data
+// Initial restaurants data
 const initialRestaurants: InsertRestaurant[] = [
   {
     name: "Rose's Luxury",
