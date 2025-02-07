@@ -442,6 +442,16 @@ export class DatabaseStorage implements IStorage {
     userId: string
   ): Promise<(PersonalRanking & { restaurant: Restaurant })[]> {
     try {
+      // First ensure the user has personal rankings initialized
+      const allRestaurants = await this.getRestaurants();
+      for (const restaurant of allRestaurants) {
+        const existing = await this.getPersonalRanking(userId, restaurant.id);
+        if (!existing) {
+          await this.createPersonalRanking(userId, restaurant.id);
+        }
+      }
+
+      // Now fetch all rankings with restaurants
       const rankings = await db
         .select({
           id: personalRankings.id,
@@ -454,15 +464,21 @@ export class DatabaseStorage implements IStorage {
         })
         .from(personalRankings)
         .where(eq(personalRankings.userId, userId))
-        .innerJoin(restaurants, eq(personalRankings.restaurantId, restaurants.id))
-        .orderBy(desc(personalRankings.score), restaurants.name);
+        .innerJoin(restaurants, eq(personalRankings.restaurantId, restaurants.id));
 
-      // If all scores are 0 (new user), sort alphabetically by restaurant name
+      // Sort by restaurant name if all scores are 0 (new user)
       if (rankings.every(r => r.score === 0)) {
         return rankings.sort((a, b) => a.restaurant.name.localeCompare(b.restaurant.name));
       }
 
-      return rankings;
+      // Otherwise sort by score and then name
+      return rankings.sort((a, b) => {
+        const scoreDiff = b.score - a.score;
+        if (scoreDiff === 0) {
+          return a.restaurant.name.localeCompare(b.restaurant.name);
+        }
+        return scoreDiff;
+      });
     } catch (error) {
       console.error('Error fetching personal rankings:', error);
       return [];
@@ -471,19 +487,6 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
-
-async function initializePersonalRankings(userId: string) {
-  const restaurants = await storage.getRestaurants();
-  console.log(`Initializing personal rankings for user ${userId} with ${restaurants.length} restaurants`);
-
-  for (const restaurant of restaurants) {
-    const existing = await storage.getPersonalRanking(userId, restaurant.id);
-    if (!existing) {
-      await storage.createPersonalRanking(userId, restaurant.id);
-      console.log(`Created personal ranking for restaurant ${restaurant.id}`);
-    }
-  }
-}
 
 (async () => {
   try {
@@ -497,7 +500,7 @@ async function initializePersonalRankings(userId: string) {
       console.log('Seeding complete');
     }
 
-    await initializePersonalRankings('anonymous');
+    await storage.getPersonalRankings('anonymous'); //Initialize anonymous user rankings here
   } catch (error) {
     console.error('Error during seeding:', error);
   }
