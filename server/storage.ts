@@ -104,7 +104,7 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-// Initial restaurants data
+// Adding more restaurants while keeping existing ones and structure
 const initialRestaurants: InsertRestaurant[] = [
   {
     name: "Rose's Luxury",
@@ -370,6 +370,156 @@ const initialRestaurants: InsertRestaurant[] = [
     name: "Federalist Pig",
     area: "Adams Morgan",
     cuisineTypes: ["BBQ", "American"],
+  },
+  {
+    name: "New Restaurant 1",
+    area: "Shaw",
+    cuisineTypes: ["Thai", "Asian"],
+  },
+  {
+    name: "New Restaurant 2",
+    area: "U Street",
+    cuisineTypes: ["Mexican", "Tacos"],
+  },
+  {
+    name: "New Restaurant 3",
+    area: "Dupont Circle",
+    cuisineTypes: ["Italian", "Pasta"],
+  },
+  {
+    name: "New Restaurant 4",
+    area: "Capitol Hill",
+    cuisineTypes: ["American", "Burgers"],
+  },
+  {
+    name: "New Restaurant 5",
+    area: "Georgetown",
+    cuisineTypes: ["Seafood", "Fine Dining"],
+  },
+  {
+    name: "New Restaurant 6",
+    area: "Adams Morgan",
+    cuisineTypes: ["Ethiopian", "Vegetarian"],
+  },
+  {
+    name: "New Restaurant 7",
+    area: "14th Street",
+    cuisineTypes: ["French", "Bistro"],
+  },
+  {
+    name: "New Restaurant 8",
+    area: "Columbia Heights",
+    cuisineTypes: ["Pizza", "Neapolitan"],
+  },
+  {
+    name: "New Restaurant 9",
+    area: "Penn Quarter",
+    cuisineTypes: ["Indian", "Curries"],
+  },
+  {
+    name: "New Restaurant 10",
+    area: "Navy Yard",
+    cuisineTypes: ["American", "Brewery"],
+  },
+  {
+    name: "New Restaurant 11",
+    area: "H Street",
+    cuisineTypes: ["Vietnamese", "Pho"],
+  },
+  {
+    name: "New Restaurant 12",
+    area: "Logan Circle",
+    cuisineTypes: ["American", "Gastropub"],
+  },
+  {
+    name: "New Restaurant 13",
+    area: "Mount Vernon",
+    cuisineTypes: ["Chinese", "Dim Sum"],
+  },
+  {
+    name: "New Restaurant 14",
+    area: "Mount Pleasant",
+    cuisineTypes: ["Latin American", "Tapas"],
+  },
+  {
+    name: "New Restaurant 15",
+    area: "Union Market",
+    cuisineTypes: ["American", "Comfort Food"],
+  },
+  {
+    name: "New Restaurant 16",
+    area: "West End",
+    cuisineTypes: ["Mediterranean", "Lebanese"],
+  },
+  {
+    name: "New Restaurant 17",
+    area: "East End",
+    cuisineTypes: ["Italian", "Pizza"],
+  },
+  {
+    name: "New Restaurant 18",
+    area: "Wharf",
+    cuisineTypes: ["Seafood", "Oysters"],
+  },
+  {
+    name: "New Restaurant 19",
+    area: "Shaw",
+    cuisineTypes: ["American", "Southern"],
+  },
+  {
+    name: "New Restaurant 20",
+    area: "Capitol Hill",
+    cuisineTypes: ["American", "Bakery"],
+  },
+    {
+    name: "New Restaurant 21",
+    area: "Shaw",
+    cuisineTypes: ["American", "Burgers"],
+  },
+    {
+    name: "New Restaurant 22",
+    area: "Capitol Hill",
+    cuisineTypes: ["American", "Cafe"],
+  },
+    {
+    name: "New Restaurant 23",
+    area: "Georgetown",
+    cuisineTypes: ["American", "Seafood"],
+  },
+    {
+    name: "New Restaurant 24",
+    area: "Adams Morgan",
+    cuisineTypes: ["American", "Tapas"],
+  },
+    {
+    name: "New Restaurant 25",
+    area: "14th Street",
+    cuisineTypes: ["American", "Gastropub"],
+  },
+    {
+    name: "New Restaurant 26",
+    area: "Columbia Heights",
+    cuisineTypes: ["American", "Pizza"],
+  },
+    {
+    name: "New Restaurant 27",
+    area: "Penn Quarter",
+    cuisineTypes: ["American", "Steakhouse"],
+  },
+    {
+    name: "New Restaurant 28",
+    area: "Navy Yard",
+    cuisineTypes: ["American", "Brewery"],
+  },
+    {
+    name: "New Restaurant 29",
+    area: "H Street",
+    cuisineTypes: ["American", "Fine Dining"],
+  },
+    {
+    name: "New Restaurant 30",
+    area: "Logan Circle",
+    cuisineTypes: ["American", "Comfort Food"],
   }
 ];
 
