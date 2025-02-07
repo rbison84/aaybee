@@ -26,30 +26,36 @@ export function registerRoutes(app: Express) {
       return res.status(400).json({ error: result.error });
     }
 
-    // If notTried is true, just record the comparison without updating ratings
-    if (result.data.notTried) {
-      const comparison = await storage.createComparison(result.data);
-      return res.json(comparison);
+    const { winnerId, loserId, userId, context, notTried } = result.data;
+
+    // For "Haven't tried both" case, we'll just record the comparison
+    // using the first restaurant as winner and second as loser
+    const comparison = await storage.createComparison({
+      winnerId: notTried ? req.body.restaurantIds[0] : winnerId,
+      loserId: notTried ? req.body.restaurantIds[1] : loserId,
+      userId,
+      context,
+      notTried: notTried ?? false
+    });
+
+    // Only update ratings if the user made an actual choice
+    if (!notTried) {
+      const winner = await storage.getRestaurantById(comparison.winnerId);
+      const loser = await storage.getRestaurantById(comparison.loserId);
+
+      if (!winner || !loser) {
+        return res.status(404).json({ error: "Restaurant not found" });
+      }
+
+      const crowdBT = new CrowdBT();
+      const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] =
+        crowdBT.updateRatings(winner.rating ?? 0, winner.sigma ?? 1, loser.rating ?? 0, loser.sigma ?? 1);
+
+      await Promise.all([
+        storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
+        storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma)
+      ]);
     }
-
-    const comparison = await storage.createComparison(result.data);
-
-    // Update ratings using CrowdBT
-    const winner = await storage.getRestaurantById(comparison.winnerId);
-    const loser = await storage.getRestaurantById(comparison.loserId);
-
-    if (!winner || !loser) {
-      return res.status(404).json({ error: "Restaurant not found" });
-    }
-
-    const crowdBT = new CrowdBT();
-    const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] =
-      crowdBT.updateRatings(winner.rating ?? 0, winner.sigma ?? 1, loser.rating ?? 0, loser.sigma ?? 1);
-
-    await Promise.all([
-      storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
-      storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma)
-    ]);
 
     res.json(comparison);
   });
@@ -80,6 +86,8 @@ export function registerRoutes(app: Express) {
     // Calculate cuisine preferences
     const preferences = new Map<string, number>();
     for (const comparison of comparisons) {
+      if (comparison.notTried) continue; // Skip comparisons where user hasn't tried the restaurants
+
       const winner = await storage.getRestaurantById(comparison.winnerId);
       const loser = await storage.getRestaurantById(comparison.loserId);
 

@@ -19,18 +19,27 @@ export default function Compare() {
   const submitMutation = useMutation({
     mutationFn: async ({ winnerId, notTried }: { winnerId?: number, notTried?: boolean }) => {
       if (!pair) return;
-      const loserId = winnerId ? pair.find(r => r.id !== winnerId)?.id : undefined;
 
-      await apiRequest("POST", "/api/comparisons", {
-        winnerId,
-        loserId,
-        userId: "anonymous",
-        context: { timeOfDay: new Date().getHours() },
-        notTried: notTried ?? false
-      });
+      if (notTried) {
+        await apiRequest("POST", "/api/comparisons", {
+          restaurantIds: pair.map(r => r.id),
+          userId: "anonymous",
+          context: { timeOfDay: new Date().getHours() },
+          notTried: true
+        });
+      } else if (winnerId) {
+        const loserId = pair.find(r => r.id !== winnerId)?.id;
+        if (!loserId) return;
 
-      // If the user made a choice (not "Haven't tried both"), mark both restaurants as tried
-      if (!notTried && winnerId) {
+        await apiRequest("POST", "/api/comparisons", {
+          winnerId,
+          loserId,
+          userId: "anonymous",
+          context: { timeOfDay: new Date().getHours() },
+          notTried: false
+        });
+
+        // If the user made a choice, mark both restaurants as tried
         await apiRequest("POST", "/api/restaurants/tried", {
           restaurantIds: pair.map(r => r.id)
         });
