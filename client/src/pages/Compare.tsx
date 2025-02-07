@@ -22,7 +22,7 @@ export default function Compare() {
 
       if (notTried) {
         await apiRequest("POST", "/api/comparisons", {
-          restaurantIds: pair.map(r => r.id),
+          restaurantIds: [pair[0].id, pair[1].id],
           userId: "anonymous",
           context: { timeOfDay: new Date().getHours() },
           notTried: true
@@ -41,7 +41,7 @@ export default function Compare() {
 
         // If the user made a choice, mark both restaurants as tried
         await apiRequest("POST", "/api/restaurants/tried", {
-          restaurantIds: pair.map(r => r.id)
+          restaurantIds: [pair[0].id, pair[1].id]
         });
       }
     },
