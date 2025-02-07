@@ -1,6 +1,6 @@
 import { type Restaurant, type InsertRestaurant, type Comparison, type InsertComparison, restaurants, comparisons, type TriedRestaurant, triedRestaurants, type PersonalRanking, personalRankings } from "@shared/schema";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 
 const initialRestaurants: InsertRestaurant[] = [
   {
@@ -405,6 +405,8 @@ export class DatabaseStorage implements IStorage {
         .values({
           userId,
           restaurantId,
+          score: 0, // Start with same initial score as global rankings
+          totalChoices: 0,
         })
         .returning();
       return ranking;
@@ -453,7 +455,7 @@ export class DatabaseStorage implements IStorage {
         .from(personalRankings)
         .where(eq(personalRankings.userId, userId))
         .innerJoin(restaurants, eq(personalRankings.restaurantId, restaurants.id))
-        .orderBy(personalRankings.score, "desc"); 
+        .orderBy(desc(personalRankings.score)); // Use desc from drizzle-orm
       return rankings;
     } catch (error) {
       console.error('Error fetching personal rankings:', error);

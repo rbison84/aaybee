@@ -105,11 +105,17 @@ export function registerRoutes(app: Express) {
         return res.status(404).json({ error: "Restaurant not found" });
       }
 
-      // Update global rankings
+      // Use a single CrowdBT instance for both updates
       const crowdBT = new CrowdBT();
       const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] =
-        crowdBT.updateRatings(winner.rating ?? 0, winner.sigma ?? 1, loser.rating ?? 0, loser.sigma ?? 1);
+        crowdBT.updateRatings(
+          winner.rating ?? 0,
+          winner.sigma ?? 1,
+          loser.rating ?? 0,
+          loser.sigma ?? 1
+        );
 
+      // Update both global and personal rankings using the same CrowdBT parameters
       await Promise.all([
         storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
         storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma),
