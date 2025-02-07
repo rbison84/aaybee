@@ -81,58 +81,64 @@ export function registerRoutes(app: Express) {
       return res.status(400).json({ error: result.error });
     }
 
-    const { winnerId, loserId, userId, context, notTried } = result.data;
+    try {
+      const { winnerId, loserId, userId, context, notTried } = result.data;
 
-    const comparison = await storage.createComparison({
-      winnerId: notTried ? null : winnerId,
-      loserId: notTried ? null : loserId,
-      userId,
-      context,
-      notTried
-    });
-
-    // Only update ratings if user made an actual choice
-    if (!notTried && winnerId && loserId) {
-      const winner = await storage.getRestaurantById(winnerId);
-      const loser = await storage.getRestaurantById(loserId);
-
-      if (!winner || !loser) {
-        return res.status(404).json({ error: "Restaurant not found" });
-      }
-
-      // Update global rankings
-      const crowdBT = new CrowdBT();
-      const winnerRating = winner.rating ?? 0;
-      const loserRating = loser.rating ?? 0;
-      const winnerSigma = winner.sigma ?? 1;
-      const loserSigma = loser.sigma ?? 1;
-
-      const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] =
-        crowdBT.updateRatings(
-          winnerRating,
-          winnerSigma,
-          loserRating,
-          loserSigma
-        );
-
-      console.log('Updating global rankings:', {
-        winner: { id: winner.id, oldRating: winnerRating, newRating: newWinnerRating },
-        loser: { id: loser.id, oldRating: loserRating, newRating: newLoserRating }
+      // Create comparison
+      const comparison = await storage.createComparison({
+        winnerId: notTried ? null : winnerId,
+        loserId: notTried ? null : loserId,
+        userId,
+        context,
+        notTried
       });
 
-      // Update global rankings
-      await Promise.all([
-        storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
-        storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma)
-      ]);
+      // Only update ratings if user made an actual choice
+      if (!notTried && winnerId && loserId) {
+        const winner = await storage.getRestaurantById(winnerId);
+        const loser = await storage.getRestaurantById(loserId);
 
-      // Only update personal rankings if user is authenticated (not anonymous)
-      if (userId !== 'anonymous') {
-        await updatePersonalRankings(storage, winner.id, loser.id, userId);
+        if (!winner || !loser) {
+          return res.status(404).json({ error: "Restaurant not found" });
+        }
+
+        // Update global rankings
+        const crowdBT = new CrowdBT();
+        const winnerRating = winner.rating ?? 0;
+        const loserRating = loser.rating ?? 0;
+        const winnerSigma = winner.sigma ?? 1;
+        const loserSigma = loser.sigma ?? 1;
+
+        const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] =
+          crowdBT.updateRatings(
+            winnerRating,
+            winnerSigma,
+            loserRating,
+            loserSigma
+          );
+
+        console.log('Updating global rankings:', {
+          winner: { id: winner.id, oldRating: winnerRating, newRating: newWinnerRating },
+          loser: { id: loser.id, oldRating: loserRating, newRating: newLoserRating }
+        });
+
+        // Update global rankings
+        await Promise.all([
+          storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
+          storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma)
+        ]);
+
+        // Only update personal rankings if user is authenticated (not anonymous)
+        if (userId !== 'anonymous') {
+          await updatePersonalRankings(storage, winner.id, loser.id, userId);
+        }
       }
-    }
 
-    res.json(comparison);
+      res.json(comparison);
+    } catch (error) {
+      console.error('Error processing comparison:', error);
+      res.status(500).json({ error: 'Failed to process comparison' });
+    }
   });
 
   // Filter restaurants

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { type Restaurant } from "@shared/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Compare() {
   const { toast } = useToast();
@@ -23,27 +23,23 @@ export default function Compare() {
     mutationFn: async ({ winnerId, notTried }: { winnerId?: number, notTried?: boolean }) => {
       if (!pair || pair.length !== 2) return;
 
-      if (notTried) {
-        await apiRequest("POST", "/api/comparisons", {
-          restaurantIds: [pair[0].id, pair[1].id],
-          userId: user?.id || 'anonymous',
-          context: { timeOfDay: new Date().getHours() },
-          notTried: true,
-          winnerId: null,
-          loserId: null
-        });
-      } else if (winnerId) {
-        const loserId = pair.find(r => r.id !== winnerId)?.id;
-        if (!loserId) return;
+      const payload = notTried ? {
+        userId: user?.id || 'anonymous',
+        context: { timeOfDay: new Date().getHours() },
+        notTried: true,
+        winnerId: null,
+        loserId: null
+      } : {
+        winnerId,
+        loserId: pair.find(r => r.id !== winnerId)?.id,
+        userId: user?.id || 'anonymous',
+        context: { timeOfDay: new Date().getHours() },
+        notTried: false
+      };
 
-        await apiRequest("POST", "/api/comparisons", {
-          winnerId,
-          loserId,
-          userId: user?.id || 'anonymous',
-          context: { timeOfDay: new Date().getHours() },
-          notTried: false
-        });
+      await apiRequest("POST", "/api/comparisons", payload);
 
+      if (!notTried) {
         await apiRequest("POST", "/api/restaurants/tried", {
           restaurantIds: [pair[0].id, pair[1].id],
           userId: user?.id || 'anonymous'
