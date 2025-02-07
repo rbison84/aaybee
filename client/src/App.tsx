@@ -54,12 +54,19 @@ function Navigation() {
 }
 
 function Router() {
+  const { isLoaded, isSignedIn } = useUser();
+
+  // Show loading state while Clerk loads
+  if (!isLoaded) return null;
+
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/compare" component={Compare} />
       <Route path="/rankings" component={Rankings} />
-      <Route path="/recommendations" component={Recommendations} />
+      <Route path="/recommendations" component={
+        () => isSignedIn ? <Recommendations /> : <SignIn routing="path" signUpUrl="/sign-up" />
+      } />
       <Route path="/sign-in/:path*" component={() => (
         <div className="flex justify-center items-center min-h-[80vh]">
           <SignIn path="/sign-in" routing="path" signUpUrl="/sign-up" />

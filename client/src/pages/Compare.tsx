@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useUser } from "@clerk/clerk-react";
 import { RestaurantCard } from "@/components/RestaurantCard";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,10 +11,11 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function Compare() {
   const { toast } = useToast();
+  const { user } = useUser();
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const { data: pair, isLoading, error, refetch } = useQuery<[Restaurant, Restaurant]>({
-    queryKey: ["/api/restaurants/pair"],
+    queryKey: ["/api/restaurants/pair", user?.id],
     retry: false
   });
 
@@ -24,7 +26,7 @@ export default function Compare() {
       if (notTried) {
         await apiRequest("POST", "/api/comparisons", {
           restaurantIds: [pair[0].id, pair[1].id],
-          userId: "anonymous",
+          userId: user?.id || 'anonymous',
           context: { timeOfDay: new Date().getHours() },
           notTried: true
         });
@@ -35,14 +37,14 @@ export default function Compare() {
         await apiRequest("POST", "/api/comparisons", {
           winnerId,
           loserId,
-          userId: "anonymous",
+          userId: user?.id || 'anonymous',
           context: { timeOfDay: new Date().getHours() },
           notTried: false
         });
 
         await apiRequest("POST", "/api/restaurants/tried", {
           restaurantIds: [pair[0].id, pair[1].id],
-          userId: "anonymous"
+          userId: user?.id || 'anonymous'
         });
       }
     },
