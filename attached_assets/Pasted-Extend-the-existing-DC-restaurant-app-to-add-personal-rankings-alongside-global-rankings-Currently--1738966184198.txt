@@ -1,0 +1,229 @@
+Extend the existing DC restaurant app to add personal rankings alongside global rankings.
+Currently have:
+- Restaurant A/B comparison
+- Global ranking system
+- Basic restaurant data
+
+Add these new features:
+
+1. Add to schema:
+*/
+
+// prisma/schema.prisma
+// (Keep existing Restaurant and GlobalRanking models)
+
+model PersonalRanking {
+  id           String     @id @default(cuid())
+  userId       String
+  restaurantId String
+  score        Float      @default(1400) // Starting ELO
+  rank         Int        // Personal rank
+  totalChoices Int        @default(0)
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([userId, restaurantId])
+}
+
+/*
+2. Modify existing comparison handler to update both rankings:
+*/
+
+// lib/rankings.ts
+export async function handleChoice(
+  winnerId: string, 
+  loserId: string, 
+  userId: string
+) {
+  // Update global ranking (your existing code)
+  await updateGlobalRanking(winnerId, loserId);
+
+  // Add personal ranking update
+  await updatePersonalRanking({
+    winnerId,
+    loserId,
+    userId
+  });
+}
+
+async function updatePersonalRanking({
+  winnerId,
+  loserId,
+  userId
+}: {
+  winnerId: string;
+  loserId: string;
+  userId: string;
+}) {
+  const [winner, loser] = await Promise.all([
+    getOrCreatePersonalRanking(userId, winnerId),
+    getOrCreatePersonalRanking(userId, loserId)
+  ]);
+
+  // Update ELO scores
+  const expectedScore = 1 / (1 + Math.pow(10, (loser.score - winner.score) / 400));
+  const updateAmount = 32 * (1 - expectedScore);
+
+  await Promise.all([
+    prisma.personalRanking.update({
+      where: { id: winner.id },
+      data: { 
+        score: winner.score + updateAmount,
+        totalChoices: { increment: 1 }
+      }
+    }),
+    prisma.personalRanking.update({
+      where: { id: loser.id },
+      data: { 
+        score: loser.score - updateAmount,
+        totalChoices: { increment: 1 }
+      }
+    })
+  ]);
+}
+
+/*
+3. Add ranking tabs component:
+*/
+
+// components/RankingTabs.tsx
+export const RankingTabs = () => {
+  const [activeTab, setActiveTab] = useState<'global' | 'personal'>('global');
+  const { user } = useUser();
+  
+  const { data: globalRankings } = api.rankings.getGlobalRankings.useQuery({
+    enabled: activeTab === 'global'
+  });
+  
+  const { data: personalRankings } = api.rankings.getPersonalRankings.useQuery({
+    enabled: activeTab === 'personal' && !!user
+  });
+
+  return (
+    <div className="max-w-4xl mx-auto p-4">
+      {/* Tab Headers */}
+      <div className="flex border-b mb-6">
+        <button
+          className={`pb-2 px-4 ${
+            activeTab === 'global' 
+              ? 'border-b-2 border-blue-500 font-bold' 
+              : ''
+          }`}
+          onClick={() => setActiveTab('global')}
+        >
+          DC's Top Rated
+        </button>
+        <button
+          className={`pb-2 px-4 ${
+            activeTab === 'personal' 
+              ? 'border-b-2 border-blue-500 font-bold' 
+              : ''
+          }`}
+          onClick={() => setActiveTab('personal')}
+          disabled={!user}
+        >
+          My Rankings
+        </button>
+      </div>
+
+      {/* Rankings List */}
+      <div className="space-y-4">
+        {(activeTab === 'global' ? globalRankings : personalRankings)?.map(
+          (ranking, index) => (
+            <RankingCard
+              key={ranking.id}
+              rank={index + 1}
+              restaurant={ranking.restaurant}
+              score={ranking.score}
+              total={ranking.totalChoices}
+              isPersonal={activeTab === 'personal'}
+            />
+          )
+        )}
+      </div>
+    </div>
+  );
+};
+
+/*
+4. Add ranking routes:
+*/
+
+// server/api/routers/rankings.ts
+export const rankingsRouter = createTRPCRouter({
+  getGlobalRankings: publicProcedure
+    .input(z.object({
+      cuisineType: z.string().optional(),
+      area: z.string().optional(),
+      limit: z.number().default(50)
+    }))
+    .query(({ ctx, input }) => {
+      return ctx.prisma.globalRanking.findMany({
+        where: {
+          restaurant: {
+            cuisineTypes: input.cuisineType ? {
+              has: input.cuisineType
+            } : undefined,
+            area: input.area
+          }
+        },
+        include: {
+          restaurant: true
+        },
+        orderBy: {
+          score: 'desc'
+        },
+        take: input.limit
+      });
+    }),
+
+  getPersonalRankings: protectedProcedure
+    .input(z.object({
+      cuisineType: z.string().optional(),
+      area: z.string().optional(),
+      limit: z.number().default(50)
+    }))
+    .query(({ ctx, input }) => {
+      return ctx.prisma.personalRanking.findMany({
+        where: {
+          userId: ctx.session.userId,
+          restaurant: {
+            cuisineTypes: input.cuisineType ? {
+              has: input.cuisineType
+            } : undefined,
+            area: input.area
+          }
+        },
+        include: {
+          restaurant: true
+        },
+        orderBy: {
+          score: 'desc'
+        },
+        take: input.limit
+      });
+    })
+});
+
+/*
+Key Points:
+1. Keep existing global ranking system
+2. Add parallel personal rankings
+3. Each comparison updates both
+4. Shared UI components
+5. Separate data storage
+
+Implementation Steps:
+1. Add PersonalRanking model
+2. Update comparison handler
+3. Add ranking tabs
+4. Add new API routes
+5. Test both systems
+
+Testing:
+- Compare rankings divergence
+- Check both update correctly
+- Verify filtering works
+- Test auth requirements
+- Validate UI switches
+
+This preserves your existing functionality while adding personal rankings.

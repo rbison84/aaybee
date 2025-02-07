@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { RestaurantCard } from "@/components/RestaurantCard";
 import { FilterBar } from "@/components/FilterBar";
+import { RankingTabs } from "@/components/RankingTabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type Restaurant } from "@shared/schema";
 import { useState } from "react";
@@ -52,15 +52,12 @@ export default function Rankings() {
         onCuisineChange={value => setSelectedCuisine(value === 'all' ? undefined : value)}
       />
 
-      <div className="space-y-4 p-4">
-        {sortedRestaurants.map((restaurant, index) => (
-          <div key={restaurant.id} className="relative">
-            <div className="absolute -left-8 top-1/2 -translate-y-1/2 font-bold text-xl text-muted-foreground">
-              {index + 1}
-            </div>
-            <RestaurantCard restaurant={restaurant} />
-          </div>
-        ))}
+      <div className="p-4">
+        <RankingTabs
+          globalRankings={sortedRestaurants}
+          selectedArea={selectedArea}
+          selectedCuisine={selectedCuisine}
+        />
       </div>
     </div>
   );

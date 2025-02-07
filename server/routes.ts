@@ -4,6 +4,41 @@ import { storage } from "./storage";
 import { CrowdBT } from "@/lib/crowdbt";
 import { insertComparisonSchema } from "@shared/schema";
 import { z } from "zod";
+import type { IStorage } from "@/lib/storage";
+
+
+// Helper function to update personal rankings
+async function updatePersonalRankings(
+  storage: IStorage,
+  winnerId: number,
+  loserId: number,
+  userId: string
+): Promise<void> {
+  // Get or create personal rankings for both restaurants
+  const winnerRanking = await storage.getPersonalRanking(userId, winnerId) ||
+    await storage.createPersonalRanking(userId, winnerId);
+  const loserRanking = await storage.getPersonalRanking(userId, loserId) ||
+    await storage.createPersonalRanking(userId, loserId);
+
+  // Calculate new ELO scores
+  const expectedScore = 1 / (1 + Math.pow(10, (loserRanking.score - winnerRanking.score) / 400));
+  const kFactor = 32;
+  const updateAmount = kFactor * (1 - expectedScore);
+
+  // Update both rankings
+  await Promise.all([
+    storage.updatePersonalRanking(
+      winnerRanking.id,
+      winnerRanking.score + updateAmount,
+      winnerRanking.totalChoices + 1
+    ),
+    storage.updatePersonalRanking(
+      loserRanking.id,
+      loserRanking.score - updateAmount,
+      loserRanking.totalChoices + 1
+    )
+  ]);
+}
 
 export function registerRoutes(app: Express) {
   // Get all restaurants
@@ -36,8 +71,7 @@ export function registerRoutes(app: Express) {
 
     const { winnerId, loserId, userId, context, notTried } = result.data;
 
-    // For "Haven't tried both" case, we'll just record the comparison
-    // using the first restaurant as winner and second as loser
+    // For "I don't know" case, we'll just record the comparison
     const comparison = await storage.createComparison({
       winnerId: notTried ? req.body.restaurantIds[0] : winnerId,
       loserId: notTried ? req.body.restaurantIds[1] : loserId,
@@ -55,6 +89,7 @@ export function registerRoutes(app: Express) {
         return res.status(404).json({ error: "Restaurant not found" });
       }
 
+      // Update global rankings
       const crowdBT = new CrowdBT();
       const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] =
         crowdBT.updateRatings(winner.rating ?? 0, winner.sigma ?? 1, loser.rating ?? 0, loser.sigma ?? 1);
@@ -63,6 +98,9 @@ export function registerRoutes(app: Express) {
         storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
         storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma)
       ]);
+
+      // Update personal rankings
+      await updatePersonalRankings(storage, winner.id, loser.id, userId);
     }
 
     res.json(comparison);
@@ -145,6 +183,13 @@ export function registerRoutes(app: Express) {
     );
 
     res.json({ success: true });
+  });
+
+  // Add new endpoint for personal rankings
+  app.get("/api/rankings/personal", async (req, res) => {
+    const userId = req.query.userId as string || 'anonymous';
+    const rankings = await storage.getPersonalRankings(userId);
+    res.json(rankings);
   });
 
   const httpServer = createServer(app);

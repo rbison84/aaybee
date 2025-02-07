@@ -29,6 +29,15 @@ export const triedRestaurants = pgTable("tried_restaurants", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const personalRankings = pgTable("personal_rankings", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  restaurantId: serial("restaurant_id").references(() => restaurants.id),
+  score: real("score").default(1400), // Starting ELO score
+  totalChoices: real("total_choices").default(0), // Changed from serial to real with default 0
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const insertRestaurantSchema = createInsertSchema(restaurants).omit({
   id: true,
   rating: true,
@@ -46,9 +55,18 @@ export const insertTriedRestaurantSchema = createInsertSchema(triedRestaurants).
   createdAt: true,
 });
 
+export const insertPersonalRankingSchema = createInsertSchema(personalRankings).omit({
+  id: true,
+  score: true,
+  totalChoices: true,
+  updatedAt: true,
+});
+
 export type Restaurant = typeof restaurants.$inferSelect;
 export type InsertRestaurant = z.infer<typeof insertRestaurantSchema>;
 export type Comparison = typeof comparisons.$inferSelect;
 export type InsertComparison = z.infer<typeof insertComparisonSchema>;
 export type TriedRestaurant = typeof triedRestaurants.$inferSelect;
 export type InsertTriedRestaurant = z.infer<typeof insertTriedRestaurantSchema>;
+export type PersonalRanking = typeof personalRankings.$inferSelect;
+export type InsertPersonalRanking = z.infer<typeof insertPersonalRankingSchema>;

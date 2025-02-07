@@ -1,4 +1,4 @@
-import { type Restaurant, type InsertRestaurant, type Comparison, type InsertComparison, restaurants, comparisons, type TriedRestaurant, triedRestaurants } from "@shared/schema";
+import { type Restaurant, type InsertRestaurant, type Comparison, type InsertComparison, restaurants, comparisons, type TriedRestaurant, triedRestaurants, type PersonalRanking, personalRankings } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
@@ -282,6 +282,16 @@ export interface IStorage {
   getComparisons(userId: string): Promise<Comparison[]>;
   markRestaurantAsTried(userId: string, restaurantId: number): Promise<void>;
   getTriedRestaurants(userId: string): Promise<number[]>;
+
+  // New methods for personal rankings
+  getPersonalRanking(userId: string, restaurantId: number): Promise<PersonalRanking | undefined>;
+  createPersonalRanking(userId: string, restaurantId: number): Promise<PersonalRanking>;
+  updatePersonalRanking(
+    id: number,
+    score: number,
+    totalChoices: number
+  ): Promise<PersonalRanking>;
+  getPersonalRankings(userId: string): Promise<(PersonalRanking & { restaurant: Restaurant })[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -369,12 +379,72 @@ export class DatabaseStorage implements IStorage {
       .where(eq(triedRestaurants.userId, userId));
     return tried.map(t => t.restaurantId);
   }
+
+  async getPersonalRanking(
+    userId: string,
+    restaurantId: number
+  ): Promise<PersonalRanking | undefined> {
+    const [ranking] = await db
+      .select()
+      .from(personalRankings)
+      .where(eq(personalRankings.userId, userId))
+      .where(eq(personalRankings.restaurantId, restaurantId));
+    return ranking;
+  }
+
+  async createPersonalRanking(
+    userId: string,
+    restaurantId: number
+  ): Promise<PersonalRanking> {
+    const [ranking] = await db
+      .insert(personalRankings)
+      .values({
+        userId,
+        restaurantId,
+      })
+      .returning();
+    return ranking;
+  }
+
+  async updatePersonalRanking(
+    id: number,
+    score: number,
+    totalChoices: number
+  ): Promise<PersonalRanking> {
+    const [ranking] = await db
+      .update(personalRankings)
+      .set({
+        score,
+        totalChoices,
+        updatedAt: new Date(),
+      })
+      .where(eq(personalRankings.id, id))
+      .returning();
+    return ranking;
+  }
+
+  async getPersonalRankings(
+    userId: string
+  ): Promise<(PersonalRanking & { restaurant: Restaurant })[]> {
+    return await db
+      .select({
+        id: personalRankings.id,
+        userId: personalRankings.userId,
+        restaurantId: personalRankings.restaurantId,
+        score: personalRankings.score,
+        totalChoices: personalRankings.totalChoices,
+        updatedAt: personalRankings.updatedAt,
+        restaurant: restaurants
+      })
+      .from(personalRankings)
+      .where(eq(personalRankings.userId, userId))
+      .innerJoin(restaurants, eq(personalRankings.restaurantId, restaurants.id))
+      .orderBy(personalRankings.score);
+  }
 }
 
-// Create a singleton instance
 export const storage = new DatabaseStorage();
 
-// Seed the database with initial restaurants if empty
 (async () => {
   try {
     const existingRestaurants = await storage.getRestaurants();
