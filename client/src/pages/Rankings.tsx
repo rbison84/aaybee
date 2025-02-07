@@ -35,6 +35,9 @@ export default function Rankings() {
     );
   }
 
+  const sortedRestaurants = restaurants
+    ?.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)) || [];
+
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold p-4">DC Restaurant Rankings</h1>
@@ -49,8 +52,13 @@ export default function Rankings() {
       />
 
       <div className="space-y-4 p-4">
-        {restaurants?.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).map(restaurant => (
-          <RestaurantCard key={restaurant.id} restaurant={restaurant} />
+        {sortedRestaurants.map((restaurant, index) => (
+          <div key={restaurant.id} className="relative">
+            <div className="absolute -left-8 top-1/2 -translate-y-1/2 font-bold text-xl text-muted-foreground">
+              {index + 1}
+            </div>
+            <RestaurantCard restaurant={restaurant} />
+          </div>
         ))}
       </div>
     </div>
