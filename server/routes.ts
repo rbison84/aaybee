@@ -1,10 +1,9 @@
 import type { Express } from "express";
 import { createServer } from "http";
-import { storage } from "./storage";
+import { storage, type IStorage } from "./storage";
 import { CrowdBT } from "@/lib/crowdbt";
 import { insertComparisonSchema } from "@shared/schema";
 import { z } from "zod";
-import type { IStorage } from "@/lib/storage";
 
 // Helper function to update personal rankings using CrowdBT
 async function updatePersonalRankings(
@@ -93,7 +92,7 @@ export function registerRoutes(app: Express) {
       notTried: notTried ?? false
     });
 
-    // Only update ratings if the user made an actual choice and is authenticated
+    // Only update ratings if the user made an actual choice
     if (!notTried) {
       const winner = await storage.getRestaurantById(comparison.winnerId);
       const loser = await storage.getRestaurantById(comparison.loserId);
