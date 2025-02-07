@@ -405,7 +405,7 @@ export class DatabaseStorage implements IStorage {
         .values({
           userId,
           restaurantId,
-          score: 0, // Start with same initial score as global rankings
+          score: 0, 
           totalChoices: 0,
         })
         .returning();
@@ -442,42 +442,59 @@ export class DatabaseStorage implements IStorage {
     userId: string
   ): Promise<(PersonalRanking & { restaurant: Restaurant })[]> {
     try {
-      // First ensure the user has personal rankings initialized
       const allRestaurants = await this.getRestaurants();
-      for (const restaurant of allRestaurants) {
-        const existing = await this.getPersonalRanking(userId, restaurant.id);
-        if (!existing) {
-          await this.createPersonalRanking(userId, restaurant.id);
+      const userComparisons = await this.getComparisons(userId);
+      const restaurantScores = new Map<number, { wins: number; losses: number }>();
+
+      allRestaurants.forEach(restaurant => {
+        restaurantScores.set(restaurant.id, { wins: 0, losses: 0 });
+      });
+
+      userComparisons.forEach(comparison => {
+        if (!comparison.notTried) {
+          const winnerScore = restaurantScores.get(comparison.winnerId);
+          const loserScore = restaurantScores.get(comparison.loserId);
+
+          if (winnerScore) winnerScore.wins++;
+          if (loserScore) loserScore.losses++;
         }
-      }
+      });
 
-      // Now fetch all rankings with restaurants
-      const rankings = await db
-        .select({
-          id: personalRankings.id,
-          userId: personalRankings.userId,
-          restaurantId: personalRankings.restaurantId,
-          score: personalRankings.score,
-          totalChoices: personalRankings.totalChoices,
-          updatedAt: personalRankings.updatedAt,
-          restaurant: restaurants
+      const rankings = await Promise.all(
+        allRestaurants.map(async restaurant => {
+          const scores = restaurantScores.get(restaurant.id) || { wins: 0, losses: 0 };
+          const totalMatches = scores.wins + scores.losses;
+
+          let ranking = await this.getPersonalRanking(userId, restaurant.id);
+          if (!ranking) {
+            ranking = await this.createPersonalRanking(userId, restaurant.id);
+          }
+
+          const score = totalMatches > 0 ? (scores.wins - scores.losses) / totalMatches : 0;
+
+          await this.updatePersonalRanking(
+            ranking.id,
+            score,
+            totalMatches
+          );
+
+          return {
+            ...ranking,
+            score,
+            restaurant
+          };
         })
-        .from(personalRankings)
-        .where(eq(personalRankings.userId, userId))
-        .innerJoin(restaurants, eq(personalRankings.restaurantId, restaurants.id));
+      );
 
-      // Sort by restaurant name if all scores are 0 (new user)
-      if (rankings.every(r => r.score === 0)) {
+      if (userComparisons.length === 0) {
         return rankings.sort((a, b) => a.restaurant.name.localeCompare(b.restaurant.name));
       }
 
-      // Otherwise sort by score and then name
       return rankings.sort((a, b) => {
-        const scoreDiff = b.score - a.score;
-        if (scoreDiff === 0) {
+        if (a.score === b.score) {
           return a.restaurant.name.localeCompare(b.restaurant.name);
         }
-        return scoreDiff;
+        return b.score - a.score;
       });
     } catch (error) {
       console.error('Error fetching personal rankings:', error);
@@ -500,7 +517,7 @@ export const storage = new DatabaseStorage();
       console.log('Seeding complete');
     }
 
-    await storage.getPersonalRankings('anonymous'); //Initialize anonymous user rankings here
+    await storage.getPersonalRankings('anonymous'); 
   } catch (error) {
     console.error('Error during seeding:', error);
   }
