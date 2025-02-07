@@ -33,7 +33,7 @@ export const personalRankings = pgTable("personal_rankings", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
   restaurantId: serial("restaurant_id").references(() => restaurants.id),
-  score: real("score").default(1400), // Starting ELO score
+  score: real("score").default(0), // Changed from 1400 to 0 to match global rankings
   totalChoices: real("total_choices").default(0), // Changed from serial to real with default 0
   updatedAt: timestamp("updated_at").defaultNow(),
 });
