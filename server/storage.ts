@@ -86,6 +86,66 @@ const initialRestaurants: InsertRestaurant[] = [
     name: "Le Diplomate",
     area: "14th Street",
     cuisineTypes: ["French", "European"],
+  },
+  {
+    name: "Maydan",
+    area: "14th Street",
+    cuisineTypes: ["Middle Eastern", "Mediterranean"],
+  },
+  {
+    name: "Tail Up Goat",
+    area: "Adams Morgan",
+    cuisineTypes: ["Mediterranean", "Contemporary"],
+  },
+  {
+    name: "Thip Khao",
+    area: "Columbia Heights",
+    cuisineTypes: ["Laotian", "Asian"],
+  },
+  {
+    name: "Sushi Taro",
+    area: "Dupont Circle",
+    cuisineTypes: ["Japanese", "Sushi"],
+  },
+  {
+    name: "Rasika",
+    area: "Penn Quarter",
+    cuisineTypes: ["Indian", "Contemporary"],
+  },
+  {
+    name: "Compass Rose",
+    area: "14th Street",
+    cuisineTypes: ["International", "Small Plates"],
+  },
+  {
+    name: "Fiola Mare",
+    area: "Georgetown",
+    cuisineTypes: ["Italian", "Seafood"],
+  },
+  {
+    name: "Purple Patch",
+    area: "Mount Pleasant",
+    cuisineTypes: ["Filipino", "Asian"],
+  },
+  {
+    name: "Chloe",
+    area: "Navy Yard",
+    cuisineTypes: ["Modern American", "Small Plates"],
+  },
+  {
+    name: "Anju",
+    area: "Dupont Circle",
+    cuisineTypes: ["Korean", "Asian"],
+  },
+  {
+    name: "El Secreto de Rosita",
+    area: "U Street",
+    cuisineTypes: ["Peruvian", "Latin American"],
+  },
+  {
+    name: "Ethiopic",
+    area: "H Street",
+    cuisineTypes: ["Ethiopian", "African"],
   }
 ];
 
