@@ -1,4 +1,4 @@
-import { type Restaurant, type InsertRestaurant, type Comparison, type InsertComparison, restaurants, comparisons } from "@shared/schema";
+import { type Restaurant, type InsertRestaurant, type Comparison, type InsertComparison, restaurants, comparisons, type TriedRestaurant, triedRestaurants } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
@@ -9,9 +9,11 @@ export interface IStorage {
   getRestaurantsByCuisine(cuisine: string): Promise<Restaurant[]>;
   createRestaurant(restaurant: InsertRestaurant): Promise<Restaurant>;
   updateRestaurantRating(id: number, rating: number, sigma: number): Promise<Restaurant>;
-  getRandomPair(): Promise<[Restaurant, Restaurant]>;
+  getRandomPair(userId: string): Promise<[Restaurant, Restaurant]>;
   createComparison(comparison: InsertComparison): Promise<Comparison>;
   getComparisons(userId: string): Promise<Comparison[]>;
+  markRestaurantAsTried(userId: string, restaurantId: number): Promise<void>;
+  getTriedRestaurants(userId: string): Promise<number[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -49,12 +51,35 @@ export class DatabaseStorage implements IStorage {
     return restaurant;
   }
 
-  async getRandomPair(): Promise<[Restaurant, Restaurant]> {
+  async getRandomPair(userId: string): Promise<[Restaurant, Restaurant]> {
+    const triedIds = await this.getTriedRestaurants(userId);
     const allRestaurants = await this.getRestaurants();
-    const idx1 = Math.floor(Math.random() * allRestaurants.length);
-    let idx2 = Math.floor(Math.random() * (allRestaurants.length - 1));
-    if (idx2 >= idx1) idx2++;
-    return [allRestaurants[idx1], allRestaurants[idx2]];
+
+    // If user hasn't tried any restaurants, return a random pair
+    if (triedIds.length === 0) {
+      const idx1 = Math.floor(Math.random() * allRestaurants.length);
+      let idx2 = Math.floor(Math.random() * (allRestaurants.length - 1));
+      if (idx2 >= idx1) idx2++;
+      return [allRestaurants[idx1], allRestaurants[idx2]];
+    }
+
+    // Otherwise, ensure at least one restaurant has been tried
+    const triedRestaurants = allRestaurants.filter(r => triedIds.includes(r.id));
+    const untriedRestaurants = allRestaurants.filter(r => !triedIds.includes(r.id));
+
+    // Randomly decide whether to show two tried restaurants or one tried and one untried
+    if (Math.random() < 0.3 && triedRestaurants.length >= 2) {
+      // Show two tried restaurants
+      const idx1 = Math.floor(Math.random() * triedRestaurants.length);
+      let idx2 = Math.floor(Math.random() * (triedRestaurants.length - 1));
+      if (idx2 >= idx1) idx2++;
+      return [triedRestaurants[idx1], triedRestaurants[idx2]];
+    } else {
+      // Show one tried and one untried restaurant
+      const triedIdx = Math.floor(Math.random() * triedRestaurants.length);
+      const untriedIdx = Math.floor(Math.random() * untriedRestaurants.length);
+      return [triedRestaurants[triedIdx], untriedRestaurants[untriedIdx]];
+    }
   }
 
   async createComparison(data: InsertComparison): Promise<Comparison> {
@@ -67,6 +92,20 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(comparisons)
       .where(eq(comparisons.userId, userId));
+  }
+
+  async markRestaurantAsTried(userId: string, restaurantId: number): Promise<void> {
+    await db.insert(triedRestaurants)
+      .values({ userId, restaurantId })
+      .onConflictDoNothing();
+  }
+
+  async getTriedRestaurants(userId: string): Promise<number[]> {
+    const tried = await db
+      .select({ restaurantId: triedRestaurants.restaurantId })
+      .from(triedRestaurants)
+      .where(eq(triedRestaurants.userId, userId));
+    return tried.map(t => t.restaurantId);
   }
 }
 

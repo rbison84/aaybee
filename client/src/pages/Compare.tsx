@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { RestaurantCard } from "@/components/RestaurantCard";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { type Restaurant } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function Compare() {
   const { toast } = useToast();
@@ -16,17 +17,24 @@ export default function Compare() {
   });
 
   const submitMutation = useMutation({
-    mutationFn: async (winnerId: number) => {
+    mutationFn: async ({ winnerId, notTried }: { winnerId?: number, notTried?: boolean }) => {
       if (!pair) return;
-      const loserId = pair.find(r => r.id !== winnerId)?.id;
-      if (!loserId) return;
+      const loserId = winnerId ? pair.find(r => r.id !== winnerId)?.id : undefined;
 
       await apiRequest("POST", "/api/comparisons", {
         winnerId,
         loserId,
         userId: "anonymous",
-        context: { timeOfDay: new Date().getHours() }
+        context: { timeOfDay: new Date().getHours() },
+        notTried: notTried ?? false
       });
+
+      // If the user made a choice (not "Haven't tried both"), mark both restaurants as tried
+      if (!notTried && winnerId) {
+        await apiRequest("POST", "/api/restaurants/tried", {
+          restaurantIds: pair.map(r => r.id)
+        });
+      }
     },
     onSuccess: () => {
       toast({
@@ -40,7 +48,11 @@ export default function Compare() {
 
   const handleChoice = async (id: number) => {
     setSelectedId(id);
-    await submitMutation.mutateAsync(id);
+    await submitMutation.mutateAsync({ winnerId: id });
+  };
+
+  const handleNotTried = async () => {
+    await submitMutation.mutateAsync({ notTried: true });
   };
 
   if (isLoading || !pair) {
@@ -71,6 +83,15 @@ export default function Compare() {
             onClick={() => handleChoice(restaurant.id)}
           />
         ))}
+      </div>
+      <div className="flex justify-center mt-6">
+        <Button 
+          variant="outline" 
+          onClick={handleNotTried}
+          className="text-muted-foreground"
+        >
+          Haven't tried both
+        </Button>
       </div>
     </div>
   );

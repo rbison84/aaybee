@@ -2,7 +2,8 @@ import type { Express } from "express";
 import { createServer } from "http";
 import { storage } from "./storage";
 import { CrowdBT } from "@/lib/crowdbt";
-import { insertComparisonSchema, insertRestaurantSchema } from "@shared/schema";
+import { insertComparisonSchema } from "@shared/schema";
+import { z } from "zod";
 
 export function registerRoutes(app: Express) {
   // Get all restaurants
@@ -12,8 +13,9 @@ export function registerRoutes(app: Express) {
   });
 
   // Get random pair for comparison
-  app.get("/api/restaurants/pair", async (_req, res) => {
-    const pair = await storage.getRandomPair();
+  app.get("/api/restaurants/pair", async (req, res) => {
+    const userId = req.query.userId as string || 'anonymous';
+    const pair = await storage.getRandomPair(userId);
     res.json(pair);
   });
 
@@ -22,6 +24,12 @@ export function registerRoutes(app: Express) {
     const result = insertComparisonSchema.safeParse(req.body);
     if (!result.success) {
       return res.status(400).json({ error: result.error });
+    }
+
+    // If notTried is true, just record the comparison without updating ratings
+    if (result.data.notTried) {
+      const comparison = await storage.createComparison(result.data);
+      return res.json(comparison);
     }
 
     const comparison = await storage.createComparison(result.data);
@@ -35,7 +43,7 @@ export function registerRoutes(app: Express) {
     }
 
     const crowdBT = new CrowdBT();
-    const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] = 
+    const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] =
       crowdBT.updateRatings(winner.rating ?? 0, winner.sigma ?? 1, loser.rating ?? 0, loser.sigma ?? 1);
 
     await Promise.all([
@@ -97,13 +105,28 @@ export function registerRoutes(app: Express) {
         );
         return { ...restaurant, preferenceScore };
       })
-      .sort((a, b) => 
+      .sort((a, b) =>
         // Combine preference score with rating for final ranking
         (b.preferenceScore + (b.rating || 0)) - (a.preferenceScore + (a.rating || 0))
       )
       .slice(0, 5); // Return top 5 recommendations
 
     res.json(recommendations);
+  });
+
+  // Mark restaurants as tried
+  app.post("/api/restaurants/tried", async (req, res) => {
+    const { userId = 'anonymous', restaurantIds } = req.body;
+
+    if (!Array.isArray(restaurantIds)) {
+      return res.status(400).json({ error: "restaurantIds must be an array" });
+    }
+
+    await Promise.all(
+      restaurantIds.map(id => storage.markRestaurantAsTried(userId, id))
+    );
+
+    res.json({ success: true });
   });
 
   const httpServer = createServer(app);

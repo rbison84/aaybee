@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, jsonb, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, jsonb, real, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -19,6 +19,14 @@ export const comparisons = pgTable("comparisons", {
   userId: text("user_id").notNull(),
   context: jsonb("context").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  notTried: boolean("not_tried").default(false),
+});
+
+export const triedRestaurants = pgTable("tried_restaurants", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  restaurantId: serial("restaurant_id").references(() => restaurants.id),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const insertRestaurantSchema = createInsertSchema(restaurants).omit({
@@ -33,7 +41,14 @@ export const insertComparisonSchema = createInsertSchema(comparisons).omit({
   createdAt: true,
 });
 
+export const insertTriedRestaurantSchema = createInsertSchema(triedRestaurants).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type Restaurant = typeof restaurants.$inferSelect;
 export type InsertRestaurant = z.infer<typeof insertRestaurantSchema>;
 export type Comparison = typeof comparisons.$inferSelect;
 export type InsertComparison = z.infer<typeof insertComparisonSchema>;
+export type TriedRestaurant = typeof triedRestaurants.$inferSelect;
+export type InsertTriedRestaurant = z.infer<typeof insertTriedRestaurantSchema>;
