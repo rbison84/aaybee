@@ -222,6 +222,54 @@ export function registerRoutes(app: Express) {
     res.json(rankings);
   });
 
+  // Add new endpoint for admin to view all choices
+  app.get("/api/admin/choices", async (_req, res) => {
+    try {
+      // Get all comparisons
+      const allComparisons = await storage.getAllComparisons();
+
+      // Group comparisons by user
+      const userChoices: Record<string, {
+        comparisons: (Comparison & {
+          winner: Restaurant;
+          loser: Restaurant;
+        })[];
+      }> = {};
+
+      // Process each comparison
+      for (const comparison of allComparisons) {
+        if (!userChoices[comparison.userId]) {
+          userChoices[comparison.userId] = { comparisons: [] };
+        }
+
+        // Get restaurant details
+        const winner = await storage.getRestaurantById(comparison.winnerId);
+        const loser = await storage.getRestaurantById(comparison.loserId);
+
+        if (winner && loser) {
+          userChoices[comparison.userId].comparisons.push({
+            ...comparison,
+            winner,
+            loser
+          });
+        }
+      }
+
+      // Sort comparisons by date
+      for (const userId in userChoices) {
+        userChoices[userId].comparisons.sort((a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      }
+
+      res.json(userChoices);
+    } catch (error) {
+      console.error('Error fetching admin choices:', error);
+      res.status(500).json({ error: 'Failed to fetch choices' });
+    }
+  });
+
+
   const httpServer = createServer(app);
   return httpServer;
 }

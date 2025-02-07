@@ -288,6 +288,7 @@ export interface IStorage {
   createPersonalRanking(userId: string, restaurantId: number): Promise<PersonalRanking>;
   updatePersonalRanking(id: number, score: number, totalChoices: number): Promise<PersonalRanking>;
   getPersonalRankings(userId: string): Promise<(PersonalRanking & { restaurant: Restaurant })[]>;
+  getAllComparisons(): Promise<Comparison[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -539,6 +540,13 @@ export class DatabaseStorage implements IStorage {
       console.error('Error fetching personal rankings:', error);
       return [];
     }
+  }
+
+  async getAllComparisons(): Promise<Comparison[]> {
+    return await db
+      .select()
+      .from(comparisons)
+      .orderBy(desc(comparisons.createdAt));
   }
 }
 
