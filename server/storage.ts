@@ -2,109 +2,6 @@ import { type Restaurant, type InsertRestaurant, type Comparison, type InsertCom
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
-export interface IStorage {
-  getRestaurants(): Promise<Restaurant[]>;
-  getRestaurantById(id: number): Promise<Restaurant | undefined>;
-  getRestaurantsByArea(area: string): Promise<Restaurant[]>;
-  getRestaurantsByCuisine(cuisine: string): Promise<Restaurant[]>;
-  createRestaurant(restaurant: InsertRestaurant): Promise<Restaurant>;
-  updateRestaurantRating(id: number, rating: number, sigma: number): Promise<Restaurant>;
-  getRandomPair(userId: string): Promise<[Restaurant, Restaurant]>;
-  createComparison(comparison: InsertComparison): Promise<Comparison>;
-  getComparisons(userId: string): Promise<Comparison[]>;
-  markRestaurantAsTried(userId: string, restaurantId: number): Promise<void>;
-  getTriedRestaurants(userId: string): Promise<number[]>;
-}
-
-export class DatabaseStorage implements IStorage {
-  async getRestaurants(): Promise<Restaurant[]> {
-    return await db.select().from(restaurants);
-  }
-
-  async getRestaurantById(id: number): Promise<Restaurant | undefined> {
-    const [restaurant] = await db.select().from(restaurants).where(eq(restaurants.id, id));
-    return restaurant;
-  }
-
-  async getRestaurantsByArea(area: string): Promise<Restaurant[]> {
-    return await db.select().from(restaurants).where(eq(restaurants.area, area));
-  }
-
-  async getRestaurantsByCuisine(cuisine: string): Promise<Restaurant[]> {
-    const allRestaurants = await this.getRestaurants();
-    return allRestaurants.filter(r => r.cuisineTypes.includes(cuisine));
-  }
-
-  async createRestaurant(data: InsertRestaurant): Promise<Restaurant> {
-    const [restaurant] = await db.insert(restaurants).values(data).returning();
-    return restaurant;
-  }
-
-  async updateRestaurantRating(id: number, rating: number, sigma: number): Promise<Restaurant> {
-    const [restaurant] = await db
-      .update(restaurants)
-      .set({ rating, sigma })
-      .where(eq(restaurants.id, id))
-      .returning();
-
-    if (!restaurant) throw new Error("Restaurant not found");
-    return restaurant;
-  }
-
-  async getRandomPair(userId: string): Promise<[Restaurant, Restaurant]> {
-    const triedIds = await this.getTriedRestaurants(userId);
-    const allRestaurants = await this.getRestaurants();
-
-    if (allRestaurants.length < 2) {
-      throw new Error("Not enough restaurants for comparison");
-    }
-
-    // Simple random selection without complicated logic
-    const availableRestaurants = [...allRestaurants];
-    const idx1 = Math.floor(Math.random() * availableRestaurants.length);
-    const first = availableRestaurants[idx1];
-
-    // Remove the first restaurant from available options
-    availableRestaurants.splice(idx1, 1);
-
-    const idx2 = Math.floor(Math.random() * availableRestaurants.length);
-    const second = availableRestaurants[idx2];
-
-    if (!first || !second) {
-      throw new Error("Could not get a valid pair of restaurants");
-    }
-
-    return [first, second];
-  }
-
-  async createComparison(data: InsertComparison): Promise<Comparison> {
-    const [comparison] = await db.insert(comparisons).values(data).returning();
-    return comparison;
-  }
-
-  async getComparisons(userId: string): Promise<Comparison[]> {
-    return await db
-      .select()
-      .from(comparisons)
-      .where(eq(comparisons.userId, userId));
-  }
-
-  async markRestaurantAsTried(userId: string, restaurantId: number): Promise<void> {
-    await db.insert(triedRestaurants)
-      .values({ userId, restaurantId })
-      .onConflictDoNothing();
-  }
-
-  async getTriedRestaurants(userId: string): Promise<number[]> {
-    const tried = await db
-      .select({ restaurantId: triedRestaurants.restaurantId })
-      .from(triedRestaurants)
-      .where(eq(triedRestaurants.userId, userId));
-    return tried.map(t => t.restaurantId);
-  }
-}
-
-// Adding more restaurants while keeping existing ones and structure
 const initialRestaurants: InsertRestaurant[] = [
   {
     name: "Rose's Luxury",
@@ -471,65 +368,175 @@ const initialRestaurants: InsertRestaurant[] = [
     area: "Capitol Hill",
     cuisineTypes: ["American", "Bakery"],
   },
-    {
+  {
     name: "New Restaurant 21",
     area: "Shaw",
     cuisineTypes: ["American", "Burgers"],
   },
-    {
+  {
     name: "New Restaurant 22",
     area: "Capitol Hill",
     cuisineTypes: ["American", "Cafe"],
   },
-    {
+  {
     name: "New Restaurant 23",
     area: "Georgetown",
     cuisineTypes: ["American", "Seafood"],
   },
-    {
+  {
     name: "New Restaurant 24",
     area: "Adams Morgan",
     cuisineTypes: ["American", "Tapas"],
   },
-    {
+  {
     name: "New Restaurant 25",
     area: "14th Street",
     cuisineTypes: ["American", "Gastropub"],
   },
-    {
+  {
     name: "New Restaurant 26",
     area: "Columbia Heights",
     cuisineTypes: ["American", "Pizza"],
   },
-    {
+  {
     name: "New Restaurant 27",
     area: "Penn Quarter",
     cuisineTypes: ["American", "Steakhouse"],
   },
-    {
+  {
     name: "New Restaurant 28",
     area: "Navy Yard",
     cuisineTypes: ["American", "Brewery"],
   },
-    {
+  {
     name: "New Restaurant 29",
     area: "H Street",
     cuisineTypes: ["American", "Fine Dining"],
   },
-    {
+  {
     name: "New Restaurant 30",
     area: "Logan Circle",
     cuisineTypes: ["American", "Comfort Food"],
   }
 ];
 
+export interface IStorage {
+  getRestaurants(): Promise<Restaurant[]>;
+  getRestaurantById(id: number): Promise<Restaurant | undefined>;
+  getRestaurantsByArea(area: string): Promise<Restaurant[]>;
+  getRestaurantsByCuisine(cuisine: string): Promise<Restaurant[]>;
+  createRestaurant(restaurant: InsertRestaurant): Promise<Restaurant>;
+  updateRestaurantRating(id: number, rating: number, sigma: number): Promise<Restaurant>;
+  getRandomPair(userId: string): Promise<[Restaurant, Restaurant]>;
+  createComparison(comparison: InsertComparison): Promise<Comparison>;
+  getComparisons(userId: string): Promise<Comparison[]>;
+  markRestaurantAsTried(userId: string, restaurantId: number): Promise<void>;
+  getTriedRestaurants(userId: string): Promise<number[]>;
+}
+
+export class DatabaseStorage implements IStorage {
+  async getRestaurants(): Promise<Restaurant[]> {
+    const results = await db.select().from(restaurants);
+    console.log(`Fetched ${results.length} restaurants from database`);
+    return results;
+  }
+
+  async getRestaurantById(id: number): Promise<Restaurant | undefined> {
+    const [restaurant] = await db.select().from(restaurants).where(eq(restaurants.id, id));
+    return restaurant;
+  }
+
+  async getRestaurantsByArea(area: string): Promise<Restaurant[]> {
+    return await db.select().from(restaurants).where(eq(restaurants.area, area));
+  }
+
+  async getRestaurantsByCuisine(cuisine: string): Promise<Restaurant[]> {
+    const allRestaurants = await this.getRestaurants();
+    return allRestaurants.filter(r => r.cuisineTypes.includes(cuisine));
+  }
+
+  async createRestaurant(data: InsertRestaurant): Promise<Restaurant> {
+    const [restaurant] = await db.insert(restaurants).values(data).returning();
+    return restaurant;
+  }
+
+  async updateRestaurantRating(id: number, rating: number, sigma: number): Promise<Restaurant> {
+    const [restaurant] = await db
+      .update(restaurants)
+      .set({ rating, sigma })
+      .where(eq(restaurants.id, id))
+      .returning();
+
+    if (!restaurant) throw new Error("Restaurant not found");
+    return restaurant;
+  }
+
+  async getRandomPair(userId: string): Promise<[Restaurant, Restaurant]> {
+    const allRestaurants = await this.getRestaurants();
+
+    if (allRestaurants.length < 2) {
+      throw new Error("Not enough restaurants for comparison");
+    }
+
+    // Simple random selection
+    const availableRestaurants = [...allRestaurants];
+    const idx1 = Math.floor(Math.random() * availableRestaurants.length);
+    const first = availableRestaurants[idx1];
+
+    availableRestaurants.splice(idx1, 1);
+    const idx2 = Math.floor(Math.random() * availableRestaurants.length);
+    const second = availableRestaurants[idx2];
+
+    if (!first || !second) {
+      throw new Error("Could not get a valid pair of restaurants");
+    }
+
+    return [first, second];
+  }
+
+  async createComparison(data: InsertComparison): Promise<Comparison> {
+    const [comparison] = await db.insert(comparisons).values(data).returning();
+    return comparison;
+  }
+
+  async getComparisons(userId: string): Promise<Comparison[]> {
+    return await db
+      .select()
+      .from(comparisons)
+      .where(eq(comparisons.userId, userId));
+  }
+
+  async markRestaurantAsTried(userId: string, restaurantId: number): Promise<void> {
+    await db.insert(triedRestaurants)
+      .values({ userId, restaurantId })
+      .onConflictDoNothing();
+  }
+
+  async getTriedRestaurants(userId: string): Promise<number[]> {
+    const tried = await db
+      .select({ restaurantId: triedRestaurants.restaurantId })
+      .from(triedRestaurants)
+      .where(eq(triedRestaurants.userId, userId));
+    return tried.map(t => t.restaurantId);
+  }
+}
+
 // Create a singleton instance
 export const storage = new DatabaseStorage();
 
 // Seed the database with initial restaurants if empty
 (async () => {
-  const existingRestaurants = await storage.getRestaurants();
-  if (existingRestaurants.length === 0) {
-    await Promise.all(initialRestaurants.map(r => storage.createRestaurant(r)));
+  try {
+    const existingRestaurants = await storage.getRestaurants();
+    console.log(`Found ${existingRestaurants.length} existing restaurants`);
+    if (existingRestaurants.length === 0) {
+      console.log(`Seeding ${initialRestaurants.length} restaurants...`);
+      for (const restaurant of initialRestaurants) {
+        await storage.createRestaurant(restaurant);
+      }
+      console.log('Seeding complete');
+    }
+  } catch (error) {
+    console.error('Error during seeding:', error);
   }
 })();
