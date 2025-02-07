@@ -405,7 +405,7 @@ export class DatabaseStorage implements IStorage {
         .values({
           userId,
           restaurantId,
-          score: 0, 
+          score: 0,
           totalChoices: 0,
         })
         .returning();
@@ -442,60 +442,74 @@ export class DatabaseStorage implements IStorage {
     userId: string
   ): Promise<(PersonalRanking & { restaurant: Restaurant })[]> {
     try {
+      // Get all restaurants and user's comparisons
       const allRestaurants = await this.getRestaurants();
       const userComparisons = await this.getComparisons(userId);
-      const restaurantScores = new Map<number, { wins: number; losses: number }>();
 
-      allRestaurants.forEach(restaurant => {
-        restaurantScores.set(restaurant.id, { wins: 0, losses: 0 });
-      });
-
-      userComparisons.forEach(comparison => {
-        if (!comparison.notTried) {
-          const winnerScore = restaurantScores.get(comparison.winnerId);
-          const loserScore = restaurantScores.get(comparison.loserId);
-
-          if (winnerScore) winnerScore.wins++;
-          if (loserScore) loserScore.losses++;
-        }
-      });
-
+      // Initialize personal rankings if they don't exist
       const rankings = await Promise.all(
         allRestaurants.map(async restaurant => {
-          const scores = restaurantScores.get(restaurant.id) || { wins: 0, losses: 0 };
-          const totalMatches = scores.wins + scores.losses;
-
           let ranking = await this.getPersonalRanking(userId, restaurant.id);
           if (!ranking) {
             ranking = await this.createPersonalRanking(userId, restaurant.id);
           }
-
-          const score = totalMatches > 0 ? (scores.wins - scores.losses) / totalMatches : 0;
-
-          await this.updatePersonalRanking(
-            ranking.id,
-            score,
-            totalMatches
-          );
-
           return {
             ...ranking,
-            score,
             restaurant
           };
         })
       );
 
+      // For new users with no comparisons, sort alphabetically
       if (userComparisons.length === 0) {
-        return rankings.sort((a, b) => a.restaurant.name.localeCompare(b.restaurant.name));
+        console.log('New user - sorting restaurants alphabetically');
+        return rankings.sort((a, b) =>
+          a.restaurant.name.localeCompare(b.restaurant.name)
+        );
       }
 
+      // Process comparisons to update scores using CrowdBT
+      const crowdBT = new CrowdBT(); // Assuming CrowdBT class is defined elsewhere
+      for (const comparison of userComparisons) {
+        if (!comparison.notTried) {
+          const winner = rankings.find(r => r.restaurantId === comparison.winnerId);
+          const loser = rankings.find(r => r.restaurantId === comparison.loserId);
+
+          if (winner && loser) {
+            const [newWinnerScore, , newLoserScore] = crowdBT.updateRatings(
+              winner.score,
+              1, // Fixed sigma for personal rankings
+              loser.score,
+              1
+            );
+
+            winner.score = newWinnerScore;
+            loser.score = newLoserScore;
+          }
+        }
+      }
+
+      // Update scores in database
+      await Promise.all(
+        rankings.map(ranking =>
+          this.updatePersonalRanking(
+            ranking.id,
+            ranking.score,
+            userComparisons.filter(c =>
+              !c.notTried && (c.winnerId === ranking.restaurantId || c.loserId === ranking.restaurantId)
+            ).length
+          )
+        )
+      );
+
+      // Sort by score, then alphabetically for ties
       return rankings.sort((a, b) => {
-        if (a.score === b.score) {
+        if (Math.abs(a.score - b.score) < 0.0001) {
           return a.restaurant.name.localeCompare(b.restaurant.name);
         }
         return b.score - a.score;
       });
+
     } catch (error) {
       console.error('Error fetching personal rankings:', error);
       return [];
@@ -517,8 +531,18 @@ export const storage = new DatabaseStorage();
       console.log('Seeding complete');
     }
 
-    await storage.getPersonalRankings('anonymous'); 
+    await storage.getPersonalRankings('anonymous');
   } catch (error) {
     console.error('Error during seeding:', error);
   }
 })();
+
+// Dummy CrowdBT class - Replace with your actual implementation
+class CrowdBT {
+  updateRatings(rating1: number, sigma1: number, rating2: number, sigma2: number): [number, number, number] {
+    // Replace this with your actual CrowdBT rating update logic
+    const newRating1 = (rating1 + rating2) / 2;
+    const newRating2 = (rating1 + rating2) / 2;
+    return [newRating1, 0, newRating2];
+  }
+}
