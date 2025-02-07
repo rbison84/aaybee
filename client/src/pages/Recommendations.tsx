@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { type Restaurant } from "@shared/schema";
 
 export default function Recommendations() {
-  const { user, isLoaded } = useUser();
+  const { user, isLoaded, isSignedIn } = useUser();
 
   const { data: recommendations, isLoading } = useQuery<(Restaurant & { preferenceScore: number })[]>({
     queryKey: ["/api/restaurants/recommendations", user?.id],
-    enabled: !!user,
+    enabled: isSignedIn,
   });
 
   // Show loading state while Clerk loads
@@ -26,7 +26,7 @@ export default function Recommendations() {
   }
 
   // Show sign in prompt if user is not authenticated
-  if (!user) {
+  if (!isSignedIn) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
         <h1 className="text-2xl font-bold">Sign in to see recommendations</h1>
