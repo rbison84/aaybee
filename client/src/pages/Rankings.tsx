@@ -6,15 +6,15 @@ import { type Restaurant } from "@shared/schema";
 import { useState } from "react";
 
 export default function Rankings() {
-  const [selectedArea, setSelectedArea] = useState("");
-  const [selectedCuisine, setSelectedCuisine] = useState("");
+  const [selectedArea, setSelectedArea] = useState<string | undefined>(undefined);
+  const [selectedCuisine, setSelectedCuisine] = useState<string | undefined>(undefined);
 
   const { data: restaurants, isLoading } = useQuery<Restaurant[]>({
     queryKey: ["/api/restaurants/filter", selectedArea, selectedCuisine],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (selectedArea) params.append("area", selectedArea);
-      if (selectedCuisine) params.append("cuisine", selectedCuisine);
+      if (selectedArea && selectedArea !== 'all') params.append("area", selectedArea);
+      if (selectedCuisine && selectedCuisine !== 'all') params.append("cuisine", selectedCuisine);
       const res = await fetch(`/api/restaurants/filter?${params}`);
       return res.json();
     }
@@ -38,7 +38,7 @@ export default function Rankings() {
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold p-4">DC Restaurant Rankings</h1>
-      
+
       <FilterBar
         areas={areas}
         cuisines={cuisines}
@@ -49,7 +49,7 @@ export default function Rankings() {
       />
 
       <div className="space-y-4 p-4">
-        {restaurants?.sort((a, b) => b.rating - a.rating).map(restaurant => (
+        {restaurants?.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).map(restaurant => (
           <RestaurantCard key={restaurant.id} restaurant={restaurant} />
         ))}
       </div>

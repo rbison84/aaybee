@@ -3,10 +3,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface FilterBarProps {
   areas: string[];
   cuisines: string[];
-  selectedArea: string;
-  selectedCuisine: string;
-  onAreaChange: (value: string) => void;
-  onCuisineChange: (value: string) => void;
+  selectedArea: string | undefined;
+  selectedCuisine: string | undefined;
+  onAreaChange: (value: string | undefined) => void;
+  onCuisineChange: (value: string | undefined) => void;
 }
 
 export function FilterBar({
@@ -24,7 +24,7 @@ export function FilterBar({
           <SelectValue placeholder="Select area" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All Areas</SelectItem>
+          <SelectItem value="all">All Areas</SelectItem>
           {areas.map(area => (
             <SelectItem key={area} value={area}>
               {area}
@@ -38,7 +38,7 @@ export function FilterBar({
           <SelectValue placeholder="Select cuisine" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All Cuisines</SelectItem>
+          <SelectItem value="all">All Cuisines</SelectItem>
           {cuisines.map(cuisine => (
             <SelectItem key={cuisine} value={cuisine}>
               {cuisine}
