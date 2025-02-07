@@ -1,6 +1,7 @@
 import { type Restaurant, type InsertRestaurant, type Comparison, type InsertComparison, restaurants, comparisons, type TriedRestaurant, triedRestaurants, type PersonalRanking, personalRankings } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
+import { CrowdBT } from "@/lib/crowdbt";
 
 const initialRestaurants: InsertRestaurant[] = [
   {
@@ -442,11 +443,14 @@ export class DatabaseStorage implements IStorage {
     userId: string
   ): Promise<(PersonalRanking & { restaurant: Restaurant })[]> {
     try {
-      // Get all restaurants and user's comparisons
+      // First, get all restaurants and user's comparisons
       const allRestaurants = await this.getRestaurants();
       const userComparisons = await this.getComparisons(userId);
 
-      // Initialize personal rankings if they don't exist
+      // Filter out "not tried" comparisons
+      const validComparisons = userComparisons.filter(c => !c.notTried);
+
+      // Create or get personal rankings for all restaurants
       const rankings = await Promise.all(
         allRestaurants.map(async restaurant => {
           let ranking = await this.getPersonalRanking(userId, restaurant.id);
@@ -460,54 +464,75 @@ export class DatabaseStorage implements IStorage {
         })
       );
 
-      // For new users with no comparisons, sort alphabetically
-      if (userComparisons.length === 0) {
-        console.log('New user - sorting restaurants alphabetically');
-        return rankings.sort((a, b) =>
+      // If user has no valid comparisons, sort alphabetically
+      if (validComparisons.length === 0) {
+        console.log(`User ${userId} has no comparisons - sorting alphabetically`);
+        return rankings.sort((a, b) => 
           a.restaurant.name.localeCompare(b.restaurant.name)
         );
       }
 
-      // Process comparisons to update scores using CrowdBT
-      const crowdBT = new CrowdBT(); // Assuming CrowdBT class is defined elsewhere
-      for (const comparison of userComparisons) {
-        if (!comparison.notTried) {
-          const winner = rankings.find(r => r.restaurantId === comparison.winnerId);
-          const loser = rankings.find(r => r.restaurantId === comparison.loserId);
+      // Initialize CrowdBT for personal rankings
+      const crowdBT = new CrowdBT();
 
-          if (winner && loser) {
-            const [newWinnerScore, , newLoserScore] = crowdBT.updateRatings(
+      // Reset scores for recalculation
+      const restaurantScores = new Map<number, { score: number; sigma: number }>();
+      rankings.forEach(r => {
+        restaurantScores.set(r.restaurantId, { score: 0, sigma: 1 });
+      });
+
+      // Process all comparisons chronologically to build up scores
+      for (const comparison of validComparisons) {
+        const winner = restaurantScores.get(comparison.winnerId);
+        const loser = restaurantScores.get(comparison.loserId);
+
+        if (winner && loser) {
+          const [newWinnerScore, newWinnerSigma, newLoserScore, newLoserSigma] =
+            crowdBT.updateRatings(
               winner.score,
-              1, // Fixed sigma for personal rankings
+              winner.sigma,
               loser.score,
-              1
+              loser.sigma
             );
 
-            winner.score = newWinnerScore;
-            loser.score = newLoserScore;
-          }
+          restaurantScores.set(comparison.winnerId, {
+            score: newWinnerScore,
+            sigma: newWinnerSigma
+          });
+          restaurantScores.set(comparison.loserId, {
+            score: newLoserScore,
+            sigma: newLoserSigma
+          });
         }
       }
 
-      // Update scores in database
+      // Update rankings with calculated scores
       await Promise.all(
-        rankings.map(ranking =>
-          this.updatePersonalRanking(
-            ranking.id,
-            ranking.score,
-            userComparisons.filter(c =>
-              !c.notTried && (c.winnerId === ranking.restaurantId || c.loserId === ranking.restaurantId)
-            ).length
-          )
-        )
+        rankings.map(async ranking => {
+          const scores = restaurantScores.get(ranking.restaurantId);
+          if (scores) {
+            const totalChoices = validComparisons.filter(
+              c => c.winnerId === ranking.restaurantId || c.loserId === ranking.restaurantId
+            ).length;
+
+            await this.updatePersonalRanking(
+              ranking.id,
+              scores.score,
+              totalChoices
+            );
+            ranking.score = scores.score;
+            ranking.totalChoices = totalChoices;
+          }
+        })
       );
 
       // Sort by score, then alphabetically for ties
       return rankings.sort((a, b) => {
-        if (Math.abs(a.score - b.score) < 0.0001) {
+        const scoreDiff = (b.score ?? 0) - (a.score ?? 0);
+        if (Math.abs(scoreDiff) < 0.0001) {
           return a.restaurant.name.localeCompare(b.restaurant.name);
         }
-        return b.score - a.score;
+        return scoreDiff;
       });
 
     } catch (error) {
@@ -519,6 +544,7 @@ export class DatabaseStorage implements IStorage {
 
 export const storage = new DatabaseStorage();
 
+// Initialize database with restaurants if empty
 (async () => {
   try {
     const existingRestaurants = await storage.getRestaurants();
@@ -530,19 +556,7 @@ export const storage = new DatabaseStorage();
       }
       console.log('Seeding complete');
     }
-
-    await storage.getPersonalRankings('anonymous');
   } catch (error) {
     console.error('Error during seeding:', error);
   }
 })();
-
-// Dummy CrowdBT class - Replace with your actual implementation
-class CrowdBT {
-  updateRatings(rating1: number, sigma1: number, rating2: number, sigma2: number): [number, number, number] {
-    // Replace this with your actual CrowdBT rating update logic
-    const newRating1 = (rating1 + rating2) / 2;
-    const newRating2 = (rating1 + rating2) / 2;
-    return [newRating1, 0, newRating2];
-  }
-}
