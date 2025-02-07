@@ -16,6 +16,7 @@ export default function Rankings() {
       if (selectedArea && selectedArea !== 'all') params.append("area", selectedArea);
       if (selectedCuisine && selectedCuisine !== 'all') params.append("cuisine", selectedCuisine);
       const res = await fetch(`/api/restaurants/filter?${params}`);
+      if (!res.ok) throw new Error('Failed to fetch restaurants');
       return res.json();
     }
   });
@@ -28,7 +29,7 @@ export default function Rankings() {
   if (isLoading) {
     return (
       <div className="space-y-4 p-4">
-        {[1, 2, 3].map(i => (
+        {[1, 2, 3, 4, 5].map(i => (
           <Skeleton key={i} className="h-32" />
         ))}
       </div>
@@ -47,8 +48,8 @@ export default function Rankings() {
         cuisines={cuisines}
         selectedArea={selectedArea}
         selectedCuisine={selectedCuisine}
-        onAreaChange={setSelectedArea}
-        onCuisineChange={setSelectedCuisine}
+        onAreaChange={value => setSelectedArea(value === 'all' ? undefined : value)}
+        onCuisineChange={value => setSelectedCuisine(value === 'all' ? undefined : value)}
       />
 
       <div className="space-y-4 p-4">
