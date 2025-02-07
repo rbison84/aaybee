@@ -25,18 +25,18 @@ export function registerRoutes(app: Express) {
     }
 
     const comparison = await storage.createComparison(result.data);
-    
+
     // Update ratings using CrowdBT
     const winner = await storage.getRestaurantById(comparison.winnerId);
     const loser = await storage.getRestaurantById(comparison.loserId);
-    
+
     if (!winner || !loser) {
       return res.status(404).json({ error: "Restaurant not found" });
     }
 
     const crowdBT = new CrowdBT();
     const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] = 
-      crowdBT.updateRatings(winner.rating, winner.sigma, loser.rating, loser.sigma);
+      crowdBT.updateRatings(winner.rating ?? 0, winner.sigma ?? 1, loser.rating ?? 0, loser.sigma ?? 1);
 
     await Promise.all([
       storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
@@ -60,6 +60,50 @@ export function registerRoutes(app: Express) {
     }
 
     res.json(restaurants);
+  });
+
+  // Get recommendations
+  app.get("/api/restaurants/recommendations", async (req, res) => {
+    const userId = req.query.userId as string || 'anonymous';
+
+    // Get user's comparison history
+    const comparisons = await storage.getComparisons(userId);
+
+    // Calculate cuisine preferences
+    const preferences = new Map<string, number>();
+    for (const comparison of comparisons) {
+      const winner = await storage.getRestaurantById(comparison.winnerId);
+      const loser = await storage.getRestaurantById(comparison.loserId);
+
+      if (winner && loser) {
+        // Increase score for winner's cuisines
+        winner.cuisineTypes.forEach(cuisine => {
+          preferences.set(cuisine, (preferences.get(cuisine) || 0) + 1);
+        });
+        // Slightly decrease score for loser's cuisines
+        loser.cuisineTypes.forEach(cuisine => {
+          preferences.set(cuisine, (preferences.get(cuisine) || 0) - 0.5);
+        });
+      }
+    }
+
+    // Get all restaurants and sort by preference score and rating
+    const restaurants = await storage.getRestaurants();
+    const recommendations = restaurants
+      .map(restaurant => {
+        const preferenceScore = restaurant.cuisineTypes.reduce(
+          (score, cuisine) => score + (preferences.get(cuisine) || 0),
+          0
+        );
+        return { ...restaurant, preferenceScore };
+      })
+      .sort((a, b) => 
+        // Combine preference score with rating for final ranking
+        (b.preferenceScore + (b.rating || 0)) - (a.preferenceScore + (a.rating || 0))
+      )
+      .slice(0, 5); // Return top 5 recommendations
+
+    res.json(recommendations);
   });
 
   const httpServer = createServer(app);
