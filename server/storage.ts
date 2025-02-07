@@ -1,6 +1,6 @@
 import { type Restaurant, type InsertRestaurant, type Comparison, type InsertComparison, restaurants, comparisons, type TriedRestaurant, triedRestaurants, type PersonalRanking, personalRankings } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 const initialRestaurants: InsertRestaurant[] = [
   {
@@ -283,14 +283,9 @@ export interface IStorage {
   markRestaurantAsTried(userId: string, restaurantId: number): Promise<void>;
   getTriedRestaurants(userId: string): Promise<number[]>;
 
-  // New methods for personal rankings
   getPersonalRanking(userId: string, restaurantId: number): Promise<PersonalRanking | undefined>;
   createPersonalRanking(userId: string, restaurantId: number): Promise<PersonalRanking>;
-  updatePersonalRanking(
-    id: number,
-    score: number,
-    totalChoices: number
-  ): Promise<PersonalRanking>;
+  updatePersonalRanking(id: number, score: number, totalChoices: number): Promise<PersonalRanking>;
   getPersonalRankings(userId: string): Promise<(PersonalRanking & { restaurant: Restaurant })[]>;
 }
 
@@ -338,7 +333,6 @@ export class DatabaseStorage implements IStorage {
       throw new Error("Not enough restaurants for comparison");
     }
 
-    // Simple random selection
     const availableRestaurants = [...allRestaurants];
     const idx1 = Math.floor(Math.random() * availableRestaurants.length);
     const first = availableRestaurants[idx1];
@@ -384,26 +378,40 @@ export class DatabaseStorage implements IStorage {
     userId: string,
     restaurantId: number
   ): Promise<PersonalRanking | undefined> {
-    const [ranking] = await db
-      .select()
-      .from(personalRankings)
-      .where(eq(personalRankings.userId, userId))
-      .where(eq(personalRankings.restaurantId, restaurantId));
-    return ranking;
+    try {
+      const [ranking] = await db
+        .select()
+        .from(personalRankings)
+        .where(
+          and(
+            eq(personalRankings.userId, userId),
+            eq(personalRankings.restaurantId, restaurantId)
+          )
+        );
+      return ranking;
+    } catch (error) {
+      console.error('Error fetching personal ranking:', error);
+      return undefined;
+    }
   }
 
   async createPersonalRanking(
     userId: string,
     restaurantId: number
   ): Promise<PersonalRanking> {
-    const [ranking] = await db
-      .insert(personalRankings)
-      .values({
-        userId,
-        restaurantId,
-      })
-      .returning();
-    return ranking;
+    try {
+      const [ranking] = await db
+        .insert(personalRankings)
+        .values({
+          userId,
+          restaurantId,
+        })
+        .returning();
+      return ranking;
+    } catch (error) {
+      console.error('Error creating personal ranking:', error);
+      throw new Error('Failed to create personal ranking');
+    }
   }
 
   async updatePersonalRanking(
@@ -411,35 +419,47 @@ export class DatabaseStorage implements IStorage {
     score: number,
     totalChoices: number
   ): Promise<PersonalRanking> {
-    const [ranking] = await db
-      .update(personalRankings)
-      .set({
-        score,
-        totalChoices,
-        updatedAt: new Date(),
-      })
-      .where(eq(personalRankings.id, id))
-      .returning();
-    return ranking;
+    try {
+      const [ranking] = await db
+        .update(personalRankings)
+        .set({
+          score,
+          totalChoices,
+          updatedAt: new Date(),
+        })
+        .where(eq(personalRankings.id, id))
+        .returning();
+      return ranking;
+    } catch (error) {
+      console.error('Error updating personal ranking:', error);
+      throw new Error('Failed to update personal ranking');
+    }
   }
 
   async getPersonalRankings(
     userId: string
   ): Promise<(PersonalRanking & { restaurant: Restaurant })[]> {
-    return await db
-      .select({
-        id: personalRankings.id,
-        userId: personalRankings.userId,
-        restaurantId: personalRankings.restaurantId,
-        score: personalRankings.score,
-        totalChoices: personalRankings.totalChoices,
-        updatedAt: personalRankings.updatedAt,
-        restaurant: restaurants
-      })
-      .from(personalRankings)
-      .where(eq(personalRankings.userId, userId))
-      .innerJoin(restaurants, eq(personalRankings.restaurantId, restaurants.id))
-      .orderBy(personalRankings.score);
+    try {
+      const rankings = await db
+        .select({
+          id: personalRankings.id,
+          userId: personalRankings.userId,
+          restaurantId: personalRankings.restaurantId,
+          score: personalRankings.score,
+          totalChoices: personalRankings.totalChoices,
+          updatedAt: personalRankings.updatedAt,
+          restaurant: restaurants
+        })
+        .from(personalRankings)
+        .where(eq(personalRankings.userId, userId))
+        .innerJoin(restaurants, eq(personalRankings.restaurantId, restaurants.id))
+        .orderBy(personalRankings.score);
+
+      return rankings;
+    } catch (error) {
+      console.error('Error fetching personal rankings:', error);
+      return [];
+    }
   }
 }
 
