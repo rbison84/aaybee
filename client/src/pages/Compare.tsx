@@ -12,13 +12,14 @@ export default function Compare() {
   const { toast } = useToast();
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  const { data: pair, isLoading, refetch } = useQuery<[Restaurant, Restaurant]>({
+  const { data: pair, isLoading, error, refetch } = useQuery<[Restaurant, Restaurant]>({
     queryKey: ["/api/restaurants/pair"],
+    retry: false
   });
 
   const submitMutation = useMutation({
     mutationFn: async ({ winnerId, notTried }: { winnerId?: number, notTried?: boolean }) => {
-      if (!pair) return;
+      if (!pair || pair.length !== 2) return;
 
       if (notTried) {
         await apiRequest("POST", "/api/comparisons", {
@@ -39,7 +40,6 @@ export default function Compare() {
           notTried: false
         });
 
-        // If the user made a choice, mark both restaurants as tried
         await apiRequest("POST", "/api/restaurants/tried", {
           restaurantIds: [pair[0].id, pair[1].id],
           userId: "anonymous"
@@ -65,7 +65,16 @@ export default function Compare() {
     await submitMutation.mutateAsync({ notTried: true });
   };
 
-  if (isLoading || !pair) {
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8">
+        <p className="text-destructive mb-4">Failed to load restaurants for comparison</p>
+        <Button onClick={() => refetch()}>Try Again</Button>
+      </div>
+    );
+  }
+
+  if (isLoading || !pair || pair.length !== 2) {
     return (
       <div className="grid md:grid-cols-2 gap-6 p-4">
         <Card className="p-6">
@@ -100,7 +109,7 @@ export default function Compare() {
           onClick={handleNotTried}
           className="text-muted-foreground"
         >
-          I don't know
+          I haven't tried both
         </Button>
       </div>
     </div>

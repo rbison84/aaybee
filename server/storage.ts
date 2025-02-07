@@ -55,31 +55,26 @@ export class DatabaseStorage implements IStorage {
     const triedIds = await this.getTriedRestaurants(userId);
     const allRestaurants = await this.getRestaurants();
 
-    // If user hasn't tried any restaurants, return a random pair
-    if (triedIds.length === 0) {
-      const idx1 = Math.floor(Math.random() * allRestaurants.length);
-      let idx2 = Math.floor(Math.random() * (allRestaurants.length - 1));
-      if (idx2 >= idx1) idx2++;
-      return [allRestaurants[idx1], allRestaurants[idx2]];
+    if (allRestaurants.length < 2) {
+      throw new Error("Not enough restaurants for comparison");
     }
 
-    // Otherwise, ensure at least one restaurant has been tried
-    const triedRestaurants = allRestaurants.filter(r => triedIds.includes(r.id));
-    const untriedRestaurants = allRestaurants.filter(r => !triedIds.includes(r.id));
+    // Simple random selection without complicated logic
+    const availableRestaurants = [...allRestaurants];
+    const idx1 = Math.floor(Math.random() * availableRestaurants.length);
+    const first = availableRestaurants[idx1];
 
-    // Randomly decide whether to show two tried restaurants or one tried and one untried
-    if (Math.random() < 0.3 && triedRestaurants.length >= 2) {
-      // Show two tried restaurants
-      const idx1 = Math.floor(Math.random() * triedRestaurants.length);
-      let idx2 = Math.floor(Math.random() * (triedRestaurants.length - 1));
-      if (idx2 >= idx1) idx2++;
-      return [triedRestaurants[idx1], triedRestaurants[idx2]];
-    } else {
-      // Show one tried and one untried restaurant
-      const triedIdx = Math.floor(Math.random() * triedRestaurants.length);
-      const untriedIdx = Math.floor(Math.random() * untriedRestaurants.length);
-      return [triedRestaurants[triedIdx], untriedRestaurants[untriedIdx]];
+    // Remove the first restaurant from available options
+    availableRestaurants.splice(idx1, 1);
+
+    const idx2 = Math.floor(Math.random() * availableRestaurants.length);
+    const second = availableRestaurants[idx2];
+
+    if (!first || !second) {
+      throw new Error("Could not get a valid pair of restaurants");
     }
+
+    return [first, second];
   }
 
   async createComparison(data: InsertComparison): Promise<Comparison> {
