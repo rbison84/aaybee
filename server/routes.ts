@@ -14,9 +14,17 @@ export function registerRoutes(app: Express) {
 
   // Get random pair for comparison
   app.get("/api/restaurants/pair", async (req, res) => {
-    const userId = req.query.userId as string || 'anonymous';
-    const pair = await storage.getRandomPair(userId);
-    res.json(pair);
+    try {
+      const userId = req.query.userId as string || 'anonymous';
+      const pair = await storage.getRandomPair(userId);
+      if (!pair || pair.length !== 2) {
+        throw new Error("Could not get a valid pair of restaurants");
+      }
+      res.json(pair);
+    } catch (error) {
+      console.error("Error getting restaurant pair:", error);
+      res.status(500).json({ error: "Failed to get restaurant pair" });
+    }
   });
 
   // Submit comparison
@@ -65,14 +73,16 @@ export function registerRoutes(app: Express) {
     const { area, cuisine } = req.query;
     let restaurants;
 
-    if (area) {
+    if (area && area !== 'all') {
       restaurants = await storage.getRestaurantsByArea(area as string);
-    } else if (cuisine) {
+    } else if (cuisine && cuisine !== 'all') {
       restaurants = await storage.getRestaurantsByCuisine(cuisine as string);
     } else {
       restaurants = await storage.getRestaurants();
     }
 
+    // Sort by rating
+    restaurants.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
     res.json(restaurants);
   });
 
