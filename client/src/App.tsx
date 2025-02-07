@@ -65,16 +65,16 @@ function Router() {
       <Route path="/compare" component={Compare} />
       <Route path="/rankings" component={Rankings} />
       <Route path="/recommendations" component={
-        () => isSignedIn ? <Recommendations /> : <SignIn routing="path" signUpUrl="/sign-up" />
+        () => isSignedIn ? <Recommendations /> : <SignIn redirectUrl="/recommendations" />
       } />
-      <Route path="/sign-in/:path*" component={() => (
+      <Route path="/sign-in" component={() => (
         <div className="flex justify-center items-center min-h-[80vh]">
-          <SignIn path="/sign-in" routing="path" signUpUrl="/sign-up" />
+          <SignIn redirectUrl="/compare" />
         </div>
       )} />
-      <Route path="/sign-up/:path*" component={() => (
+      <Route path="/sign-up" component={() => (
         <div className="flex justify-center items-center min-h-[80vh]">
-          <SignUp path="/sign-up" routing="path" signInUrl="/sign-in" />
+          <SignUp redirectUrl="/compare" />
         </div>
       )} />
       <Route component={NotFound} />
