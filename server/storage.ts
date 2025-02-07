@@ -456,6 +456,12 @@ export class DatabaseStorage implements IStorage {
         .where(eq(personalRankings.userId, userId))
         .innerJoin(restaurants, eq(personalRankings.restaurantId, restaurants.id))
         .orderBy(desc(personalRankings.score), restaurants.name);
+
+      // If all scores are 0 (new user), sort alphabetically by restaurant name
+      if (rankings.every(r => r.score === 0)) {
+        return rankings.sort((a, b) => a.restaurant.name.localeCompare(b.restaurant.name));
+      }
+
       return rankings;
     } catch (error) {
       console.error('Error fetching personal rankings:', error);
