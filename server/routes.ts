@@ -83,19 +83,18 @@ export function registerRoutes(app: Express) {
 
     const { winnerId, loserId, userId, context, notTried } = result.data;
 
-    // For "I don't know" case, we'll just record the comparison
     const comparison = await storage.createComparison({
-      winnerId: notTried ? req.body.restaurantIds[0] : winnerId,
-      loserId: notTried ? req.body.restaurantIds[1] : loserId,
+      winnerId: notTried ? null : winnerId,
+      loserId: notTried ? null : loserId,
       userId,
       context,
-      notTried: notTried ?? false
+      notTried
     });
 
-    // Only update ratings if the user made an actual choice
-    if (!notTried) {
-      const winner = await storage.getRestaurantById(comparison.winnerId);
-      const loser = await storage.getRestaurantById(comparison.loserId);
+    // Only update ratings if user made an actual choice
+    if (!notTried && winnerId && loserId) {
+      const winner = await storage.getRestaurantById(winnerId);
+      const loser = await storage.getRestaurantById(loserId);
 
       if (!winner || !loser) {
         return res.status(404).json({ error: "Restaurant not found" });
