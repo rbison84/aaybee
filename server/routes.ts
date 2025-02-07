@@ -6,8 +6,7 @@ import { insertComparisonSchema } from "@shared/schema";
 import { z } from "zod";
 import type { IStorage } from "@/lib/storage";
 
-
-// Helper function to update personal rankings
+// Helper function to update personal rankings using CrowdBT
 async function updatePersonalRankings(
   storage: IStorage,
   winnerId: number,
@@ -26,21 +25,26 @@ async function updatePersonalRankings(
       loser: { id: loserId, currentScore: loserRanking.score }
     });
 
-    // Calculate new ELO scores
-    const expectedScore = 1 / (1 + Math.pow(10, (loserRanking.score - winnerRanking.score) / 400));
-    const kFactor = 32;
-    const updateAmount = kFactor * (1 - expectedScore);
+    // Use CrowdBT for personal rankings
+    const crowdBT = new CrowdBT();
+    const [newWinnerScore, newWinnerSigma, newLoserScore, newLoserSigma] =
+      crowdBT.updateRatings(
+        winnerRanking.score,
+        1, // Using constant sigma for personal rankings for simplicity
+        loserRanking.score,
+        1
+      );
 
     // Update both rankings
     await Promise.all([
       storage.updatePersonalRanking(
         winnerRanking.id,
-        winnerRanking.score + updateAmount,
+        newWinnerScore,
         winnerRanking.totalChoices + 1
       ),
       storage.updatePersonalRanking(
         loserRanking.id,
-        loserRanking.score - updateAmount,
+        newLoserScore,
         loserRanking.totalChoices + 1
       )
     ]);
@@ -108,11 +112,10 @@ export function registerRoutes(app: Express) {
 
       await Promise.all([
         storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
-        storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma)
+        storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma),
+        // Update personal rankings in parallel
+        updatePersonalRankings(storage, winner.id, loser.id, userId)
       ]);
-
-      // Update personal rankings
-      await updatePersonalRankings(storage, winner.id, loser.id, userId);
     }
 
     res.json(comparison);
