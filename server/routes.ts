@@ -266,21 +266,28 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      // Convert scores map to array of restaurants with their scores
-      const rankings = restaurants.map(restaurant => {
-        const score = scores.get(restaurant.id);
-        return {
-          ...restaurant,
-          score: score?.score || 1400,
-          totalChoices: score?.total || 0
-        };
-      });
+      // Convert scores map to array with full restaurant objects and their scores
+      const rankings = await Promise.all(
+        restaurants.map(async restaurant => {
+          const score = scores.get(restaurant.id);
+          // Get or create personal ranking
+          const personalRanking = await storage.getPersonalRanking(userId, restaurant.id) ||
+            await storage.createPersonalRanking(userId, restaurant.id);
 
-      // Sort by score, then by name for ties
+          return {
+            ...personalRanking,
+            score: score?.score || 1400,
+            totalChoices: score?.total || 0,
+            restaurant: restaurant // Keep full restaurant object
+          };
+        })
+      );
+
+      // Sort by score, then by restaurant name for ties
       rankings.sort((a, b) => {
         const scoreDiff = b.score - a.score;
         if (Math.abs(scoreDiff) < 0.0001) {
-          return a.name.localeCompare(b.name);
+          return a.restaurant.name.localeCompare(b.restaurant.name);
         }
         return scoreDiff;
       });
