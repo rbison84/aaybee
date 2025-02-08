@@ -81,6 +81,18 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Get user's comparisons
+  app.get("/api/comparisons", async (req, res) => {
+    try {
+      const userId = req.query.userId as string || 'anonymous';
+      const comparisons = await storage.getComparisons(userId);
+      res.json(comparisons);
+    } catch (error) {
+      console.error("Error getting comparisons:", error);
+      res.status(500).json({ error: "Failed to get comparisons" });
+    }
+  });
+
   // Submit comparison
   app.post("/api/comparisons", async (req, res) => {
     const result = insertComparisonSchema.safeParse(req.body);
@@ -91,7 +103,7 @@ export function registerRoutes(app: Express) {
     try {
       const { winnerId, loserId, userId, context, notTried } = result.data;
 
-      // Create comparison
+      // Create comparison record
       const comparison = await storage.createComparison({
         winnerId: notTried ? null : winnerId,
         loserId: notTried ? null : loserId,
@@ -129,10 +141,10 @@ export function registerRoutes(app: Express) {
           storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
           storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma)
         ]);
-      }
 
-      // Always update personal rankings, even for anonymous users
-      await updatePersonalRankings(storage, winnerId, loserId, userId);
+        // Update personal rankings for all choices
+        await updatePersonalRankings(storage, winnerId, loserId, userId);
+      }
 
       // Recalculate all global rankings to ensure consistency
       await storage.updateGlobalRankings();
