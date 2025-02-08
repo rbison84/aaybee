@@ -49,7 +49,17 @@ export function RankingTabs({
               <div className="absolute -left-8 top-1/2 -translate-y-1/2 font-bold text-xl text-muted-foreground">
                 {index + 1}
               </div>
-              <RestaurantCard restaurant={restaurant} />
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex justify-between items-start">
+                    <RestaurantCard restaurant={restaurant} />
+                    <div className="text-sm text-muted-foreground">
+                      <div>Score: {restaurant.rating?.toFixed(2) || 0}</div>
+                      <div>Sigma: {restaurant.sigma?.toFixed(2) || 1}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           ))}
         </div>
@@ -69,7 +79,17 @@ export function RankingTabs({
                 <div className="absolute -left-8 top-1/2 -translate-y-1/2 font-bold text-xl text-muted-foreground">
                   {index + 1}
                 </div>
-                <RestaurantCard restaurant={ranking.restaurant} />
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex justify-between items-start">
+                      <RestaurantCard restaurant={ranking.restaurant} />
+                      <div className="text-sm text-muted-foreground">
+                        <div>Score: {ranking.score?.toFixed(2) || 0}</div>
+                        <div>Total Choices: {ranking.totalChoices || 0}</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             ))}
           </div>
