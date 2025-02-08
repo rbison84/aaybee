@@ -220,9 +220,76 @@ export function registerRoutes(app: Express) {
 
   // Add new endpoint for personal rankings
   app.get("/api/rankings/personal", async (req, res) => {
-    const userId = req.query.userId as string || 'anonymous';
-    const rankings = await storage.getPersonalRankings(userId);
-    res.json(rankings);
+    try {
+      const userId = req.query.userId as string || 'anonymous';
+
+      // Get all user's valid comparisons (excluding 'not tried')
+      const userComparisons = await storage.getComparisons(userId);
+      const validComparisons = userComparisons.filter(c =>
+        !c.notTried && c.winnerId && c.loserId
+      );
+
+      // Get all restaurants
+      const restaurants = await storage.getRestaurants();
+
+      // Initialize scores for all restaurants
+      const scores = new Map<number, { score: number; total: number }>();
+      restaurants.forEach(r => {
+        scores.set(r.id, { score: 1400, total: 0 }); // Start with ELO base score
+      });
+
+      // Create CrowdBT instance for calculating scores
+      const crowdBT = new CrowdBT(0.5, 0.5);
+
+      // Process each comparison chronologically to update scores
+      for (const comp of validComparisons) {
+        const winner = scores.get(comp.winnerId);
+        const loser = scores.get(comp.loserId);
+
+        if (winner && loser) {
+          const [newWinnerScore, , newLoserScore] = crowdBT.updateRatings(
+            winner.score,
+            1, // Fixed sigma for personal rankings
+            loser.score,
+            1
+          );
+
+          scores.set(comp.winnerId, {
+            score: newWinnerScore,
+            total: winner.total + 1
+          });
+
+          scores.set(comp.loserId, {
+            score: newLoserScore,
+            total: loser.total + 1
+          });
+        }
+      }
+
+      // Convert scores map to array of restaurants with their scores
+      const rankings = restaurants.map(restaurant => {
+        const score = scores.get(restaurant.id);
+        return {
+          ...restaurant,
+          score: score?.score || 1400,
+          totalChoices: score?.total || 0
+        };
+      });
+
+      // Sort by score, then by name for ties
+      rankings.sort((a, b) => {
+        const scoreDiff = b.score - a.score;
+        if (Math.abs(scoreDiff) < 0.0001) {
+          return a.name.localeCompare(b.name);
+        }
+        return scoreDiff;
+      });
+
+      res.json(rankings);
+    } catch (error) {
+      console.error('Error getting personal rankings:', error);
+      res.status(500).json({ error: 'Failed to get personal rankings' });
+    }
   });
 
   // Add new endpoint for admin to view all choices
