@@ -14,8 +14,8 @@ export const restaurants = pgTable("restaurants", {
 
 export const comparisons = pgTable("comparisons", {
   id: serial("id").primaryKey(),
-  winnerId: serial("winner_id").references(() => restaurants.id),
-  loserId: serial("loser_id").references(() => restaurants.id),
+  winnerId: serial("winner_id").references(() => restaurants.id, { onDelete: 'cascade' }),
+  loserId: serial("loser_id").references(() => restaurants.id, { onDelete: 'cascade' }),
   userId: text("user_id").notNull(),
   context: jsonb("context").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -33,8 +33,8 @@ export const personalRankings = pgTable("personal_rankings", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
   restaurantId: serial("restaurant_id").references(() => restaurants.id),
-  score: real("score").default(0), // Changed from 1400 to 0 to match global rankings
-  totalChoices: real("total_choices").default(0), // Changed from serial to real with default 0
+  score: real("score").default(0),
+  totalChoices: real("total_choices").default(0),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
