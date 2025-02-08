@@ -553,27 +553,27 @@ export class DatabaseStorage implements IStorage {
   async updateGlobalRankings(): Promise<void> {
     try {
       // Get all valid comparisons and sort by creation date
-      const comparisons = await db
+      const validComparisons = await db
         .select()
         .from(comparisons)
         .where(eq(comparisons.notTried, false))
         .orderBy(asc(comparisons.createdAt));
 
       // Get all restaurants
-      const restaurants = await this.getRestaurants();
+      const allRestaurants = await this.getRestaurants();
 
       // Initialize CrowdBT and restaurant scores
       const crowdBT = new CrowdBT();
       const restaurantScores = new Map<number, { rating: number; sigma: number }>();
 
       // Initialize all restaurants with default scores
-      restaurants.forEach(r => {
+      allRestaurants.forEach(r => {
         restaurantScores.set(r.id, { rating: 0, sigma: 1 });
       });
 
       // Process all comparisons chronologically
-      for (const comparison of comparisons) {
-        if (comparison.notTried || !comparison.winnerId || !comparison.loserId) continue;
+      for (const comparison of validComparisons) {
+        if (!comparison.winnerId || !comparison.loserId) continue;
 
         const winner = restaurantScores.get(comparison.winnerId);
         const loser = restaurantScores.get(comparison.loserId);

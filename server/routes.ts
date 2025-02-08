@@ -93,8 +93,42 @@ export function registerRoutes(app: Express) {
         notTried
       });
 
-      // Recalculate global rankings if this was a valid comparison
+      // Only update ratings if user made an actual choice
       if (!notTried && winnerId && loserId) {
+        const winner = await storage.getRestaurantById(winnerId);
+        const loser = await storage.getRestaurantById(loserId);
+
+        if (!winner || !loser) {
+          return res.status(404).json({ error: "Restaurant not found" });
+        }
+
+        // Update global rankings
+        const crowdBT = new CrowdBT();
+        const winnerRating = winner.rating ?? 0;
+        const loserRating = loser.rating ?? 0;
+        const winnerSigma = winner.sigma ?? 1;
+        const loserSigma = loser.sigma ?? 1;
+
+        const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] =
+          crowdBT.updateRatings(
+            winnerRating,
+            winnerSigma,
+            loserRating,
+            loserSigma
+          );
+
+        // Update global rankings
+        await Promise.all([
+          storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
+          storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma)
+        ]);
+
+        // Only update personal rankings if user is authenticated (not anonymous)
+        if (userId !== 'anonymous') {
+          await updatePersonalRankings(storage, winner.id, loser.id, userId);
+        }
+
+        // Recalculate all global rankings to ensure consistency
         await storage.updateGlobalRankings();
       }
 
