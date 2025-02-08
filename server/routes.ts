@@ -22,9 +22,9 @@ async function updatePersonalRankings(
     // Use a separate CrowdBT instance for personal rankings
     const crowdBT = new CrowdBT();
     const [newWinnerScore, , newLoserScore] = crowdBT.updateRatings(
-      winnerRanking.score,
+      winnerRanking.score || 0,
       1, // Fixed sigma for personal rankings
-      loserRanking.score,
+      loserRanking.score || 0,
       1
     );
 
@@ -33,12 +33,12 @@ async function updatePersonalRankings(
       storage.updatePersonalRanking(
         winnerRanking.id,
         newWinnerScore,
-        winnerRanking.totalChoices + 1
+        (winnerRanking.totalChoices || 0) + 1
       ),
       storage.updatePersonalRanking(
         loserRanking.id,
         newLoserScore,
-        loserRanking.totalChoices + 1
+        (loserRanking.totalChoices || 0) + 1
       )
     ]);
 
