@@ -93,45 +93,9 @@ export function registerRoutes(app: Express) {
         notTried
       });
 
-      // Only update ratings if user made an actual choice
+      // Recalculate global rankings if this was a valid comparison
       if (!notTried && winnerId && loserId) {
-        const winner = await storage.getRestaurantById(winnerId);
-        const loser = await storage.getRestaurantById(loserId);
-
-        if (!winner || !loser) {
-          return res.status(404).json({ error: "Restaurant not found" });
-        }
-
-        // Update global rankings
-        const crowdBT = new CrowdBT();
-        const winnerRating = winner.rating ?? 0;
-        const loserRating = loser.rating ?? 0;
-        const winnerSigma = winner.sigma ?? 1;
-        const loserSigma = loser.sigma ?? 1;
-
-        const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] =
-          crowdBT.updateRatings(
-            winnerRating,
-            winnerSigma,
-            loserRating,
-            loserSigma
-          );
-
-        console.log('Updating global rankings:', {
-          winner: { id: winner.id, oldRating: winnerRating, newRating: newWinnerRating },
-          loser: { id: loser.id, oldRating: loserRating, newRating: newLoserRating }
-        });
-
-        // Update global rankings
-        await Promise.all([
-          storage.updateRestaurantRating(winner.id, newWinnerRating, newWinnerSigma),
-          storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma)
-        ]);
-
-        // Only update personal rankings if user is authenticated (not anonymous)
-        if (userId !== 'anonymous') {
-          await updatePersonalRankings(storage, winner.id, loser.id, userId);
-        }
+        await storage.updateGlobalRankings();
       }
 
       res.json(comparison);
@@ -274,6 +238,17 @@ export function registerRoutes(app: Express) {
     }
   });
 
+
+  // Add a new route to recalculate rankings
+  app.post("/api/rankings/recalculate", async (_req, res) => {
+    try {
+      await storage.updateGlobalRankings();
+      res.json({ message: "Rankings recalculated successfully" });
+    } catch (error) {
+      console.error('Error recalculating rankings:', error);
+      res.status(500).json({ error: 'Failed to recalculate rankings' });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

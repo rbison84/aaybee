@@ -1,6 +1,6 @@
 import { type Restaurant, type InsertRestaurant, type Comparison, type InsertComparison, restaurants, comparisons, type TriedRestaurant, triedRestaurants, type PersonalRanking, personalRankings } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { CrowdBT } from "@/lib/crowdbt";
 
 const initialRestaurants: InsertRestaurant[] = [
@@ -289,6 +289,7 @@ export interface IStorage {
   updatePersonalRanking(id: number, score: number, totalChoices: number): Promise<PersonalRanking>;
   getPersonalRankings(userId: string): Promise<(PersonalRanking & { restaurant: Restaurant })[]>;
   getAllComparisons(): Promise<Comparison[]>;
+  updateGlobalRankings(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -547,6 +548,68 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(comparisons)
       .orderBy(desc(comparisons.createdAt));
+  }
+
+  async updateGlobalRankings(): Promise<void> {
+    try {
+      // Get all valid comparisons and sort by creation date
+      const comparisons = await db
+        .select()
+        .from(comparisons)
+        .where(eq(comparisons.notTried, false))
+        .orderBy(asc(comparisons.createdAt));
+
+      // Get all restaurants
+      const restaurants = await this.getRestaurants();
+
+      // Initialize CrowdBT and restaurant scores
+      const crowdBT = new CrowdBT();
+      const restaurantScores = new Map<number, { rating: number; sigma: number }>();
+
+      // Initialize all restaurants with default scores
+      restaurants.forEach(r => {
+        restaurantScores.set(r.id, { rating: 0, sigma: 1 });
+      });
+
+      // Process all comparisons chronologically
+      for (const comparison of comparisons) {
+        if (comparison.notTried || !comparison.winnerId || !comparison.loserId) continue;
+
+        const winner = restaurantScores.get(comparison.winnerId);
+        const loser = restaurantScores.get(comparison.loserId);
+
+        if (winner && loser) {
+          const [newWinnerRating, newWinnerSigma, newLoserRating, newLoserSigma] =
+            crowdBT.updateRatings(
+              winner.rating,
+              winner.sigma,
+              loser.rating,
+              loser.sigma
+            );
+
+          restaurantScores.set(comparison.winnerId, {
+            rating: newWinnerRating,
+            sigma: newWinnerSigma
+          });
+          restaurantScores.set(comparison.loserId, {
+            rating: newLoserRating,
+            sigma: newLoserSigma
+          });
+        }
+      }
+
+      // Update all restaurant ratings in the database
+      await Promise.all(
+        Array.from(restaurantScores.entries()).map(([id, scores]) =>
+          this.updateRestaurantRating(id, scores.rating, scores.sigma)
+        )
+      );
+
+      console.log('Global rankings updated successfully');
+    } catch (error) {
+      console.error('Error updating global rankings:', error);
+      throw error;
+    }
   }
 }
 
