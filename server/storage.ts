@@ -445,46 +445,43 @@ export class DatabaseStorage implements IStorage {
     userId: string
   ): Promise<(PersonalRanking & { restaurant: Restaurant })[]> {
     try {
-      // First, get all restaurants and user's comparisons
+      // Get all valid comparisons for this specific user
+      const userComparisons = await db
+        .select()
+        .from(comparisons)
+        .where(
+          and(
+            eq(comparisons.userId, userId),
+            eq(comparisons.notTried, false)
+          )
+        )
+        .orderBy(asc(comparisons.createdAt));
+
+      // Get all restaurants
       const allRestaurants = await this.getRestaurants();
-      const userComparisons = await this.getComparisons(userId);
 
-      // Filter out "not tried" comparisons
-      const validComparisons = userComparisons.filter(c => !c.notTried && c.winnerId !== null && c.loserId !== null);
+      // Initialize CrowdBT
+      const crowdBT = new CrowdBT(0.5, 0.5);
 
-      // Create or get personal rankings for all restaurants
-      const rankings = await Promise.all(
-        allRestaurants.map(async restaurant => {
-          let ranking = await this.getPersonalRanking(userId, restaurant.id);
-          if (!ranking) {
-            ranking = await this.createPersonalRanking(userId, restaurant.id);
-          }
-          return {
-            ...ranking,
-            restaurant
-          };
-        })
-      );
+      // Initialize scores for all restaurants
+      const restaurantScores = new Map<number, { 
+        score: number; 
+        sigma: number;
+        totalChoices: number;
+      }>();
 
-      // If user has no valid comparisons, sort alphabetically
-      if (validComparisons.length === 0) {
-        console.log(`User ${userId} has no comparisons - sorting alphabetically`);
-        return rankings.sort((a, b) => 
-          a.restaurant.name.localeCompare(b.restaurant.name)
-        );
-      }
-
-      // Initialize CrowdBT for personal rankings
-      const crowdBT = new CrowdBT();
-
-      // Reset scores for recalculation
-      const restaurantScores = new Map<number, { score: number; sigma: number }>();
-      rankings.forEach(r => {
-        restaurantScores.set(r.restaurantId, { score: 0, sigma: 1 });
+      allRestaurants.forEach(r => {
+        restaurantScores.set(r.id, { 
+          score: 1400, // Starting ELO score
+          sigma: 1,
+          totalChoices: 0
+        });
       });
 
-      // Process all comparisons chronologically to build up scores
-      for (const comparison of validComparisons) {
+      // Process all user's comparisons chronologically
+      for (const comparison of userComparisons) {
+        if (!comparison.winnerId || !comparison.loserId) continue;
+
         const winner = restaurantScores.get(comparison.winnerId);
         const loser = restaurantScores.get(comparison.loserId);
 
@@ -499,38 +496,44 @@ export class DatabaseStorage implements IStorage {
 
           restaurantScores.set(comparison.winnerId, {
             score: newWinnerScore,
-            sigma: newWinnerSigma
+            sigma: newWinnerSigma,
+            totalChoices: winner.totalChoices + 1
           });
+
           restaurantScores.set(comparison.loserId, {
             score: newLoserScore,
-            sigma: newLoserSigma
+            sigma: newLoserSigma,
+            totalChoices: loser.totalChoices + 1
           });
         }
       }
 
-      // Update rankings with calculated scores
-      await Promise.all(
-        rankings.map(async ranking => {
-          const scores = restaurantScores.get(ranking.restaurantId);
-          if (scores) {
-            const totalChoices = validComparisons.filter(
-              c => c.winnerId === ranking.restaurantId || c.loserId === ranking.restaurantId
-            ).length;
+      // Create personal rankings array with restaurants and their scores
+      const rankings = await Promise.all(
+        allRestaurants.map(async restaurant => {
+          const scores = restaurantScores.get(restaurant.id);
+          const ranking = await this.getPersonalRanking(userId, restaurant.id) ||
+            await this.createPersonalRanking(userId, restaurant.id);
 
-            await this.updatePersonalRanking(
-              ranking.id,
-              scores.score,
-              totalChoices
-            );
-            ranking.score = scores.score;
-            ranking.totalChoices = totalChoices;
-          }
+          // Update the ranking in the database
+          await this.updatePersonalRanking(
+            ranking.id,
+            scores?.score || 1400,
+            scores?.totalChoices || 0
+          );
+
+          return {
+            ...ranking,
+            score: scores?.score || 1400,
+            totalChoices: scores?.totalChoices || 0,
+            restaurant
+          };
         })
       );
 
-      // Sort by score, then alphabetically for ties
+      // Sort by score (descending), then by name for ties
       return rankings.sort((a, b) => {
-        const scoreDiff = (b.score ?? 0) - (a.score ?? 0);
+        const scoreDiff = (b.score || 0) - (a.score || 0);
         if (Math.abs(scoreDiff) < 0.0001) {
           return a.restaurant.name.localeCompare(b.restaurant.name);
         }
@@ -539,7 +542,7 @@ export class DatabaseStorage implements IStorage {
 
     } catch (error) {
       console.error('Error fetching personal rankings:', error);
-      return [];
+      throw error;
     }
   }
 
