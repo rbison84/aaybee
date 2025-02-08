@@ -13,21 +13,14 @@ async function updatePersonalRankings(
   userId: string,
 ): Promise<void> {
   try {
-    console.log('Updating personal rankings for:', { userId, winnerId, loserId });
-
     // Get or create personal rankings for both restaurants
     const winnerRanking = await storage.getPersonalRanking(userId, winnerId) ||
       await storage.createPersonalRanking(userId, winnerId);
     const loserRanking = await storage.getPersonalRanking(userId, loserId) ||
       await storage.createPersonalRanking(userId, loserId);
 
-    console.log('Current rankings:', {
-      winner: { id: winnerId, score: winnerRanking.score },
-      loser: { id: loserId, score: loserRanking.score }
-    });
-
-    // Use CrowdBT for personal rankings
-    const crowdBT = new CrowdBT(0.5, 0.5);  // Explicit parameters for clarity
+    // Use a separate CrowdBT instance for personal rankings
+    const crowdBT = new CrowdBT();
     const [newWinnerScore, , newLoserScore] = crowdBT.updateRatings(
       winnerRanking.score || 0,
       1, // Fixed sigma for personal rankings
@@ -81,18 +74,6 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Get user's comparisons
-  app.get("/api/comparisons", async (req, res) => {
-    try {
-      const userId = req.query.userId as string || 'anonymous';
-      const comparisons = await storage.getComparisons(userId);
-      res.json(comparisons);
-    } catch (error) {
-      console.error("Error getting comparisons:", error);
-      res.status(500).json({ error: "Failed to get comparisons" });
-    }
-  });
-
   // Submit comparison
   app.post("/api/comparisons", async (req, res) => {
     const result = insertComparisonSchema.safeParse(req.body);
@@ -103,7 +84,7 @@ export function registerRoutes(app: Express) {
     try {
       const { winnerId, loserId, userId, context, notTried } = result.data;
 
-      // Create comparison record
+      // Create comparison
       const comparison = await storage.createComparison({
         winnerId: notTried ? null : winnerId,
         loserId: notTried ? null : loserId,
@@ -142,12 +123,14 @@ export function registerRoutes(app: Express) {
           storage.updateRestaurantRating(loser.id, newLoserRating, newLoserSigma)
         ]);
 
-        // Update personal rankings for all choices
-        await updatePersonalRankings(storage, winnerId, loserId, userId);
-      }
+        // Only update personal rankings if user is authenticated (not anonymous)
+        if (userId !== 'anonymous') {
+          await updatePersonalRankings(storage, winner.id, loser.id, userId);
+        }
 
-      // Recalculate all global rankings to ensure consistency
-      await storage.updateGlobalRankings();
+        // Recalculate all global rankings to ensure consistency
+        await storage.updateGlobalRankings();
+      }
 
       res.json(comparison);
     } catch (error) {
@@ -156,16 +139,148 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Filter restaurants
+  app.get("/api/restaurants/filter", async (req, res) => {
+    const { area, cuisine } = req.query;
+    let restaurants;
+
+    if (area && area !== 'all') {
+      restaurants = await storage.getRestaurantsByArea(area as string);
+    } else if (cuisine && cuisine !== 'all') {
+      restaurants = await storage.getRestaurantsByCuisine(cuisine as string);
+    } else {
+      restaurants = await storage.getRestaurants();
+    }
+
+    // Sort by rating
+    restaurants.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+    res.json(restaurants);
+  });
+
+  // Get recommendations
+  app.get("/api/restaurants/recommendations", async (req, res) => {
+    const userId = req.query.userId as string || 'anonymous';
+
+    // Get user's comparison history
+    const comparisons = await storage.getComparisons(userId);
+
+    // Calculate cuisine preferences
+    const preferences = new Map<string, number>();
+    for (const comparison of comparisons) {
+      if (comparison.notTried) continue;
+
+      const winner = await storage.getRestaurantById(comparison.winnerId);
+      const loser = await storage.getRestaurantById(comparison.loserId);
+
+      if (winner && loser) {
+        winner.cuisineTypes.forEach(cuisine => {
+          preferences.set(cuisine, (preferences.get(cuisine) || 0) + 1);
+        });
+        loser.cuisineTypes.forEach(cuisine => {
+          preferences.set(cuisine, (preferences.get(cuisine) || 0) - 0.5);
+        });
+      }
+    }
+
+    // Get all restaurants and sort by preference score and personal rating
+    const restaurants = await storage.getRestaurants();
+    const recommendations = await Promise.all(
+      restaurants.map(async (restaurant) => {
+        const preferenceScore = restaurant.cuisineTypes.reduce(
+          (score, cuisine) => score + (preferences.get(cuisine) || 0),
+          0
+        );
+        const personalRanking = await storage.getPersonalRanking(userId, restaurant.id);
+        return {
+          ...restaurant,
+          preferenceScore: preferenceScore + (personalRanking?.score || 0)
+        };
+      })
+    );
+
+    // Sort by combined score and return top 5
+    recommendations.sort((a, b) => b.preferenceScore - a.preferenceScore);
+    res.json(recommendations.slice(0, 5));
+  });
+
+  // Mark restaurants as tried
+  app.post("/api/restaurants/tried", async (req, res) => {
+    const { userId = 'anonymous', restaurantIds } = req.body;
+
+    if (!Array.isArray(restaurantIds)) {
+      return res.status(400).json({ error: "restaurantIds must be an array" });
+    }
+
+    await Promise.all(
+      restaurantIds.map(id => storage.markRestaurantAsTried(userId, id))
+    );
+
+    res.json({ success: true });
+  });
+
   // Add new endpoint for personal rankings
   app.get("/api/rankings/personal", async (req, res) => {
     const userId = req.query.userId as string || 'anonymous';
+    const rankings = await storage.getPersonalRankings(userId);
+    res.json(rankings);
+  });
+
+  // Add new endpoint for admin to view all choices
+  app.get("/api/admin/choices", async (_req, res) => {
     try {
-      const rankings = await storage.getPersonalRankings(userId);
-      console.log(`Retrieved ${rankings.length} personal rankings for user ${userId}`);
-      res.json(rankings);
+      // Get all comparisons
+      const allComparisons = await storage.getAllComparisons();
+
+      // Group comparisons by user
+      const userChoices: Record<string, {
+        comparisons: (Comparison & {
+          winner: Restaurant;
+          loser: Restaurant;
+        })[];
+      }> = {};
+
+      // Process each comparison
+      for (const comparison of allComparisons) {
+        if (!userChoices[comparison.userId]) {
+          userChoices[comparison.userId] = { comparisons: [] };
+        }
+
+        // Get restaurant details
+        const winner = await storage.getRestaurantById(comparison.winnerId);
+        const loser = await storage.getRestaurantById(comparison.loserId);
+
+        if (winner && loser) {
+          userChoices[comparison.userId].comparisons.push({
+            ...comparison,
+            winner,
+            loser
+          });
+        }
+      }
+
+      // Sort comparisons by date
+      for (const userId in userChoices) {
+        userChoices[userId].comparisons.sort((a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      }
+
+      res.json(userChoices);
     } catch (error) {
-      console.error('Error fetching personal rankings:', error);
-      res.status(500).json({ error: 'Failed to fetch personal rankings' });
+      console.error('Error fetching admin choices:', error);
+      res.status(500).json({ error: 'Failed to fetch choices' });
+    }
+  });
+
+
+  // Add a new route to recalculate rankings
+  app.post("/api/rankings/recalculate", async (_req, res) => {
+    try {
+      await storage.updateGlobalRankings();
+      res.json({ message: "Rankings recalculated successfully" });
+    } catch (error) {
+      console.error('Error recalculating rankings:', error);
+      res.status(500).json({ error: 'Failed to recalculate rankings' });
     }
   });
 

@@ -23,8 +23,15 @@ export function RankingTabs({
     queryKey: ["/api/rankings/personal", selectedArea, selectedCuisine],
   });
 
-  const { data: userChoices, isLoading: isLoadingChoices } = useQuery<Comparison[]>({
-    queryKey: ["/api/comparisons"],
+  const { data: userChoices, isLoading: isLoadingChoices } = useQuery<{
+    [userId: string]: {
+      comparisons: (Comparison & {
+        winner: Restaurant;
+        loser: Restaurant;
+      })[];
+    }
+  }>({
+    queryKey: ["/api/admin/choices"],
   });
 
   return (
@@ -32,7 +39,7 @@ export function RankingTabs({
       <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="global">Global Rankings</TabsTrigger>
         <TabsTrigger value="personal">My Rankings</TabsTrigger>
-        <TabsTrigger value="admin">Recent Choices</TabsTrigger>
+        <TabsTrigger value="admin">Admin</TabsTrigger>
       </TabsList>
 
       <TabsContent value="global">
@@ -93,41 +100,39 @@ export function RankingTabs({
         {isLoadingChoices ? (
           <div className="space-y-4">
             {[1, 2, 3].map(i => (
-              <Skeleton key={i} className="h-32" />
+              <Skeleton key={i} className="h-48" />
             ))}
           </div>
         ) : (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Choices</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {userChoices?.map((comparison, index) => (
-                    <div key={comparison.id} className="border p-4 rounded-lg">
-                      <div className="text-sm text-muted-foreground mb-2">
-                        Choice {index + 1} - {new Date(comparison.createdAt).toLocaleString()}
-                      </div>
-                      {comparison.notTried ? (
-                        <div className="text-muted-foreground">User skipped this comparison</div>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-6">
+            {userChoices && Object.entries(userChoices).map(([userId, data]) => (
+              <Card key={userId}>
+                <CardHeader>
+                  <CardTitle>User: {userId}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {data.comparisons.map((comparison, index) => (
+                      <div key={comparison.id} className="border p-2 rounded">
+                        <div className="text-sm text-muted-foreground">
+                          Choice {index + 1} - {new Date(comparison.createdAt).toLocaleString()}
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 mt-2">
                           <div>
-                            <div className="font-semibold">Winner ID:</div>
-                            {comparison.winnerId}
+                            <div className="font-semibold">Winner:</div>
+                            {comparison.winner.name}
                           </div>
                           <div>
-                            <div className="font-semibold">Loser ID:</div>
-                            {comparison.loserId}
+                            <div className="font-semibold">Loser:</div>
+                            {comparison.loser.name}
                           </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         )}
       </TabsContent>
