@@ -1,6 +1,6 @@
 [build]
   publish = "dist"
-  command = "npx expo export --platform web"
+  command = "npm install && npx expo export --platform web"
 
 # Edge functions intercept share URLs for bot OG meta tags
 [[edge_functions]]
