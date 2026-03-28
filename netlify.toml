@@ -1,6 +1,12 @@
 [build]
   publish = "dist"
-  command = "npm install && npx expo export --platform web"
+  command = "npm install && npx expo export --platform web && cp public/_redirects dist/_redirects"
+
+# SPA fallback — serve index.html for all routes
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
 
 # Edge functions intercept share URLs for bot OG meta tags
 [[edge_functions]]
