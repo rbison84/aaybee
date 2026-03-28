@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { StyleSheet, Text, View, Pressable, Image, Share, ScrollView, Platform } from 'react-native';
+import { StyleSheet, Text, View, Pressable, Image, Share, ScrollView, Platform, TextInput } from 'react-native';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -45,6 +45,8 @@ import {
   DeviationCell,
 } from '../utils/dailySwiss';
 import { shareService } from '../services/shareService';
+import { crewService, Crew, CrewMember, CrewDailyResult } from '../services/crewService';
+import { useAuth } from '../contexts/AuthContext';
 
 type DailyTab = 'today' | 'collection';
 
@@ -97,6 +99,15 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
 
   const { movies, recordComparison, undoLastComparison } = useAppStore();
   const haptics = useHaptics();
+  const { user } = useAuth();
+  const [crews, setCrews] = useState<Crew[]>([]);
+  const [crewResults, setCrewResults] = useState<Map<string, CrewDailyResult>>(new Map());
+  const [crewMembers, setCrewMembers] = useState<Map<string, CrewMember[]>>(new Map());
+  const [showCrewSetup, setShowCrewSetup] = useState(false);
+  const [crewName, setCrewName] = useState('');
+  const [crewJoinCode, setCrewJoinCode] = useState('');
+  const [crewLoading, setCrewLoading] = useState(false);
+  const [crewError, setCrewError] = useState<string | null>(null);
 
   const dailyNumber = useMemo(() => getDailyNumber(), []);
   const featuredCategory = useMemo(() => getTodaysDailyCategory(), []);
@@ -121,6 +132,12 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     };
     init();
   }, [step, activeCategoryId, refreshKey]);
+
+  // Load crews on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    crewService.getMyCrews(user.id).then(setCrews);
+  }, [user?.id]);
 
   // Filter category movieIds to only those present in the movies store
   const getAvailableMovieIds = useCallback((categoryId: string): string[] => {
@@ -232,7 +249,23 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
 
     const updatedCollections = await dailyStreakService.getCollections();
     setCollections(updatedCollections);
-  }, [activeCategoryId, activeCategory, dailyNumber]);
+
+    // Submit to crews
+    if (user?.id && crews.length > 0 && ranking) {
+      for (const crew of crews) {
+        crewService.submitDailyPick(crew.id, user.id, dailyNumber, ranking);
+        // Load results
+        crewService.getCrewDailyResults(crew.id, dailyNumber).then(result => {
+          if (result) {
+            setCrewResults(prev => new Map(prev).set(crew.id, result));
+          }
+        });
+        crewService.getCrewMembers(crew.id, dailyNumber).then(members => {
+          setCrewMembers(prev => new Map(prev).set(crew.id, members));
+        });
+      }
+    }
+  }, [activeCategoryId, activeCategory, dailyNumber, user?.id, crews]);
 
   // Handle comparison selection
   const handleSelect = useCallback((winnerId: string, loserId: string) => {
@@ -669,6 +702,28 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
             )}
           </View>
 
+          {/* World context */}
+          {fullRanking && activeCategory && (
+            <View style={styles.worldStatsSection}>
+              <Text style={styles.worldStatsTitle}>vs the world</Text>
+              {fullRanking.slice(0, 3).map((movieId, idx) => {
+                const globalPos = activeCategory.movieIds.indexOf(movieId);
+                const movie = movies.get(movieId);
+                if (!movie) return null;
+                const agrees = globalPos === idx;
+                return (
+                  <View key={movieId} style={styles.worldStatRow}>
+                    <Text style={styles.worldStatRank}>#{idx + 1}</Text>
+                    <Text style={styles.worldStatMovie} numberOfLines={1}>{movie.title}</Text>
+                    <Text style={[styles.worldStatLabel, agrees ? styles.worldStatAgree : styles.worldStatDisagree]}>
+                      {agrees ? 'consensus' : `world: #${globalPos + 1}`}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
           {currentStreak > 0 && (
             <View style={styles.streakBadgeResults}>
               <View style={styles.streakBadgeContent}>
@@ -695,6 +750,52 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
               <Text style={styles.backToTodayText}>Back to Today</Text>
             </Pressable>
           </View>
+
+          {/* Crew Results */}
+          {crews.length > 0 && (
+            <View style={styles.crewResultsSection}>
+              <Text style={styles.crewSectionTitle}>your crews</Text>
+              {crews.map(crew => {
+                const result = crewResults.get(crew.id);
+                const members = crewMembers.get(crew.id) || [];
+                const playedCount = members.filter(m => m.played_today).length;
+                return (
+                  <View key={crew.id} style={styles.crewCard}>
+                    <Text style={styles.crewName}>{crew.name}</Text>
+                    <Text style={styles.crewPlayCount}>{playedCount}/{members.length} played</Text>
+                    {result ? (
+                      <View style={styles.crewResultDetail}>
+                        {result.hottestTaker && (
+                          <Text style={styles.crewHotTake}>
+                            {result.hottestTaker.displayName} ranked #{result.hottestTaker.userRank} what the crew ranked #{result.hottestTaker.consensusRank}
+                          </Text>
+                        )}
+                        {result.mostMainstream && (
+                          <Text style={styles.crewMainstream}>
+                            {result.mostMainstream.displayName} — {result.mostMainstream.alignmentPercent}% aligned
+                          </Text>
+                        )}
+                        {result.memberResults.find(m => m.userId === user?.id) && (
+                          <Text style={styles.crewYourAlignment}>
+                            you: {result.memberResults.find(m => m.userId === user?.id)?.alignmentPercent}% aligned with crew
+                          </Text>
+                        )}
+                      </View>
+                    ) : (
+                      <Text style={styles.crewWaiting}>waiting for more members to play...</Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Create/Join Crew (shown if no crews) */}
+          {crews.length === 0 && user?.id && (
+            <Pressable style={styles.crewPromptButton} onPress={() => setShowCrewSetup(true)}>
+              <Text style={styles.crewPromptText}>play daily with friends — create a crew</Text>
+            </Pressable>
+          )}
         </Animated.View>
       </ScrollView>
     );
@@ -781,6 +882,83 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     );
   };
 
+  // ---- RENDER: CREW SETUP MODAL ----
+
+  const renderCrewSetupModal = () => {
+    if (!showCrewSetup) return null;
+    return (
+      <View style={styles.crewSetupOverlay}>
+        <View style={styles.crewSetupCard}>
+          <Text style={styles.crewSetupTitle}>crews</Text>
+          <Text style={styles.crewSetupSubtitle}>play daily together and see how your taste compares</Text>
+
+          <TextInput
+            style={styles.crewInput}
+            placeholder="crew name"
+            placeholderTextColor={colors.textMuted}
+            value={crewName}
+            onChangeText={setCrewName}
+            maxLength={30}
+          />
+          <Pressable
+            style={[styles.crewButton, !crewName.trim() && { opacity: 0.4 }]}
+            onPress={async () => {
+              if (!user?.id || !crewName.trim()) return;
+              setCrewLoading(true);
+              const { crew, error } = await crewService.createCrew(user.id, crewName.trim());
+              if (crew) {
+                setCrews(prev => [...prev, crew]);
+                setShowCrewSetup(false);
+                setCrewName('');
+              }
+              if (error) setCrewError(error);
+              setCrewLoading(false);
+            }}
+            disabled={!crewName.trim() || crewLoading}
+          >
+            <Text style={styles.crewButtonText}>create crew</Text>
+          </Pressable>
+
+          <Text style={styles.crewDivider}>or join one</Text>
+
+          <TextInput
+            style={styles.crewInput}
+            placeholder="enter code"
+            placeholderTextColor={colors.textMuted}
+            value={crewJoinCode}
+            onChangeText={t => setCrewJoinCode(t.toUpperCase())}
+            maxLength={6}
+            autoCapitalize="characters"
+          />
+          <Pressable
+            style={[styles.crewButton, crewJoinCode.length < 6 && { opacity: 0.4 }]}
+            onPress={async () => {
+              if (!user?.id || crewJoinCode.length < 6) return;
+              setCrewLoading(true);
+              const { crew, error } = await crewService.joinCrew(user.id, crewJoinCode);
+              if (crew) {
+                setCrews(prev => [...prev, crew]);
+                setShowCrewSetup(false);
+                setCrewJoinCode('');
+              }
+              if (error) setCrewError(error);
+              setCrewLoading(false);
+            }}
+            disabled={crewJoinCode.length < 6 || crewLoading}
+          >
+            <Text style={styles.crewButtonText}>join crew</Text>
+          </Pressable>
+
+          {crewError && <Text style={styles.crewErrorText}>{crewError}</Text>}
+
+          <Pressable onPress={() => setShowCrewSetup(false)} style={styles.crewCloseButton}>
+            <Text style={styles.crewCloseText}>close</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  };
+
   // ---- MAIN RENDER ----
 
   const tabs = useMemo(() => [
@@ -800,6 +978,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     return (
       <View style={styles.container}>
         {renderResults()}
+        {renderCrewSetupModal()}
       </View>
     );
   }
@@ -811,6 +990,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
       )}
       {activeTab === 'today' && renderIntro()}
       {activeTab === 'collection' && !activeCategoryId && renderCollection()}
+      {renderCrewSetupModal()}
     </View>
   );
 }
@@ -1356,5 +1536,189 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: -9999,
     top: -9999,
+  },
+
+  // Crew Results
+  crewResultsSection: {
+    width: '100%',
+    marginTop: spacing.lg,
+    gap: spacing.sm,
+  },
+  crewSectionTitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textTransform: 'lowercase' as const,
+    marginBottom: spacing.xs,
+  },
+  crewCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  crewName: {
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
+    fontWeight: '600',
+  },
+  crewPlayCount: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  crewResultDetail: {
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  crewHotTake: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  crewMainstream: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  crewYourAlignment: {
+    ...typography.captionMedium,
+    color: colors.accent,
+    marginTop: spacing.xs,
+  },
+  crewWaiting: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontStyle: 'italic' as const,
+  },
+  crewPromptButton: {
+    width: '100%',
+    marginTop: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  crewPromptText: {
+    ...typography.bodyMedium,
+    color: colors.textSecondary,
+  },
+
+  // Crew Setup Modal
+  crewSetupOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  crewSetupCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.xl,
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  crewSetupTitle: {
+    ...typography.h2,
+    color: colors.textPrimary,
+    textAlign: 'center',
+  },
+  crewSetupSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  crewInput: {
+    width: '100%',
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    color: colors.textPrimary,
+    ...typography.body,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  crewButton: {
+    width: '100%',
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+  },
+  crewButtonText: {
+    ...typography.bodyMedium,
+    color: colors.background,
+    fontWeight: '700',
+  },
+  crewDivider: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginVertical: spacing.xs,
+  },
+  crewErrorText: {
+    ...typography.caption,
+    color: '#F87171',
+    textAlign: 'center',
+  },
+  crewCloseButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  crewCloseText: {
+    ...typography.bodyMedium,
+    color: colors.textSecondary,
+  },
+
+  // World stats
+  worldStatsSection: {
+    width: '100%',
+    marginBottom: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+  },
+  worldStatsTitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textTransform: 'uppercase' as any,
+    letterSpacing: 2,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  worldStatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    gap: spacing.sm,
+  },
+  worldStatRank: {
+    ...typography.bodyMedium,
+    color: colors.accent,
+    width: 32,
+    fontWeight: '700',
+  },
+  worldStatMovie: {
+    ...typography.body,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  worldStatLabel: {
+    ...typography.caption,
+    fontWeight: '600',
+  },
+  worldStatAgree: {
+    color: colors.accent,
+  },
+  worldStatDisagree: {
+    color: colors.textSecondary,
   },
 });

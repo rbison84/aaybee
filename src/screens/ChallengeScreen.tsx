@@ -20,9 +20,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDimensions } from '../contexts/DimensionsContext';
 import { useHaptics } from '../hooks/useHaptics';
-import { challengeService, ChallengeMovie, FriendChallenge, ChallengeResults } from '../services/challengeService';
+import { challengeService, getMatchTier, ChallengeMovie, FriendChallenge, ChallengeResults } from '../services/challengeService';
 import { shareService } from '../services/shareService';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
+
+// Only import QR on web
+let QRCodeSVG: any = null;
+if (Platform.OS === 'web') {
+  try {
+    QRCodeSVG = require('qrcode.react').QRCodeSVG;
+  } catch {}
+}
 
 // ============================================
 // TYPES
@@ -73,6 +81,12 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
   // Results
   const [results, setResults] = useState<ChallengeResults | null>(null);
 
+  // Copied feedback
+  const [copied, setCopied] = useState(false);
+
+  // Leaderboard
+  const [leaderboard, setLeaderboard] = useState<{ name: string; matchPercent: number; code: string; date: string }[]>([]);
+
   // Prevent double tap
   const pickingRef = useRef(false);
 
@@ -90,6 +104,31 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
         if (c.status === 'complete' && c.results) {
           setResults(c.results as ChallengeResults);
           setStep('results');
+        } else if (user?.id) {
+          // Logged-in user: auto-set name and join directly
+          const autoName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
+          setChallengerName(autoName);
+          const { challenge: updated, error: err } = await challengeService.joinChallenge(
+            c.code,
+            autoName,
+            user.id,
+          );
+          if (err) {
+            setError(err);
+            setStep('home');
+          } else if (updated?.status === 'complete' && updated.results) {
+            setChallenge(updated);
+            setResults(updated.results as ChallengeResults);
+            setStep('results');
+          } else {
+            if (updated) setChallenge(updated);
+            const movies = (updated || c).movies;
+            const pairs = generateSwissPairs(movies);
+            setRankingPairs(pairs);
+            setCurrentPairIndex(0);
+            setScores(new Map(movies.map(m => [m.id, 0])));
+            setStep('rank');
+          }
         } else {
           setStep('name');
         }
@@ -100,6 +139,12 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
       setLoading(false);
     })();
   }, [initialCode]);
+
+  // Load leaderboard
+  useEffect(() => {
+    if (!user?.id) return;
+    challengeService.getChallengeLeaderboard(user.id).then(setLeaderboard);
+  }, [user?.id]);
 
   // ============================================
   // CREATE FLOW
@@ -166,13 +211,16 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
   // ============================================
 
   const joinChallenge = useCallback(async () => {
-    if (!challenge || !challengerName.trim()) return;
+    const autoName = user?.id
+      ? (user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan')
+      : challengerName.trim();
+    if (!challenge || !autoName) return;
     setLoading(true);
     setError(null);
 
     const { challenge: updated, error: err } = await challengeService.joinChallenge(
       challenge.code,
-      challengerName.trim(),
+      autoName,
       user?.id,
     );
 
@@ -267,6 +315,8 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
         await Share.share({ message });
       }
       haptics.success();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       if ((err as any)?.name !== 'AbortError') {
         console.error('Share failed:', err);
@@ -288,6 +338,8 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
         await Share.share({ message });
       }
       haptics.success();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       if ((err as any)?.name !== 'AbortError') {
         console.error('Share failed:', err);
@@ -415,6 +467,27 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
       </View>
 
       {error && <Text style={styles.errorText}>{error}</Text>}
+
+      {leaderboard.length > 0 && (
+        <View style={styles.leaderboardSection}>
+          <Text style={styles.leaderboardTitle}>your challenges</Text>
+          {leaderboard.map((entry, i) => (
+            <Pressable key={`${entry.code}-${i}`} style={styles.leaderboardRow} onPress={() => {
+              (async () => {
+                const c = await challengeService.getChallengeByCode(entry.code);
+                if (c && c.results) {
+                  setChallenge(c);
+                  setResults(c.results as ChallengeResults);
+                  setStep('results');
+                }
+              })();
+            }}>
+              <Text style={styles.leaderboardName}>{entry.name}</Text>
+              <Text style={styles.leaderboardPercent}>{entry.matchPercent}%</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
     </Animated.View>
   );
 
@@ -488,11 +561,25 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
         <Text style={styles.codeDisplayText}>{challenge?.code}</Text>
       </View>
 
+      {Platform.OS === 'web' && QRCodeSVG && (
+        <View style={styles.qrContainer}>
+          <QRCodeSVG
+            value={`https://aaybee.netlify.app/challenge/${challenge?.code}`}
+            size={160}
+            bgColor="transparent"
+            fgColor="#F5F3FF"
+            level="M"
+          />
+        </View>
+      )}
+
       <Pressable
         style={[styles.actionButton, styles.actionButtonPrimary, { marginTop: spacing.xl }]}
         onPress={handleShareLink}
       >
-        <Text style={styles.actionButtonTextPrimary}>share challenge</Text>
+        <Text style={styles.actionButtonTextPrimary}>
+          {copied ? 'copied!' : 'share challenge'}
+        </Text>
       </Pressable>
 
       <Pressable
@@ -618,6 +705,8 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
             {results.matchPercent}%
           </Animated.Text>
           <Text style={styles.matchLabel}>taste match</Text>
+          <Text style={styles.matchTierName}>{getMatchTier(results.matchPercent).name}</Text>
+          <Text style={styles.matchTierSubtitle}>{getMatchTier(results.matchPercent).subtitle}</Text>
           <Text style={styles.matchNames}>
             {challenge.creator_name} & {challenge.challenger_name}
           </Text>
@@ -653,7 +742,9 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
           style={[styles.actionButton, styles.actionButtonPrimary]}
           onPress={handleShareResults}
         >
-          <Text style={styles.actionButtonTextPrimary}>share result</Text>
+          <Text style={styles.actionButtonTextPrimary}>
+            {copied ? 'copied!' : 'share result'}
+          </Text>
         </Pressable>
 
         <Pressable
@@ -813,6 +904,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.accent,
   },
+  qrContainer: {
+    alignItems: 'center' as const,
+    marginVertical: spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+  },
   codeDisplayText: {
     ...typography.displayMedium,
     color: colors.accent,
@@ -965,6 +1063,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.xs,
   },
+  matchTierName: {
+    ...typography.h3,
+    color: colors.accent,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  matchTierSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
   matchNames: {
     ...typography.bodyMedium,
     color: colors.textMuted,
@@ -1003,6 +1113,39 @@ const styles = StyleSheet.create({
   resultDisagreement: {
     ...typography.caption,
     color: colors.textMuted,
+    marginLeft: spacing.sm,
+  },
+
+  // Leaderboard
+  leaderboardSection: {
+    width: '100%',
+    maxWidth: 320,
+    marginTop: spacing.xl,
+  },
+  leaderboardTitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textTransform: 'uppercase' as any,
+    letterSpacing: 2,
+    marginBottom: spacing.sm,
+  },
+  leaderboardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  leaderboardName: {
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  leaderboardPercent: {
+    ...typography.bodyMedium,
+    color: colors.accent,
+    fontWeight: '700',
     marginLeft: spacing.sm,
   },
 });

@@ -274,6 +274,16 @@ export const challengeService = {
         .eq('id', challenge.id);
 
       if (error) return { results: null, error: error.message };
+
+      // Update friendship stats if both users are authenticated
+      if (challenge.creator_id && challenge.challenger_id) {
+        await challengeService.updateFriendshipStats(
+          challenge.creator_id,
+          challenge.challenger_id,
+          results.matchPercent,
+        );
+      }
+
       return { results };
     } catch (err) {
       return { results: null, error: 'Failed to submit ranking' };
@@ -321,6 +331,85 @@ export const challengeService = {
       return [];
     }
   },
+
+  /**
+   * Update friendship challenge stats after completing a challenge.
+   * Tracks running average match % between two users.
+   * NOTE: Requires similarity_score (INT) and games_played (INT) columns on friendships table.
+   * Run: ALTER TABLE friendships ADD COLUMN IF NOT EXISTS similarity_score INT DEFAULT 0;
+   *      ALTER TABLE friendships ADD COLUMN IF NOT EXISTS games_played INT DEFAULT 0;
+   */
+  updateFriendshipStats: async (
+    userIdA: string,
+    userIdB: string,
+    matchPercent: number,
+  ): Promise<void> => {
+    try {
+      // Normalize order
+      const [a, b] = [userIdA, userIdB].sort();
+
+      // Check existing friendship
+      const { data: existing } = await supabase
+        .from('friendships')
+        .select('id, similarity_score, games_played')
+        .eq('user_id', a)
+        .eq('friend_id', b)
+        .maybeSingle();
+
+      if (existing) {
+        const oldTotal = (existing.similarity_score || 0) * (existing.games_played || 1);
+        const newGames = (existing.games_played || 1) + 1;
+        const newAvg = Math.round((oldTotal + matchPercent) / newGames);
+        await supabase
+          .from('friendships')
+          .update({ similarity_score: newAvg, games_played: newGames })
+          .eq('id', existing.id);
+      }
+      // If no friendship exists, don't create one — they need to be friends first
+    } catch (err) {
+      console.error('[ChallengeService] updateFriendshipStats error:', err);
+    }
+  },
+
+  /**
+   * Get challenge leaderboard — all completed challenges sorted by match %.
+   */
+  getChallengeLeaderboard: async (
+    userId: string,
+  ): Promise<{ name: string; matchPercent: number; code: string; date: string }[]> => {
+    try {
+      const { data: challenges } = await supabase
+        .from('friend_challenges')
+        .select('code, creator_name, challenger_name, creator_id, challenger_id, match_percent, completed_at')
+        .eq('status', 'complete')
+        .or(`creator_id.eq.${userId},challenger_id.eq.${userId}`)
+        .order('completed_at', { ascending: false })
+        .limit(50);
+
+      if (!challenges) return [];
+
+      return challenges.map(c => {
+        const isCreator = c.creator_id === userId;
+        return {
+          name: isCreator ? (c.challenger_name || 'Someone') : c.creator_name,
+          matchPercent: Math.round(c.match_percent || 0),
+          code: c.code,
+          date: c.completed_at || '',
+        };
+      });
+    } catch {
+      return [];
+    }
+  },
 };
+
+export function getMatchTier(matchPercent: number): { name: string; subtitle: string } {
+  if (matchPercent >= 90) return { name: 'Cinema Soulmates', subtitle: "you'd co-direct a film" };
+  if (matchPercent >= 75) return { name: 'Same Screening', subtitle: "basically the same taste in different seats" };
+  if (matchPercent >= 60) return { name: 'Shared Popcorn', subtitle: "you'd survive a movie marathon" };
+  if (matchPercent >= 40) return { name: 'Different Cuts', subtitle: "agree to disagree, respectfully" };
+  if (matchPercent >= 20) return { name: 'Separate Theatres', subtitle: "one of you watches the credits, one doesn't" };
+  return { name: 'Opposite Reels', subtitle: "did you two even watch the same movies?" };
+}
 
 export default challengeService;

@@ -20,6 +20,8 @@ import { globalRankingsService, GlobalRanking } from '../services/globalRankings
 import { recommendationService, UserSimilarity } from '../services/recommendationService';
 import { calculateTopGenres } from '../services/directorService';
 import { computeGenreAffinity } from '../utils/genreAffinity';
+import { TasteRadar } from '../components/TasteRadar';
+import { computeTasteAxes, getArchetype, TasteAxes, AXIS_LABELS } from '../utils/tasteAxes';
 import { Movie, Genre } from '../types';
 
 // ============================================
@@ -175,6 +177,23 @@ export function TasteProfileScreen({ onClose }: TasteProfileScreenProps) {
     return { avgYear, eraLabel, crowdPct, crowdLabel, topGenreShare, focusLabel, topGenreNames };
   }, [rankedMovies, globalRankings]);
 
+  // Compute taste axes and archetype from top movies
+  const { tasteAxes, archetype } = useMemo(() => {
+    const top20 = rankedMovies.slice(0, 20);
+    const globalMap = new Map(globalRankings.map(gr => [gr.movie_id, gr]));
+    const movieData = top20.map(m => {
+      const globalData = globalMap.get(m.id);
+      return {
+        year: m.year,
+        genres: m.genres as string[],
+        globalBeta: globalData?.global_beta,
+        userBeta: m.beta,
+      };
+    });
+    const axes = computeTasteAxes(movieData);
+    return { tasteAxes: axes, archetype: getArchetype(axes) };
+  }, [rankedMovies, globalRankings]);
+
   // Find rarest favorite
   const rarePick = useMemo((): RarePick | null => {
     if (globalRankings.length === 0 || rankedMovies.length === 0) return null;
@@ -263,7 +282,7 @@ export function TasteProfileScreen({ onClose }: TasteProfileScreenProps) {
       ? `\nTop Strength: ${topStrength.genre} (${topStrength.delta > 0 ? 'above' : 'below'} avg)\n`
       : '';
 
-    const shareText = `My Taste DNA:
+    const shareText = `My Taste DNA: ${archetype.name}
 Era: ${tasteDNA.eraLabel}${tasteDNA.avgYear ? ` (avg. ${tasteDNA.avgYear})` : ''}
 Crowd: ${tasteDNA.crowdLabel} (${tasteDNA.crowdPct}%)
 Focus: ${genreNames}${strengthLine}
@@ -342,6 +361,13 @@ Find your taste profile at aaybee.netlify.app`;
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* ARCHETYPE + RADAR */}
+        <Animated.View entering={FadeInDown.delay(0)} style={styles.archetypeCard}>
+          <Text style={styles.archetypeName}>{archetype.name}</Text>
+          <Text style={styles.archetypeSubtitle}>{archetype.subtitle}</Text>
+          <TasteRadar axes={tasteAxes} />
+        </Animated.View>
+
         {/* TASTE DNA CARD */}
         <Animated.View entering={FadeInDown.delay(50)} style={styles.tasteDNACard}>
           <Text style={styles.sectionTitle}>taste dna</Text>
@@ -572,6 +598,30 @@ const styles = StyleSheet.create({
   emptyProgress: {
     ...typography.bodyMedium,
     color: colors.accent,
+  },
+
+  // Archetype + Radar
+  archetypeCard: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  archetypeName: {
+    ...typography.h2,
+    color: colors.accent,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  archetypeSubtitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
   },
 
   // Taste DNA Card
