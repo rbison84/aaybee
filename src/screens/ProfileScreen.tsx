@@ -95,10 +95,9 @@ interface ProfileScreenProps {
   isGuestMode?: boolean;
   onOpenAuth?: () => void;
   onOpenVsChallenge?: (code: string) => void;
-  onOpenChallenge?: () => void;
 }
 
-export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, onOpenVsChallenge, onOpenChallenge }: ProfileScreenProps) {
+export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, onOpenVsChallenge }: ProfileScreenProps) {
   const { postOnboardingComparisons } = useAppStore();
   const { showLockedFeature } = useLockedFeature();
   const { unlockAllFeatures } = useDevSettings();
@@ -217,22 +216,6 @@ export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, o
               {!isFriendsLocked && <ChevronIcon />}
             </Pressable>
           </Animated.View>
-
-          {/* CHALLENGE A FRIEND BUTTON */}
-          {!isGuestMode && onOpenChallenge && (
-            <Animated.View entering={FadeInDown.delay(125)} style={styles.settingsSection}>
-              <Pressable
-                style={styles.settingsButton}
-                onPress={onOpenChallenge}
-              >
-                <View style={styles.settingsLeft}>
-                  <FriendsIcon />
-                  <Text style={styles.settingsText}>challenge a friend</Text>
-                </View>
-                <ChevronIcon />
-              </Pressable>
-            </Animated.View>
-          )}
 
           {/* SETTINGS BUTTON */}
           <Animated.View entering={FadeInDown.delay(150)} style={styles.settingsSection}>

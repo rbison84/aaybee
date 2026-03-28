@@ -60,13 +60,10 @@ function PersonIcon({ size = 18, color = colors.textMuted }: { size?: number; co
 interface GlobalHeaderProps {
   onProfilePress: () => void;
   onSearchPress: () => void;
-  onTvPress: () => void;
-  onAaybee100Press: () => void;
-  onChallengePress: () => void;
   notificationCount?: number;
 }
 
-export function GlobalHeader({ onProfilePress, onSearchPress, onTvPress, onAaybee100Press, onChallengePress, notificationCount = 0 }: GlobalHeaderProps) {
+export function GlobalHeader({ onProfilePress, onSearchPress, notificationCount = 0 }: GlobalHeaderProps) {
   const insets = useSafeAreaInsets();
   const { user, isGuest } = useAuth();
 
@@ -83,14 +80,6 @@ export function GlobalHeader({ onProfilePress, onSearchPress, onTvPress, onAaybe
         <View style={styles.headerRight}>
           <Pressable style={styles.searchButton} onPress={onSearchPress} accessibilityLabel="Search movies">
             <SearchIcon size={20} color={colors.textMuted} />
-          </Pressable>
-
-          <Pressable style={styles.searchButton} onPress={onChallengePress} accessibilityLabel="Challenge a friend">
-            <ChallengeIcon size={20} color={colors.textMuted} />
-          </Pressable>
-
-          <Pressable style={styles.searchButton} onPress={onAaybee100Press} accessibilityLabel="Aaybee 100">
-            <GridIcon size={20} color={colors.textMuted} />
           </Pressable>
 
           <Pressable style={styles.avatarButton} onPress={onProfilePress} accessibilityLabel="Profile">

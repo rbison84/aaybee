@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Circle, Rect, G, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { colors } from '../theme/cinematic';
 
-type TabIconName = 'compare' | 'rankings' | 'daily' | 'discover' | 'decide';
+type TabIconName = 'compare' | 'rankings' | 'daily' | 'discover' | 'decide' | 'challenge';
 
 interface TabIconProps {
   name: TabIconName;
@@ -118,6 +118,20 @@ export function TabIcon({ name, active, size = 24 }: TabIconProps) {
             d="M12 12l1.12 2.27 2.5.36-1.81 1.77.43 2.5L12 17.77l-2.24 1.18.43-2.5-1.81-1.77 2.5-.36L12 12z"
             stroke={color}
             strokeWidth={1.5}
+            strokeLinejoin="round"
+            fill={active ? color : 'none'}
+          />
+        </Svg>
+      );
+
+    case 'challenge':
+      // Lightning bolt icon
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Path
+            d="M13 10V3L4 14h7v7l9-11h-7z"
+            stroke={color}
+            strokeWidth={strokeWidth}
             strokeLinejoin="round"
             fill={active ? color : 'none'}
           />

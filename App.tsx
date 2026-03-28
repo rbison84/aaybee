@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, ActivityIndicator, Pressable, Platform, Modal } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { useAnimatedStyle, withTiming, useSharedValue, interpolate } from 'react-native-reanimated';
 import React, { useState, useCallback, useEffect, useRef, useMemo, Suspense } from 'react';
 import { AppProvider, useAppStore } from './src/store/useAppStore';
 import { useLockedFeature } from './src/contexts/LockedFeatureContext';
@@ -49,8 +50,11 @@ import { vsService } from './src/services/vsService';
 import { friendService } from './src/services/friendService';
 import { colors, spacing, borderRadius, typography } from './src/theme/cinematic';
 
-// Tab types - 5 tabs (profile is in header, daily is center/prominent)
-type TabType = 'compare' | 'rankings' | 'daily' | 'discover' | 'decide';
+// Navigation types — dual-mode with contextual bottom tabs
+type AppMode = 'solo' | 'social';
+type SoloTab = 'compare' | 'rankings' | 'discover';
+type SocialTab = 'daily' | 'challenge' | 'decide';
+type TabType = SoloTab | SocialTab;
 
 function LoadingScreen() {
   return (
@@ -67,115 +71,169 @@ const TAB_UNLOCK_THRESHOLDS: Partial<Record<TabType, number>> = {
   rankings: 10,
   discover: 40,
   decide: 0,
+  challenge: 0, // always unlocked
 };
 
-// Bottom Tab Bar - 5 tabs with custom icons, daily in center with prominence
-interface TabBarProps {
-  activeTab: TabType;
-  onTabPress: (tab: TabType) => void;
-  lockedTabs: Record<TabType, boolean>;
-  onLockedTabPress: (tab: TabType) => void;
+// Mode toggle component — sits between header and screen content
+interface ModeToggleProps {
+  mode: AppMode;
+  onModeChange: (mode: AppMode) => void;
 }
 
-function TabBar({ activeTab, onTabPress, lockedTabs, onLockedTabPress }: TabBarProps) {
-  const insets = useSafeAreaInsets();
-  const tabs: { key: TabType; label: string; prominent?: boolean }[] = [
-    { key: 'compare', label: 'compare' },
-    { key: 'rankings', label: 'rankings' },
-    { key: 'daily', label: 'daily', prominent: true },
-    { key: 'discover', label: 'discover' },
-    { key: 'decide', label: 'decide' },
-  ];
-
+function ModeToggle({ mode, onModeChange }: ModeToggleProps) {
   return (
-    <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
-      {tabs.map((tab) => {
-        const isActive = activeTab === tab.key;
-        const isProminent = tab.prominent;
-        const isLocked = lockedTabs[tab.key];
-        return (
-          <Pressable
-            key={tab.key}
-            style={[styles.tabItem, isProminent && styles.tabItemProminent]}
-            onPress={() => isLocked ? onLockedTabPress(tab.key) : onTabPress(tab.key)}
-          >
-            {isProminent ? (
-              <View style={[
-                styles.prominentIconContainer,
-                isActive && !isLocked && styles.prominentIconContainerActive,
-                isLocked && styles.prominentIconContainerLocked,
-              ]}>
-                <View style={isLocked ? styles.lockedIconWrapper : undefined}>
-                  <TabIcon name={tab.key} active={isActive && !isLocked} size={28} />
-                </View>
-              </View>
-            ) : (
-              <View style={isLocked ? styles.lockedIconWrapper : undefined}>
-                <TabIcon name={tab.key} active={isActive && !isLocked} size={24} />
-              </View>
-            )}
-            <Text style={[
-              styles.tabLabel,
-              isActive && !isLocked && styles.tabLabelActive,
-              isLocked && styles.tabLabelLocked,
-              isProminent && !isLocked && styles.tabLabelProminent,
-              isProminent && isActive && !isLocked && styles.tabLabelProminentActive,
-            ]}>
-              {tab.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View style={styles.modeToggle}>
+      <Pressable
+        style={styles.modeToggleItem}
+        onPress={() => onModeChange('solo')}
+      >
+        <Text style={[
+          styles.modeToggleText,
+          mode === 'solo' && styles.modeToggleTextActive,
+        ]}>
+          MY MOVIES
+        </Text>
+      </Pressable>
+      <Pressable
+        style={styles.modeToggleItem}
+        onPress={() => onModeChange('social')}
+      >
+        <Text style={[
+          styles.modeToggleText,
+          mode === 'social' && styles.modeToggleTextActive,
+        ]}>
+          PLAY WITH FRIENDS
+        </Text>
+      </Pressable>
+      {/* Active indicator */}
+      <View style={[
+        styles.modeToggleIndicator,
+        mode === 'social' ? { left: '50%' } : { left: 0 },
+      ] as any} />
     </View>
   );
 }
 
-// Desktop Sidebar - replaces bottom tabs on desktop web
-interface DesktopSidebarProps {
+// Bottom Tab Bar — 3 contextual tabs per mode with slide animation
+interface TabBarProps {
+  mode: AppMode;
   activeTab: TabType;
   onTabPress: (tab: TabType) => void;
   lockedTabs: Record<TabType, boolean>;
   onLockedTabPress: (tab: TabType) => void;
+}
+
+function TabBar({ mode, activeTab, onTabPress, lockedTabs, onLockedTabPress }: TabBarProps) {
+  const insets = useSafeAreaInsets();
+  const translateX = useSharedValue(0);
+  const prevMode = useRef(mode);
+
+  useEffect(() => {
+    if (prevMode.current !== mode) {
+      const direction = mode === 'social' ? 1 : -1;
+      translateX.value = direction * 100;
+      translateX.value = withTiming(0, { duration: 250 });
+      prevMode.current = mode;
+    }
+  }, [mode]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+    opacity: interpolate(Math.abs(translateX.value), [0, 100], [1, 0]),
+  }));
+
+  const tabs: { key: TabType; label: string }[] = mode === 'solo'
+    ? [{ key: 'compare', label: 'compare' }, { key: 'rankings', label: 'rankings' }, { key: 'discover', label: 'discover' }]
+    : [{ key: 'daily', label: 'daily' }, { key: 'challenge', label: 'challenge' }, { key: 'decide', label: 'decide' }];
+
+  return (
+    <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+      <Animated.View style={[{ flexDirection: 'row' as const, flex: 1 }, animStyle]}>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.key;
+          const isLocked = lockedTabs[tab.key];
+          return (
+            <Pressable
+              key={tab.key}
+              style={styles.tabItem}
+              onPress={() => isLocked ? onLockedTabPress(tab.key) : onTabPress(tab.key)}
+            >
+              <View style={isLocked ? styles.lockedIconWrapper : undefined}>
+                <TabIcon name={tab.key} active={isActive && !isLocked} size={24} />
+              </View>
+              <Text style={[
+                styles.tabLabel,
+                isActive && !isLocked && styles.tabLabelActive,
+                isLocked && styles.tabLabelLocked,
+              ]}>
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </Animated.View>
+    </View>
+  );
+}
+
+// Desktop Sidebar — two grouped sections with mode-aware navigation
+interface DesktopSidebarProps {
+  activeTab: TabType;
+  mode: AppMode;
+  onModeChange: (mode: AppMode) => void;
+  onTabPress: (tab: TabType) => void;
+  lockedTabs: Record<TabType, boolean>;
+  onLockedTabPress: (tab: TabType) => void;
   onSearchPress: () => void;
-  onTvPress: () => void;
-  onAaybee100Press: () => void;
   onProfilePress: () => void;
-  onChallengePress: () => void;
 }
 
 function DesktopSidebar({
   activeTab,
+  mode,
+  onModeChange,
   onTabPress,
   lockedTabs,
   onLockedTabPress,
   onSearchPress,
-  onTvPress,
-  onAaybee100Press,
   onProfilePress,
-  onChallengePress,
 }: DesktopSidebarProps) {
-  const tabs: { key: TabType; label: string }[] = [
+  const soloTabs: { key: SoloTab; label: string }[] = [
     { key: 'compare', label: 'compare' },
     { key: 'rankings', label: 'rankings' },
-    { key: 'daily', label: 'daily' },
     { key: 'discover', label: 'discover' },
+  ];
+
+  const socialTabs: { key: SocialTab; label: string }[] = [
+    { key: 'daily', label: 'daily' },
+    { key: 'challenge', label: 'challenge' },
     { key: 'decide', label: 'decide' },
   ];
 
   const shortcuts: { label: string; onPress: () => void }[] = [
     { label: 'search', onPress: onSearchPress },
-    { label: 'challenge', onPress: onChallengePress },
-    { label: 'aaybee 100', onPress: onAaybee100Press },
     { label: 'profile', onPress: onProfilePress },
   ];
+
+  const handleSoloTabPress = (tab: SoloTab) => {
+    if (mode !== 'solo') onModeChange('solo');
+    onTabPress(tab);
+  };
+
+  const handleSocialTabPress = (tab: SocialTab) => {
+    if (mode !== 'social') onModeChange('social');
+    onTabPress(tab);
+  };
 
   return (
     <View style={sidebarStyles.container}>
       <Text style={sidebarStyles.logo}>aaybee</Text>
 
+      {/* MY MOVIES section */}
+      <Text style={sidebarStyles.sectionHeader}>MY MOVIES</Text>
       <View style={sidebarStyles.navSection}>
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.key;
+        {soloTabs.map((tab) => {
+          const isActive = activeTab === tab.key && mode === 'solo';
           const isLocked = lockedTabs[tab.key];
           return (
             <Pressable
@@ -185,7 +243,38 @@ function DesktopSidebar({
                 isActive && sidebarStyles.navItemActive,
                 isLocked && sidebarStyles.navItemLocked,
               ]}
-              onPress={() => isLocked ? onLockedTabPress(tab.key) : onTabPress(tab.key)}
+              onPress={() => isLocked ? onLockedTabPress(tab.key) : handleSoloTabPress(tab.key)}
+            >
+              <TabIcon name={tab.key} active={isActive && !isLocked} size={20} />
+              <Text style={[
+                sidebarStyles.navLabel,
+                isActive && !isLocked && sidebarStyles.navLabelActive,
+                isLocked && sidebarStyles.navLabelLocked,
+              ]}>
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={sidebarStyles.divider} />
+
+      {/* PLAY WITH FRIENDS section */}
+      <Text style={sidebarStyles.sectionHeader}>PLAY WITH FRIENDS</Text>
+      <View style={sidebarStyles.navSection}>
+        {socialTabs.map((tab) => {
+          const isActive = activeTab === tab.key && mode === 'social';
+          const isLocked = lockedTabs[tab.key];
+          return (
+            <Pressable
+              key={tab.key}
+              style={[
+                sidebarStyles.navItem,
+                isActive && sidebarStyles.navItemActive,
+                isLocked && sidebarStyles.navItemLocked,
+              ]}
+              onPress={() => isLocked ? onLockedTabPress(tab.key) : handleSocialTabPress(tab.key)}
             >
               <TabIcon name={tab.key} active={isActive && !isLocked} size={20} />
               <Text style={[
@@ -216,7 +305,7 @@ function DesktopSidebar({
 
       <View style={sidebarStyles.keyboardHints}>
         <Text style={sidebarStyles.hintText}>keyboard shortcuts</Text>
-        <Text style={sidebarStyles.hintDetail}>← → or click to choose</Text>
+        <Text style={sidebarStyles.hintDetail}>{'\u2190'} {'\u2192'} or click to choose</Text>
         <Text style={sidebarStyles.hintDetail}>S to skip</Text>
         <Text style={sidebarStyles.hintDetail}>Z to undo</Text>
       </View>
@@ -240,6 +329,16 @@ const sidebarStyles = StyleSheet.create({
     letterSpacing: -1.5,
     marginBottom: spacing.xxxl,
     paddingHorizontal: spacing.sm,
+  },
+  sectionHeader: {
+    ...typography.tiny,
+    color: colors.textMuted,
+    fontWeight: '600',
+    opacity: 0.5,
+    letterSpacing: 1,
+    fontSize: 10,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.xs,
   },
   navSection: {
     gap: spacing.xs,
@@ -325,7 +424,10 @@ function MainApp() {
   const [debugVisible, setDebugVisible] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>('compare');
+  const [mode, setMode] = useState<AppMode>('solo');
+  const [soloTab, setSoloTab] = useState<SoloTab>('compare');
+  const [socialTab, setSocialTab] = useState<SocialTab>('daily');
+  const activeTab: TabType = mode === 'solo' ? soloTab : socialTab;
   const [rankingsInitialTab, setRankingsInitialTab] = useState<'yours' | 'friends' | 'global'>('yours');
   const [rankingsInitialFilter, setRankingsInitialFilter] = useState<'classic' | 'top25' | 'all'>('classic');
   const [tabBeforeProfile, setTabBeforeProfile] = useState<TabType>('compare');
@@ -334,7 +436,6 @@ function MainApp() {
   const [showTv, setShowTv] = useState(false);
   const [showVs, setShowVs] = useState(false);
   const [vsInitialCode, setVsInitialCode] = useState<string | undefined>();
-  const [showChallenge, setShowChallenge] = useState(false);
   const [challengeInitialCode, setChallengeInitialCode] = useState<string | undefined>();
   const [rankingReveal, setRankingReveal] = useState<'classic' | 'top25' | 'all' | null>(null);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
@@ -348,19 +449,18 @@ function MainApp() {
   // Compute locked tabs
   const lockedTabs = useMemo((): Record<TabType, boolean> => {
     if (isGuestMode) {
-      // Guest mode: all tabs locked except the one they landed on
-      const landedTab = deepLink?.type === 'daily' ? 'daily' : null;
+      // Guest mode: solo tabs locked, social tabs unlocked if deep-linked
       return {
-        compare: true,
-        daily: landedTab !== 'daily',
-        rankings: true,
-        discover: true,
+        compare: true, rankings: true, discover: true,
+        daily: deepLink?.type !== 'daily',
+        challenge: deepLink?.type !== 'challenge',
         decide: true,
       };
     }
     return {
       compare: false,
       daily: false,
+      challenge: false,
       rankings: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.rankings ?? 0),
       discover: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.discover ?? 0),
       decide: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.decide ?? 0),
@@ -407,7 +507,8 @@ function MainApp() {
     } else {
       setRankingsInitialFilter('all');
     }
-    setActiveTab('rankings');
+    setMode('solo');
+    setSoloTab('rankings');
     setRankingReveal(null);
   }, [rankingReveal]);
 
@@ -428,7 +529,6 @@ function MainApp() {
     setShowAaybee100(false);
     setShowTv(false);
     setShowVs(false);
-    setShowChallenge(false);
   }, []);
 
   // Handle opening profile - remember current tab
@@ -443,13 +543,27 @@ function MainApp() {
     if (showProfile) {
       setShowProfile(false);
     }
-    setActiveTab(tab);
+    // Route to the correct mode-specific setter
+    const soloTabs: TabType[] = ['compare', 'rankings', 'discover'];
+    if (soloTabs.includes(tab)) {
+      setSoloTab(tab as SoloTab);
+    } else {
+      setSocialTab(tab as SocialTab);
+    }
   }, [showProfile]);
 
   // Handle profile close via X button - return to previous tab
   const handleProfileClose = useCallback(() => {
     setShowProfile(false);
-    setActiveTab(tabBeforeProfile);
+    // Restore previous tab in the correct mode
+    const soloTabsList: TabType[] = ['compare', 'rankings', 'discover'];
+    if (soloTabsList.includes(tabBeforeProfile)) {
+      setMode('solo');
+      setSoloTab(tabBeforeProfile as SoloTab);
+    } else {
+      setMode('social');
+      setSocialTab(tabBeforeProfile as SocialTab);
+    }
   }, [tabBeforeProfile]);
 
   // Track if onboarding just completed (went from false to true)
@@ -458,7 +572,8 @@ function MainApp() {
     // Only reset when onboarding JUST completed (false -> true)
     if (hasCompletedOnboarding && !prevOnboardingComplete.current) {
       setShowProfile(false);
-      setActiveTab('compare');
+      setMode('solo');
+      setSoloTab('compare');
     }
     prevOnboardingComplete.current = hasCompletedOnboarding;
   }, [hasCompletedOnboarding]);
@@ -471,18 +586,20 @@ function MainApp() {
     clearDeepLink();
 
     if (deepLink.type === 'daily') {
-      setActiveTab('daily');
+      setMode('social');
+      setSocialTab('daily');
     } else if (deepLink.type === 'vs') {
+      // Legacy VS links — open VS overlay (keep for backwards compat)
       closeAllOverlays();
       setVsInitialCode(deepLink.code);
       setShowVs(true);
     } else if (deepLink.type === 'challenge') {
-      closeAllOverlays();
+      setMode('social');
+      setSocialTab('challenge');
       setChallengeInitialCode(deepLink.code);
-      setShowChallenge(true);
     } else if (deepLink.type === 'share') {
-      // Share links redirect to daily for now (most common share type)
-      setActiveTab('daily');
+      setMode('social');
+      setSocialTab('daily');
     }
   }, [deepLink, isLoading, closeAllOverlays]);
 
@@ -561,22 +678,21 @@ function MainApp() {
       case 'compare':
         return (
           <ComparisonScreen
-            onOpenRanking={() => setActiveTab('rankings')}
-            onOpenDiscover={() => setActiveTab('discover')}
-            onOpenDecide={() => setActiveTab('decide')}
+            onOpenRanking={() => { setMode('solo'); setSoloTab('rankings'); }}
+            onOpenDiscover={() => { setMode('solo'); setSoloTab('discover'); }}
+            onOpenDecide={() => { setMode('social'); setSocialTab('decide'); }}
             onOpenAuth={() => setShowAuth(true)}
             onOpenProfile={handleOpenProfile}
             onOpenTop10Search={navigateToTop10Search}
             onOpenTop25={navigateToTop25}
             onOpenGlobal={navigateToGlobal}
-
           />
         );
       case 'rankings':
         return (
           <Suspense fallback={<LoadingScreen />}>
             <UnifiedRankingsScreen
-              onContinueComparing={() => setActiveTab('compare')}
+              onContinueComparing={() => { setMode('solo'); setSoloTab('compare'); }}
               initialTab={rankingsInitialTab}
               initialFilter={rankingsInitialFilter}
             />
@@ -586,30 +702,36 @@ function MainApp() {
         return (
           <DailyScreen />
         );
+      case 'challenge':
+        return (
+          <ChallengeScreen
+            onClose={() => {}} // no-op since it's a tab now, not an overlay
+            initialCode={challengeInitialCode}
+          />
+        );
       case 'discover':
         return (
           <Suspense fallback={<LoadingScreen />}>
             <DiscoverScreen
-              onNavigateToCompare={() => setActiveTab('compare')}
+              onNavigateToCompare={() => { setMode('solo'); setSoloTab('compare'); }}
             />
           </Suspense>
         );
       case 'decide':
         return (
-          <DecideScreen onNavigateToCompare={() => setActiveTab('compare')} />
+          <DecideScreen onNavigateToCompare={() => { setMode('solo'); setSoloTab('compare'); }} />
         );
       default:
         return (
           <ComparisonScreen
-            onOpenRanking={() => setActiveTab('rankings')}
-            onOpenDiscover={() => setActiveTab('discover')}
-            onOpenDecide={() => setActiveTab('decide')}
+            onOpenRanking={() => { setMode('solo'); setSoloTab('rankings'); }}
+            onOpenDiscover={() => { setMode('solo'); setSoloTab('discover'); }}
+            onOpenDecide={() => { setMode('social'); setSocialTab('decide'); }}
             onOpenAuth={() => setShowAuth(true)}
             onOpenProfile={handleOpenProfile}
             onOpenTop10Search={navigateToTop10Search}
             onOpenTop25={navigateToTop25}
             onOpenGlobal={navigateToGlobal}
-
           />
         );
     }
@@ -632,11 +754,6 @@ function MainApp() {
               closeAllOverlays();
               setVsInitialCode(code);
               setShowVs(true);
-            }}
-            onOpenChallenge={() => {
-              setShowProfile(false);
-              closeAllOverlays();
-              setShowChallenge(true);
             }}
           />
         </View>
@@ -670,16 +787,6 @@ function MainApp() {
         </View>
       )}
 
-      {/* Challenge overlay */}
-      {showChallenge && (
-        <View style={styles.screenOverlay}>
-          <ChallengeScreen
-            onClose={() => { setShowChallenge(false); setChallengeInitialCode(undefined); }}
-            initialCode={challengeInitialCode}
-          />
-        </View>
-      )}
-
       {/* Search overlay */}
       {showSearch && (
         <View style={styles.screenOverlay}>
@@ -697,14 +804,13 @@ function MainApp() {
           {!isGuestMode ? (
             <DesktopSidebar
               activeTab={activeTab}
+              mode={mode}
+              onModeChange={setMode}
               onTabPress={handleTabPress}
               lockedTabs={lockedTabs}
               onLockedTabPress={handleLockedTabPress}
               onSearchPress={() => { closeAllOverlays(); setShowSearch(true); }}
-              onTvPress={() => { closeAllOverlays(); setShowTv(true); }}
-              onAaybee100Press={() => { closeAllOverlays(); setShowAaybee100(true); }}
               onProfilePress={handleOpenProfile}
-              onChallengePress={() => { closeAllOverlays(); setShowChallenge(true); }}
             />
           ) : (
             <View style={[sidebarStyles.container, { justifyContent: 'space-between' }]}>
@@ -730,17 +836,20 @@ function MainApp() {
             <GlobalHeader
               onProfilePress={handleOpenProfile}
               onSearchPress={() => { closeAllOverlays(); setShowSearch(true); }}
-              onTvPress={() => { closeAllOverlays(); setShowTv(true); }}
-              onAaybee100Press={() => { closeAllOverlays(); setShowAaybee100(true); }}
-              onChallengePress={() => { closeAllOverlays(); setShowChallenge(true); }}
               notificationCount={pendingChallengeCount}
             />
+          )}
+
+          {/* Mode toggle (mobile/tablet only) */}
+          {!isGuestMode && (
+            <ModeToggle mode={mode} onModeChange={setMode} />
           )}
 
           {screenContent}
 
           {/* Bottom Tab Bar (mobile/tablet only) */}
           <TabBar
+            mode={mode}
             activeTab={activeTab}
             onTabPress={handleTabPress}
             lockedTabs={lockedTabs}
@@ -876,7 +985,36 @@ const styles = StyleSheet.create({
   loadingSpinner: {
     marginTop: spacing.sm,
   },
-  // Tab Bar - 4 tabs with icons
+  // Mode toggle
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.tabBarBorder,
+  },
+  modeToggleItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  modeToggleText: {
+    ...typography.captionMedium,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontSize: 11,
+  } as any,
+  modeToggleTextActive: {
+    color: colors.textPrimary,
+  },
+  modeToggleIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    height: 2,
+    backgroundColor: colors.accent,
+    width: '50%',
+  } as any,
+  // Tab Bar - 3 contextual tabs
   tabBar: {
     flexDirection: 'row',
     backgroundColor: colors.background,
@@ -902,36 +1040,12 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontWeight: '600',
   },
-  tabItemProminent: {
-    marginTop: 0,
-  },
-  prominentIconContainer: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 6,
-    borderWidth: 2,
-    borderColor: colors.border,
-  },
-  prominentIconContainerActive: {
-    borderColor: colors.accent,
-  },
-  tabLabelProminent: {
-    color: colors.textPrimary,
-    fontWeight: '600',
-  },
-  tabLabelProminentActive: {
-    color: colors.accent,
-  },
   tabLabelLocked: {
     color: colors.textMuted,
     opacity: 0.4,
   },
   lockedIconWrapper: {
     opacity: 0.4,
-  },
-  prominentIconContainerLocked: {
-    borderColor: colors.border,
-    opacity: 0.5,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
