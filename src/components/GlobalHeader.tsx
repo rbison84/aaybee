@@ -31,10 +31,13 @@ function GridIcon({ size = 20, color = colors.textMuted }: { size?: number; colo
   );
 }
 
-function PlayIcon({ size = 20, color = colors.textMuted }: { size?: number; color?: string }) {
+function ChallengeIcon({ size = 20, color = colors.textMuted }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M8 5v14l11-7z" fill={color} />
+      <Path
+        d="M13 10V3L4 14h7v7l9-11h-7z"
+        fill={color}
+      />
     </Svg>
   );
 }
@@ -59,10 +62,11 @@ interface GlobalHeaderProps {
   onSearchPress: () => void;
   onTvPress: () => void;
   onAaybee100Press: () => void;
+  onChallengePress: () => void;
   notificationCount?: number;
 }
 
-export function GlobalHeader({ onProfilePress, onSearchPress, onTvPress, onAaybee100Press, notificationCount = 0 }: GlobalHeaderProps) {
+export function GlobalHeader({ onProfilePress, onSearchPress, onTvPress, onAaybee100Press, onChallengePress, notificationCount = 0 }: GlobalHeaderProps) {
   const insets = useSafeAreaInsets();
   const { user, isGuest } = useAuth();
 
@@ -81,8 +85,8 @@ export function GlobalHeader({ onProfilePress, onSearchPress, onTvPress, onAaybe
             <SearchIcon size={20} color={colors.textMuted} />
           </Pressable>
 
-          <Pressable style={styles.searchButton} onPress={onTvPress} accessibilityLabel="Watch trailers">
-            <PlayIcon size={20} color={colors.textMuted} />
+          <Pressable style={styles.searchButton} onPress={onChallengePress} accessibilityLabel="Challenge a friend">
+            <ChallengeIcon size={20} color={colors.textMuted} />
           </Pressable>
 
           <Pressable style={styles.searchButton} onPress={onAaybee100Press} accessibilityLabel="Aaybee 100">

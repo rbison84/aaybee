@@ -140,6 +140,7 @@ interface DesktopSidebarProps {
   onTvPress: () => void;
   onAaybee100Press: () => void;
   onProfilePress: () => void;
+  onChallengePress: () => void;
 }
 
 function DesktopSidebar({
@@ -151,6 +152,7 @@ function DesktopSidebar({
   onTvPress,
   onAaybee100Press,
   onProfilePress,
+  onChallengePress,
 }: DesktopSidebarProps) {
   const tabs: { key: TabType; label: string }[] = [
     { key: 'compare', label: 'compare' },
@@ -162,7 +164,7 @@ function DesktopSidebar({
 
   const shortcuts: { label: string; onPress: () => void }[] = [
     { label: 'search', onPress: onSearchPress },
-    { label: 'tv', onPress: onTvPress },
+    { label: 'challenge', onPress: onChallengePress },
     { label: 'aaybee 100', onPress: onAaybee100Press },
     { label: 'profile', onPress: onProfilePress },
   ];
@@ -702,6 +704,7 @@ function MainApp() {
               onTvPress={() => { closeAllOverlays(); setShowTv(true); }}
               onAaybee100Press={() => { closeAllOverlays(); setShowAaybee100(true); }}
               onProfilePress={handleOpenProfile}
+              onChallengePress={() => { closeAllOverlays(); setShowChallenge(true); }}
             />
           ) : (
             <View style={[sidebarStyles.container, { justifyContent: 'space-between' }]}>
@@ -729,6 +732,7 @@ function MainApp() {
               onSearchPress={() => { closeAllOverlays(); setShowSearch(true); }}
               onTvPress={() => { closeAllOverlays(); setShowTv(true); }}
               onAaybee100Press={() => { closeAllOverlays(); setShowAaybee100(true); }}
+              onChallengePress={() => { closeAllOverlays(); setShowChallenge(true); }}
               notificationCount={pendingChallengeCount}
             />
           )}
