@@ -87,6 +87,9 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
   // Leaderboard
   const [leaderboard, setLeaderboard] = useState<{ name: string; matchPercent: number; code: string; date: string }[]>([]);
 
+  // Active/pending challenges
+  const [activeChallenges, setActiveChallenges] = useState<FriendChallenge[]>([]);
+
   // Prevent double tap
   const pickingRef = useRef(false);
 
@@ -140,9 +143,10 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
     })();
   }, [initialCode]);
 
-  // Load leaderboard
+  // Load leaderboard + active challenges
   useEffect(() => {
     if (!user?.id) return;
+    challengeService.getMyActiveChallenges(user.id).then(setActiveChallenges);
     challengeService.getChallengeLeaderboard(user.id).then(setLeaderboard);
   }, [user?.id]);
 
@@ -468,24 +472,69 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
 
       {error && <Text style={styles.errorText}>{error}</Text>}
 
+      {/* Active/Pending Challenges */}
+      {activeChallenges.filter(c => c.status !== 'complete').length > 0 && (
+        <View style={styles.leaderboardSection}>
+          <Text style={styles.leaderboardTitle}>active</Text>
+          {activeChallenges
+            .filter(c => c.status !== 'complete')
+            .map((c) => {
+              const isCreator = c.creator_id === user?.id;
+              const isPending = c.status === 'pending';
+              const opponentName = isCreator ? (c.challenger_name || 'waiting...') : c.creator_name;
+              return (
+                <Pressable
+                  key={c.id}
+                  style={styles.leaderboardRow}
+                  onPress={() => {
+                    setChallenge(c);
+                    if (isPending && isCreator) {
+                      setStep('share');
+                    } else if (!isCreator && c.status === 'active') {
+                      // Challenger can continue ranking
+                      const movies = c.movies;
+                      const pairs = generateSwissPairs(movies);
+                      setRankingPairs(pairs);
+                      setCurrentPairIndex(0);
+                      setScores(new Map(movies.map(m => [m.id, 0])));
+                      setStep('rank');
+                    }
+                  }}
+                >
+                  <Text style={styles.leaderboardName}>{opponentName}</Text>
+                  <Text style={[styles.leaderboardPercent, { color: colors.textMuted }]}>
+                    {isPending ? 'waiting...' : 'ranking...'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+        </View>
+      )}
+
+      {/* Completed Challenges */}
       {leaderboard.length > 0 && (
         <View style={styles.leaderboardSection}>
-          <Text style={styles.leaderboardTitle}>your challenges</Text>
-          {leaderboard.map((entry, i) => (
-            <Pressable key={`${entry.code}-${i}`} style={styles.leaderboardRow} onPress={() => {
-              (async () => {
-                const c = await challengeService.getChallengeByCode(entry.code);
-                if (c && c.results) {
-                  setChallenge(c);
-                  setResults(c.results as ChallengeResults);
-                  setStep('results');
-                }
-              })();
-            }}>
-              <Text style={styles.leaderboardName}>{entry.name}</Text>
-              <Text style={styles.leaderboardPercent}>{entry.matchPercent}%</Text>
-            </Pressable>
-          ))}
+          <Text style={styles.leaderboardTitle}>completed</Text>
+          {leaderboard.map((entry, i) => {
+            const tier = getMatchTier(entry.matchPercent);
+            return (
+              <Pressable key={`${entry.code}-${i}`} style={styles.leaderboardRow} onPress={() => {
+                (async () => {
+                  const c = await challengeService.getChallengeByCode(entry.code);
+                  if (c && c.results) {
+                    setChallenge(c);
+                    setResults(c.results as ChallengeResults);
+                    setStep('results');
+                  }
+                })();
+              }}>
+                <Text style={styles.leaderboardName}>{entry.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Text style={styles.leaderboardPercent}>{entry.matchPercent}%</Text>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       )}
     </Animated.View>

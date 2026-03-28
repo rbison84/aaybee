@@ -16,6 +16,7 @@ import { useHaptics } from '../hooks/useHaptics';
 import { SettingsScreen } from './SettingsScreen';
 import { FriendsScreen } from './FriendsScreen';
 import { TasteProfileScreen } from './TasteProfileScreen';
+import { CrewManagementScreen } from './CrewManagementScreen';
 
 const MIN_COMPARISONS_FOR_TASTE_PROFILE = 100;
 
@@ -95,15 +96,17 @@ interface ProfileScreenProps {
   isGuestMode?: boolean;
   onOpenAuth?: () => void;
   onOpenVsChallenge?: (code: string) => void;
+  onOpenTv?: () => void;
 }
 
-export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, onOpenVsChallenge }: ProfileScreenProps) {
+export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, onOpenVsChallenge, onOpenTv }: ProfileScreenProps) {
   const { postOnboardingComparisons } = useAppStore();
   const { showLockedFeature } = useLockedFeature();
   const { unlockAllFeatures } = useDevSettings();
   const haptics = useHaptics();
   const [showSettings, setShowSettings] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
+  const [showCrews, setShowCrews] = useState(false);
   const [showTasteProfile, setShowTasteProfile] = useState(false);
 
   const isTasteProfileLocked = isGuestMode || (unlockAllFeatures ? false : postOnboardingComparisons < MIN_COMPARISONS_FOR_TASTE_PROFILE);
@@ -151,6 +154,12 @@ export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, o
       <TasteProfileScreen
         onClose={() => setShowTasteProfile(false)}
       />
+    );
+  }
+
+  if (showCrews) {
+    return (
+      <CrewManagementScreen onClose={() => setShowCrews(false)} />
     );
   }
 
@@ -216,6 +225,38 @@ export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, o
               {!isFriendsLocked && <ChevronIcon />}
             </Pressable>
           </Animated.View>
+
+          {/* CREWS BUTTON */}
+          {!isGuestMode && (
+            <Animated.View entering={FadeInDown.delay(125)} style={styles.settingsSection}>
+              <Pressable
+                style={styles.settingsButton}
+                onPress={() => setShowCrews(true)}
+              >
+                <View style={styles.settingsLeft}>
+                  <FriendsIcon />
+                  <Text style={styles.settingsText}>crews</Text>
+                </View>
+                <ChevronIcon />
+              </Pressable>
+            </Animated.View>
+          )}
+
+          {/* TRAILERS BUTTON */}
+          {onOpenTv && (
+            <Animated.View entering={FadeInDown.delay(140)} style={styles.settingsSection}>
+              <Pressable
+                style={styles.settingsButton}
+                onPress={onOpenTv}
+              >
+                <View style={styles.settingsLeft}>
+                  <SettingsIcon />
+                  <Text style={styles.settingsText}>trailers</Text>
+                </View>
+                <ChevronIcon />
+              </Pressable>
+            </Animated.View>
+          )}
 
           {/* SETTINGS BUTTON */}
           <Animated.View entering={FadeInDown.delay(150)} style={styles.settingsSection}>

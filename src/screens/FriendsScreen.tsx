@@ -191,6 +191,8 @@ function FriendProfileModal({ visible, onClose, friend, currentUserId, onChallen
               </Animated.View>
             )}
 
+            {/* TODO: Add taste comparison radar when friend movie data includes genres */}
+
             {/* TOP DIRECTORS */}
             {topDirectors.length > 0 && (
               <Animated.View entering={FadeInDown.delay(150)} style={profileStyles.section}>

@@ -693,6 +693,7 @@ function MainApp() {
           <Suspense fallback={<LoadingScreen />}>
             <UnifiedRankingsScreen
               onContinueComparing={() => { setMode('solo'); setSoloTab('compare'); }}
+              onOpenAaybee100={() => { closeAllOverlays(); setShowAaybee100(true); }}
               initialTab={rankingsInitialTab}
               initialFilter={rankingsInitialFilter}
             />
@@ -755,6 +756,7 @@ function MainApp() {
               setVsInitialCode(code);
               setShowVs(true);
             }}
+            onOpenTv={() => { setShowProfile(false); closeAllOverlays(); setShowTv(true); }}
           />
         </View>
       )}

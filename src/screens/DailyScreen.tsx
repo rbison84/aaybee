@@ -133,11 +133,18 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     init();
   }, [step, activeCategoryId, refreshKey]);
 
-  // Load crews on mount
+  // Load crews and members on mount
   useEffect(() => {
     if (!user?.id) return;
-    crewService.getMyCrews(user.id).then(setCrews);
-  }, [user?.id]);
+    (async () => {
+      const myCrews = await crewService.getMyCrews(user.id);
+      setCrews(myCrews);
+      for (const crew of myCrews) {
+        const members = await crewService.getCrewMembers(crew.id, dailyNumber);
+        setCrewMembers(prev => new Map(prev).set(crew.id, members));
+      }
+    })();
+  }, [user?.id, dailyNumber]);
 
   // Filter category movieIds to only those present in the movies store
   const getAvailableMovieIds = useCallback((categoryId: string): string[] => {
@@ -520,6 +527,22 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
                 </View>
               )}
 
+              {/* Crew Status */}
+              {user?.id && crews.length > 0 && (
+                <View style={styles.crewIntroSection}>
+                  {crews.map(crew => {
+                    const members = crewMembers.get(crew.id) || [];
+                    const playedCount = members.filter(m => m.played_today).length;
+                    return (
+                      <View key={crew.id} style={styles.crewIntroRow}>
+                        <Text style={styles.crewIntroName}>{crew.name}</Text>
+                        <Text style={styles.crewIntroStatus}>{playedCount}/{members.length} played</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
               {isCompleted ? (
                 <View style={styles.completedBadge}>
                   <View style={styles.completedBadgeContent}>
@@ -702,22 +725,29 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
             )}
           </View>
 
-          {/* World context */}
+          {/* World context — per movie comparison */}
           {fullRanking && activeCategory && (
             <View style={styles.worldStatsSection}>
               <Text style={styles.worldStatsTitle}>vs the world</Text>
-              {fullRanking.slice(0, 3).map((movieId, idx) => {
+              {fullRanking.map((movieId, idx) => {
                 const globalPos = activeCategory.movieIds.indexOf(movieId);
                 const movie = movies.get(movieId);
-                if (!movie) return null;
-                const agrees = globalPos === idx;
+                if (!movie || globalPos === -1) return null;
+                const diff = globalPos - idx;
+                const agrees = diff === 0;
+                const seenSet = new Set(swissState?.seenIds || []);
+                if (!seenSet.has(movieId)) return null; // skip unseen
                 return (
                   <View key={movieId} style={styles.worldStatRow}>
                     <Text style={styles.worldStatRank}>#{idx + 1}</Text>
                     <Text style={styles.worldStatMovie} numberOfLines={1}>{movie.title}</Text>
-                    <Text style={[styles.worldStatLabel, agrees ? styles.worldStatAgree : styles.worldStatDisagree]}>
-                      {agrees ? 'consensus' : `world: #${globalPos + 1}`}
-                    </Text>
+                    {agrees ? (
+                      <Text style={[styles.worldStatLabel, styles.worldStatAgree]}>consensus</Text>
+                    ) : (
+                      <Text style={[styles.worldStatLabel, diff > 0 ? styles.worldStatAgree : styles.worldStatDisagree]}>
+                        {diff > 0 ? `↑${diff} above` : `↓${Math.abs(diff)} below`}
+                      </Text>
+                    )}
                   </View>
                 );
               })}
@@ -1543,6 +1573,29 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: spacing.lg,
     gap: spacing.sm,
+  },
+  crewIntroSection: {
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  crewIntroRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.sm,
+  },
+  crewIntroName: {
+    ...typography.caption,
+    color: colors.textPrimary,
+    fontWeight: '600',
+  },
+  crewIntroStatus: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   crewSectionTitle: {
     ...typography.caption,

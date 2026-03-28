@@ -372,6 +372,26 @@ export const challengeService = {
   },
 
   /**
+   * Get all challenges for a user (pending + active + complete).
+   */
+  getMyActiveChallenges: async (
+    userId: string,
+  ): Promise<FriendChallenge[]> => {
+    try {
+      const { data } = await supabase
+        .from('friend_challenges')
+        .select('*')
+        .or(`creator_id.eq.${userId},challenger_id.eq.${userId}`)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(20);
+      return data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  /**
    * Get challenge leaderboard — all completed challenges sorted by match %.
    */
   getChallengeLeaderboard: async (

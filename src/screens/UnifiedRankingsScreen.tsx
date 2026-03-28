@@ -2,7 +2,10 @@ import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
   View,
+  Text,
+  Pressable,
 } from 'react-native';
+import { colors, spacing, typography } from '../theme/cinematic';
 import { CinematicBackground } from '../components/cinematic';
 import { UnderlineTabs } from '../components/UnderlineTabs';
 
@@ -31,12 +34,14 @@ type FilterType = 'classic' | 'top25' | 'all';
 
 interface UnifiedRankingsScreenProps {
   onContinueComparing?: () => void;
+  onOpenAaybee100?: () => void;
   initialTab?: TabType;
   initialFilter?: FilterType;
 }
 
 export function UnifiedRankingsScreen({
   onContinueComparing,
+  onOpenAaybee100,
   initialTab = 'yours',
   initialFilter = 'classic',
 }: UnifiedRankingsScreenProps) {
@@ -74,6 +79,13 @@ export function UnifiedRankingsScreen({
           onTabPress={handleTabPress}
         />
 
+        {/* Aaybee 100 shortcut */}
+        {onOpenAaybee100 && (
+          <Pressable style={styles.aaybee100Button} onPress={onOpenAaybee100}>
+            <Text style={styles.aaybee100Text}>aaybee 100</Text>
+          </Pressable>
+        )}
+
         {/* Tab Content */}
         <View style={styles.content}>
           {renderContent()}
@@ -93,6 +105,18 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  aaybee100Button: {
+    alignSelf: 'center',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  aaybee100Text: {
+    ...typography.caption,
+    color: colors.accent,
+    fontWeight: '600',
+    letterSpacing: 1,
   },
 });
 
