@@ -1,0 +1,27 @@
+node_modules/
+.expo/
+dist/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+netlify/functions/node_modules/
+
+# macOS
+.DS_Store
+
+# Local env files
+.env
+.env.local
+.env*.local
+
+# TypeScript
+*.tsbuildinfo
+
+# MovieLens data (large CSV files)
+data/movielens/
+nul

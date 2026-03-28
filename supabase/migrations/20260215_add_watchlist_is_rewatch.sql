@@ -1,0 +1,1 @@
+ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS is_rewatch BOOLEAN DEFAULT false;

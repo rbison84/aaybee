@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(grep:*)",
+      "Bash(dir:*)",
+      "Bash(test:*)",
+      "Bash(npx:*)",
+      "Bash(npx --yes sharp-cli:*)",
+      "Bash(node -e:*)",
+      "Bash(node scripts/tmdb_vote_counts.js:*)",
+      "Bash(node:*)",
+      "WebFetch(domain:image.tmdb.org)",
+      "Bash(unzip:*)",
+      "Bash(done)",
+      "Bash(find:*)",
+      "Bash(.ts$ \")",
+      "Bash(python3:*)",
+      "Bash(for id in 530385 493922)",
+      "Bash(do echo \"Checking $id:\")",
+      "WebSearch",
+      "WebFetch(domain:medium.com)",
+      "Bash(ls:*)",
+      "WebFetch(domain:www.themoviedb.org)"
+    ]
+  }
+}

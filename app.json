@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Aaybee",
+    "slug": "aaybee",
+    "scheme": "aaybee",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#13111C"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "backgroundColor": "#13111C"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#13111C"
+      },
+      "backgroundColor": "#13111C"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "name": "Aaybee",
+      "shortName": "Aaybee",
+      "description": "Movie ranking app - compare movies to build your personal rankings",
+      "backgroundColor": "#13111C",
+      "themeColor": "#A78BFA"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ]
+  }
+}
