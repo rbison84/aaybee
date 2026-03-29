@@ -568,40 +568,63 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
         </View>
       )}
 
-      {/* Friends */}
+      {/* Unified Leaderboard: friends ranked by avg challenge match % */}
       {friends.length > 0 && (
         <View style={styles.sectionBlock}>
-          <Text style={styles.sectionLabel}>friends</Text>
-          {friends.map(friend => {
-            const isExpanded = expandedFriendId === friend.friend_id;
-            const matchPct = friend.taste_match ? `${Math.round(friend.taste_match)}%` : '\u2014';
-            const topMovies = friendTopMovies.get(friend.friend_id);
-            return (
-              <View key={friend.friend_id}>
-                <View style={styles.friendRow}>
-                  <Pressable style={styles.friendInfo} onPress={() => handleFriendTap(friend)}>
-                    <Text style={styles.friendName}>{friend.friend?.display_name || 'Anonymous'}</Text>
-                    <Text style={styles.friendMatch}>{matchPct} match</Text>
-                  </Pressable>
-                  <Pressable style={styles.challengeButton} onPress={() => handleQuickChallenge(friend)}>
-                    <Text style={styles.challengeButtonText}>&#x2694;&#xFE0F;</Text>
-                  </Pressable>
-                </View>
-                {isExpanded && (
-                  <Animated.View entering={FadeIn.duration(200)} style={styles.friendExpanded}>
-                    {topMovies && topMovies.length > 0 && (
-                      <Text style={styles.friendMovies}>
-                        top 5: {topMovies.map(m => m.title).join(', ')}
-                      </Text>
+          <Text style={styles.sectionLabel}>your people</Text>
+          {friends
+            .map(friend => {
+              const name = friend.friend?.display_name || 'Anonymous';
+              const friendGames = leaderboard.filter(l => l.name === name);
+              const avgMatch = friendGames.length > 0
+                ? Math.round(friendGames.reduce((s, g) => s + g.matchPercent, 0) / friendGames.length)
+                : (friend.taste_match ? Math.round(friend.taste_match) : null);
+              return { friend, name, avgMatch, gameCount: friendGames.length, friendGames };
+            })
+            .sort((a, b) => (b.avgMatch ?? -1) - (a.avgMatch ?? -1))
+            .map(({ friend, name, avgMatch, gameCount, friendGames }, rank) => {
+              const isExpanded = expandedFriendId === friend.friend_id;
+              const topMovies = friendTopMovies.get(friend.friend_id);
+              const rankLabel = avgMatch !== null && rank < 3 ? `#${rank + 1}` : '';
+              return (
+                <View key={friend.friend_id}>
+                  <View style={styles.friendRow}>
+                    {rankLabel ? (
+                      <Text style={styles.rankBadge}>{rankLabel}</Text>
+                    ) : (
+                      <View style={styles.rankSpacer} />
                     )}
-                    <Text style={styles.friendStat}>
-                      past challenges: {leaderboard.filter(l => l.name === (friend.friend?.display_name || '')).length}
-                    </Text>
-                  </Animated.View>
-                )}
-              </View>
-            );
-          })}
+                    <Pressable style={styles.friendInfo} onPress={() => handleFriendTap(friend)}>
+                      <Text style={styles.friendName}>{name}</Text>
+                      <Text style={styles.friendMatch}>
+                        {avgMatch !== null ? `${avgMatch}% avg` : '\u2014'}
+                        {gameCount > 0 ? `  ${gameCount} game${gameCount !== 1 ? 's' : ''}` : ''}
+                      </Text>
+                    </Pressable>
+                    <Pressable style={styles.challengeButton} onPress={() => handleQuickChallenge(friend)}>
+                      <Text style={styles.challengeButtonLabel}>challenge</Text>
+                    </Pressable>
+                  </View>
+                  {isExpanded && (
+                    <Animated.View entering={FadeIn.duration(200)} style={styles.friendExpanded}>
+                      {topMovies && topMovies.length > 0 && (
+                        <Text style={styles.friendMovies}>
+                          top 5: {topMovies.map(m => m.title).join(', ')}
+                        </Text>
+                      )}
+                      {friendGames.length > 0 && (
+                        <Text style={styles.friendStat}>
+                          avg match: {avgMatch}% · last played: {friendGames[0]?.date ? new Date(friendGames[0].date).toLocaleDateString() : '—'}
+                        </Text>
+                      )}
+                      {friendGames.length === 0 && (
+                        <Text style={styles.friendStat}>no challenges yet</Text>
+                      )}
+                    </Animated.View>
+                  )}
+                </View>
+              );
+            })}
         </View>
       )}
 
@@ -654,28 +677,6 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
               </Pressable>
             );
           })}
-        </View>
-      )}
-
-      {/* Completed */}
-      {leaderboard.length > 0 && (
-        <View style={styles.sectionBlock}>
-          <Text style={styles.sectionLabel}>completed</Text>
-          {leaderboard.map((entry, i) => (
-            <Pressable key={`${entry.code}-${i}`} style={styles.challengeRow} onPress={() => {
-              (async () => {
-                const c = await challengeService.getChallengeByCode(entry.code);
-                if (c?.results) {
-                  setChallenge(c);
-                  setResults(c.results as ChallengeResults);
-                  setStep('results');
-                }
-              })();
-            }}>
-              <Text style={styles.challengeRowName}>{entry.name}</Text>
-              <Text style={styles.challengeRowPercent}>{entry.matchPercent}%</Text>
-            </Pressable>
-          ))}
         </View>
       )}
 
@@ -1432,8 +1433,16 @@ const styles = StyleSheet.create({
   friendInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   friendName: { ...typography.bodyMedium, color: colors.textPrimary },
   friendMatch: { ...typography.caption, color: colors.textMuted },
-  challengeButton: { padding: spacing.sm },
-  challengeButtonText: { fontSize: 18 },
+  challengeButton: {
+    paddingVertical: 4, paddingHorizontal: spacing.sm,
+    backgroundColor: colors.accentSubtle, borderRadius: borderRadius.sm,
+  },
+  challengeButtonLabel: { ...typography.caption, color: colors.accent, fontWeight: '600', fontSize: 11 },
+  rankBadge: {
+    ...typography.caption, color: colors.accent, fontWeight: '700',
+    width: 24, textAlign: 'center',
+  },
+  rankSpacer: { width: 24 },
   friendExpanded: {
     paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
     backgroundColor: colors.surface, borderRadius: borderRadius.md,
