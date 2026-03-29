@@ -78,10 +78,10 @@ const TAB_UNLOCK_THRESHOLDS: Partial<Record<TabType, number>> = {
 
 // Mode toggle component — sits between header and screen content
 function ModeToggle({ mode, onModeChange, socialBadge }: { mode: AppMode; onModeChange: (m: AppMode) => void; socialBadge?: boolean }) {
-  const indicatorX = useSharedValue(mode === 'solo' ? 0 : 0.5);
+  const indicatorX = useSharedValue(mode === 'social' ? 0 : 0.5);
 
   useEffect(() => {
-    indicatorX.value = withTiming(mode === 'solo' ? 0 : 0.5, { duration: 250 });
+    indicatorX.value = withTiming(mode === 'social' ? 0 : 0.5, { duration: 250 });
   }, [mode]);
 
   const indicatorStyle = useAnimatedStyle(() => ({
@@ -92,26 +92,26 @@ function ModeToggle({ mode, onModeChange, socialBadge }: { mode: AppMode; onMode
     <View style={styles.modeToggle}>
       <Pressable
         style={styles.modeToggleItem}
-        onPress={() => onModeChange('solo')}
-      >
-        <Text style={[
-          styles.modeToggleText,
-          mode === 'solo' && styles.modeToggleTextActive,
-        ]}>
-          MY MOVIES
-        </Text>
-      </Pressable>
-      <Pressable
-        style={styles.modeToggleItem}
         onPress={() => onModeChange('social')}
       >
         <Text style={[
           styles.modeToggleText,
           mode === 'social' && styles.modeToggleTextActive,
         ]}>
-          PLAY WITH FRIENDS
+          PLAY
         </Text>
         {socialBadge && <View style={styles.modeBadgeDot} />}
+      </Pressable>
+      <Pressable
+        style={styles.modeToggleItem}
+        onPress={() => onModeChange('solo')}
+      >
+        <Text style={[
+          styles.modeToggleText,
+          mode === 'solo' && styles.modeToggleTextActive,
+        ]}>
+          FOR YOU
+        </Text>
       </Pressable>
       {/* Active indicator */}
       <Animated.View style={[styles.modeToggleIndicator, indicatorStyle]} />
@@ -234,11 +234,11 @@ function DesktopSidebar({
     <View style={sidebarStyles.container}>
       <Text style={sidebarStyles.logo}>aaybee</Text>
 
-      {/* MY MOVIES section */}
-      <Text style={sidebarStyles.sectionHeader}>MY MOVIES</Text>
+      {/* PLAY section (social) */}
+      <Text style={sidebarStyles.sectionHeader}>PLAY</Text>
       <View style={sidebarStyles.navSection}>
-        {soloTabs.map((tab) => {
-          const isActive = activeTab === tab.key && mode === 'solo';
+        {socialTabs.map((tab) => {
+          const isActive = activeTab === tab.key && mode === 'social';
           const isLocked = lockedTabs[tab.key];
           return (
             <Pressable
@@ -248,7 +248,7 @@ function DesktopSidebar({
                 isActive && sidebarStyles.navItemActive,
                 isLocked && sidebarStyles.navItemLocked,
               ]}
-              onPress={() => isLocked ? onLockedTabPress(tab.key) : handleSoloTabPress(tab.key)}
+              onPress={() => isLocked ? onLockedTabPress(tab.key) : handleSocialTabPress(tab.key)}
             >
               <TabIcon name={tab.key} active={isActive && !isLocked} size={20} />
               <Text style={[
@@ -265,11 +265,11 @@ function DesktopSidebar({
 
       <View style={sidebarStyles.divider} />
 
-      {/* PLAY WITH FRIENDS section */}
-      <Text style={sidebarStyles.sectionHeader}>PLAY WITH FRIENDS</Text>
+      {/* FOR YOU section (solo) */}
+      <Text style={sidebarStyles.sectionHeader}>FOR YOU</Text>
       <View style={sidebarStyles.navSection}>
-        {socialTabs.map((tab) => {
-          const isActive = activeTab === tab.key && mode === 'social';
+        {soloTabs.map((tab) => {
+          const isActive = activeTab === tab.key && mode === 'solo';
           const isLocked = lockedTabs[tab.key];
           return (
             <Pressable
@@ -279,7 +279,7 @@ function DesktopSidebar({
                 isActive && sidebarStyles.navItemActive,
                 isLocked && sidebarStyles.navItemLocked,
               ]}
-              onPress={() => isLocked ? onLockedTabPress(tab.key) : handleSocialTabPress(tab.key)}
+              onPress={() => isLocked ? onLockedTabPress(tab.key) : handleSoloTabPress(tab.key)}
             >
               <TabIcon name={tab.key} active={isActive && !isLocked} size={20} />
               <Text style={[
@@ -429,7 +429,7 @@ function MainApp() {
   const [debugVisible, setDebugVisible] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [mode, setMode] = useState<AppMode>('solo');
+  const [mode, setMode] = useState<AppMode>('social');
   const [soloTab, setSoloTab] = useState<SoloTab>('compare');
   const [socialTab, setSocialTab] = useState<SocialTab>('vs');
   const activeTab: TabType = mode === 'solo' ? soloTab : socialTab;
