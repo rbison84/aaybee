@@ -474,43 +474,44 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     return (
       <ScrollView contentContainerStyle={styles.centerContainer}>
         <Animated.View style={styles.introInner} entering={FadeIn.duration(300)}>
-          <Text style={styles.dailyLabel}>Daily #{dailyNumber}</Text>
-          <Text style={styles.introTitle}>{category.title}</Text>
-
-          {/* 3x3 poster grid */}
-          <View style={styles.posterGrid}>
-            {gridMovies.map((movie, i) => {
-              const isSeen = seenSelection.has(movie.id);
-              return (
-                <Animated.View key={movie.id} style={styles.posterGridCell} entering={FadeInDown.delay(i * 50).duration(300)}>
-                  <Pressable
-                    onPress={isSelectingMode ? () => toggleSeen(movie.id) : undefined}
-                    style={styles.posterPressable}
-                  >
-                    {movie.posterUrl ? (
-                      <Image
-                        source={{ uri: movie.posterUrl }}
-                        style={[
-                          styles.posterGridImage,
-                          isSelectingMode && !isSeen && styles.posterDimmed,
-                        ]}
-                      />
-                    ) : (
-                      <View style={styles.posterGridPlaceholder}>
-                        <Text style={styles.posterGridPlaceholderText}>?</Text>
-                      </View>
-                    )}
-                    {isSelectingMode && !isSeen && (
-                      <View style={styles.posterGrayOverlay} />
-                    )}
-                  </Pressable>
-                </Animated.View>
-              );
-            })}
-          </View>
 
           {isSelectingMode ? (
             <>
+              <Text style={styles.dailyLabel}>Daily #{dailyNumber}</Text>
+              <Text style={styles.introTitle}>{category.title}</Text>
+
+              {/* 3x3 poster grid */}
+              <View style={styles.posterGrid}>
+                {gridMovies.map((movie, i) => {
+                  const isSeen = seenSelection.has(movie.id);
+                  return (
+                    <Animated.View key={movie.id} style={styles.posterGridCell} entering={FadeInDown.delay(i * 50).duration(300)}>
+                      <Pressable
+                        onPress={() => toggleSeen(movie.id)}
+                        style={styles.posterPressable}
+                      >
+                        {movie.posterUrl ? (
+                          <Image
+                            source={{ uri: movie.posterUrl }}
+                            style={[
+                              styles.posterGridImage,
+                              !isSeen && styles.posterDimmed,
+                            ]}
+                          />
+                        ) : (
+                          <View style={styles.posterGridPlaceholder}>
+                            <Text style={styles.posterGridPlaceholderText}>?</Text>
+                          </View>
+                        )}
+                        {!isSeen && (
+                          <View style={styles.posterGrayOverlay} />
+                        )}
+                      </Pressable>
+                    </Animated.View>
+                  );
+                })}
+              </View>
+
               <Text style={styles.introSubtitle}>Deselect movies you haven't seen</Text>
               <Text style={styles.seenCounter}>{seenCount} of {gridMovies.length} seen</Text>
 
@@ -526,25 +527,15 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
             </>
           ) : (
             <>
-              <Text style={styles.introSubtitle}>{category.subtitle}</Text>
-
-              {currentStreak > 0 && (
-                <View style={[styles.streakBadge, streakAtRisk && styles.streakBadgeAtRisk]}>
-                  <View style={styles.streakBadgeContent}>
-                    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                      <Path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z" stroke={colors.accent} strokeWidth={1.75} strokeLinejoin="round" />
-                      <Path d="M12 12c0 2-1.5 3-1.5 4.5a1.5 1.5 0 0 0 3 0c0-1.5-1.5-2.5-1.5-4.5z" stroke={colors.accent} strokeWidth={1.25} strokeLinejoin="round" />
-                    </Svg>
-                    <Text style={styles.streakBadgeText}>
-                      {streakAtRisk ? `${currentStreak} day streak at risk!` : `${currentStreak} day streak`}
-                    </Text>
+              {/* YOUR CREWS - at top */}
+              {user?.id && crews.length > 0 && (
+                <Animated.View entering={FadeInDown.delay(50)} style={styles.crewSection}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.crewSectionTitle}>your crews</Text>
+                    <Pressable onPress={() => setCrewCreateMode(!crewCreateMode && !crewJoinMode)} style={styles.subtleAction}>
+                      <Text style={styles.subtleActionText}>+</Text>
+                    </Pressable>
                   </View>
-                </View>
-              )}
-
-              {/* Crews */}
-              {user?.id && (
-                <View style={styles.crewSection}>
                   {crews.map(crew => {
                     const members = crewMembers.get(crew.id) || [];
                     const playedCount = members.filter(m => m.played_today).length;
@@ -602,18 +593,6 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
                     );
                   })}
 
-                  {/* Create / Join buttons */}
-                  {!crewCreateMode && !crewJoinMode && (
-                    <View style={styles.crewActions}>
-                      <Pressable style={styles.crewActionButton} onPress={() => setCrewCreateMode(true)}>
-                        <Text style={styles.crewActionText}>+ create crew</Text>
-                      </Pressable>
-                      <Pressable style={styles.crewActionButton} onPress={() => setCrewJoinMode(true)}>
-                        <Text style={styles.crewActionText}>join crew</Text>
-                      </Pressable>
-                    </View>
-                  )}
-
                   {crewCreateMode && (
                     <View style={styles.crewInlineForm}>
                       <TextInput
@@ -644,8 +623,8 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
                         >
                           <Text style={styles.crewFormButtonText}>create</Text>
                         </Pressable>
-                        <Pressable onPress={() => { setCrewCreateMode(false); setCrewName(''); }}>
-                          <Text style={styles.crewFormCancel}>cancel</Text>
+                        <Pressable onPress={() => { setCrewCreateMode(false); setCrewJoinMode(true); }}>
+                          <Text style={styles.crewFormCancel}>join instead</Text>
                         </Pressable>
                       </View>
                     </View>
@@ -690,6 +669,133 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
                   )}
 
                   {crewError && <Text style={styles.crewErrorInline}>{crewError}</Text>}
+                </Animated.View>
+              )}
+
+              {/* Whisper for users without crews */}
+              {user?.id && crews.length === 0 && !crewCreateMode && !crewJoinMode && (
+                <Pressable onPress={() => setCrewCreateMode(true)}>
+                  <Text style={styles.crewWhisper}>play daily with friends +</Text>
+                </Pressable>
+              )}
+
+              {/* Inline create/join for users without crews */}
+              {user?.id && crews.length === 0 && crewCreateMode && (
+                <View style={styles.crewInlineForm}>
+                  <TextInput
+                    style={styles.crewFormInput}
+                    placeholder="crew name"
+                    placeholderTextColor={colors.textMuted}
+                    value={crewName}
+                    onChangeText={setCrewName}
+                    maxLength={30}
+                    autoFocus
+                  />
+                  <View style={styles.crewFormButtons}>
+                    <Pressable
+                      style={[styles.crewFormButton, !crewName.trim() && { opacity: 0.4 }]}
+                      onPress={async () => {
+                        if (!user?.id || !crewName.trim()) return;
+                        setCrewLoading(true);
+                        const { crew, error } = await crewService.createCrew(user.id, crewName.trim());
+                        if (crew) {
+                          setCrews(prev => [...prev, crew]);
+                          setCrewName('');
+                          setCrewCreateMode(false);
+                        }
+                        if (error) setCrewError(error);
+                        setCrewLoading(false);
+                      }}
+                      disabled={!crewName.trim() || crewLoading}
+                    >
+                      <Text style={styles.crewFormButtonText}>create</Text>
+                    </Pressable>
+                    <Pressable onPress={() => { setCrewCreateMode(false); setCrewJoinMode(true); }}>
+                      <Text style={styles.crewFormCancel}>join instead</Text>
+                    </Pressable>
+                  </View>
+                  {crewError && <Text style={styles.crewErrorInline}>{crewError}</Text>}
+                </View>
+              )}
+
+              {user?.id && crews.length === 0 && crewJoinMode && (
+                <View style={styles.crewInlineForm}>
+                  <TextInput
+                    style={styles.crewFormInput}
+                    placeholder="enter code"
+                    placeholderTextColor={colors.textMuted}
+                    value={crewJoinCode}
+                    onChangeText={t => setCrewJoinCode(t.toUpperCase())}
+                    maxLength={6}
+                    autoCapitalize="characters"
+                    autoFocus
+                  />
+                  <View style={styles.crewFormButtons}>
+                    <Pressable
+                      style={[styles.crewFormButton, crewJoinCode.length < 6 && { opacity: 0.4 }]}
+                      onPress={async () => {
+                        if (!user?.id || crewJoinCode.length < 6) return;
+                        setCrewLoading(true);
+                        const { crew, error } = await crewService.joinCrew(user.id, crewJoinCode);
+                        if (crew) {
+                          setCrews(prev => [...prev, crew]);
+                          setCrewJoinCode('');
+                          setCrewJoinMode(false);
+                        }
+                        if (error) setCrewError(error);
+                        setCrewLoading(false);
+                      }}
+                      disabled={crewJoinCode.length < 6 || crewLoading}
+                    >
+                      <Text style={styles.crewFormButtonText}>join</Text>
+                    </Pressable>
+                    <Pressable onPress={() => { setCrewJoinMode(false); setCrewJoinCode(''); }}>
+                      <Text style={styles.crewFormCancel}>cancel</Text>
+                    </Pressable>
+                  </View>
+                  {crewError && <Text style={styles.crewErrorInline}>{crewError}</Text>}
+                </View>
+              )}
+
+              {/* Category info */}
+              <Text style={styles.dailyLabel}>Daily #{dailyNumber}</Text>
+              <Text style={styles.introTitle}>{category.title}</Text>
+
+              {/* 3x3 poster grid */}
+              <View style={styles.posterGrid}>
+                {gridMovies.map((movie, i) => {
+                  return (
+                    <Animated.View key={movie.id} style={styles.posterGridCell} entering={FadeInDown.delay(i * 50).duration(300)}>
+                      <View style={styles.posterPressable}>
+                        {movie.posterUrl ? (
+                          <Image
+                            source={{ uri: movie.posterUrl }}
+                            style={styles.posterGridImage}
+                          />
+                        ) : (
+                          <View style={styles.posterGridPlaceholder}>
+                            <Text style={styles.posterGridPlaceholderText}>?</Text>
+                          </View>
+                        )}
+                      </View>
+                    </Animated.View>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.introSubtitle}>{category.subtitle}</Text>
+
+              {currentStreak > 0 && (
+                <View style={[styles.streakBadge, streakAtRisk && styles.streakBadgeAtRisk]}>
+                  <View style={styles.streakBadgeContent}>
+                    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                      <Path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z" stroke={colors.accent} strokeWidth={1.75} strokeLinejoin="round" />
+                      <Path d="M12 12c0 2-1.5 3-1.5 4.5a1.5 1.5 0 0 0 3 0c0-1.5-1.5-2.5-1.5-4.5z" stroke={colors.accent} strokeWidth={1.25} strokeLinejoin="round" />
+                    </Svg>
+                    <Text style={styles.streakBadgeText}>
+                      {streakAtRisk ? `${currentStreak} day streak at risk!` : `${currentStreak} day streak`}
+                    </Text>
+                  </View>
                 </View>
               )}
 
@@ -1640,7 +1746,27 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     gap: spacing.sm,
   },
-  crewSection: { marginTop: spacing.lg, marginBottom: spacing.lg },
+  crewSection: { marginTop: spacing.lg, marginBottom: spacing.lg, width: '100%' },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  subtleAction: {
+    padding: spacing.xs,
+  },
+  subtleActionText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  crewWhisper: {
+    ...typography.caption,
+    color: colors.textMuted,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
   crewCardInline: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     backgroundColor: colors.card, borderRadius: borderRadius.lg,

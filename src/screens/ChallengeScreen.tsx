@@ -530,53 +530,11 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   // HOME: social hub with friends + challenges
   const renderHome = () => (
     <ScrollView style={styles.homeScroll} contentContainerStyle={styles.homeScrollContent}>
-      {/* Search */}
+      {/* Create Challenge - primary CTA */}
       {user?.id && (
-        <View style={styles.searchSection}>
-          {showSearch ? (
-            <View>
-              <View style={styles.searchRow}>
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="search by name..."
-                  placeholderTextColor={colors.textMuted}
-                  value={searchQuery}
-                  onChangeText={handleSearch}
-                  autoFocus
-                />
-                <Pressable onPress={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); }}>
-                  <Text style={styles.searchCancel}>cancel</Text>
-                </Pressable>
-              </View>
-              {searchResults.map(result => (
-                <View key={result.id} style={styles.searchResultRow}>
-                  <Text style={styles.searchResultName}>{result.display_name}</Text>
-                  {result.is_friend ? (
-                    <Text style={styles.searchResultStatus}>friends</Text>
-                  ) : result.request_pending ? (
-                    <Text style={styles.searchResultStatus}>pending</Text>
-                  ) : (
-                    <Pressable onPress={() => handleSendRequest(result.id)} style={styles.addButton}>
-                      <Text style={styles.addButtonText}>add</Text>
-                    </Pressable>
-                  )}
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Pressable style={styles.searchTrigger} onPress={() => setShowSearch(true)}>
-              <Text style={styles.searchTriggerText}>search people</Text>
-              <Text style={styles.searchTriggerPlus}>+</Text>
-            </Pressable>
-          )}
-        </View>
-      )}
-
-      {/* Create / Join */}
-      <View style={styles.createSection}>
-        {user?.id && (
+        <Animated.View entering={FadeInDown.delay(50)}>
           <Pressable
-            style={[styles.actionButton, styles.actionButtonPrimary]}
+            style={[styles.actionButton, styles.actionButtonPrimary, { marginTop: spacing.lg }]}
             onPress={loadMoviesForSelection}
             disabled={loading}
           >
@@ -584,47 +542,114 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
               {loading ? '...' : 'create challenge'}
             </Text>
           </Pressable>
-        )}
+        </Animated.View>
+      )}
 
-        <View style={styles.codeInputRow}>
-          <TextInput
-            style={styles.codeInput}
-            placeholder="enter code"
-            placeholderTextColor={colors.textMuted}
-            onChangeText={(text) => {
-              const code = text.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-              if (code.length === 6) {
-                (async () => {
-                  setLoading(true);
-                  const c = await challengeService.getChallengeByCode(code);
-                  if (c) {
-                    setChallenge(c);
-                    if (c.status === 'complete' && c.results) {
-                      setResults(c.results as ChallengeResults);
-                      setStep('results');
-                    } else {
-                      setStep('name');
-                    }
-                  } else {
-                    setError('Challenge not found or expired');
-                  }
-                  setLoading(false);
-                })();
-              }
-            }}
-            maxLength={6}
-            autoCapitalize="characters"
-          />
+      {/* YOUR PEOPLE - friends leaderboard */}
+      <Animated.View entering={FadeInDown.delay(100)} style={styles.sectionBlock}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionLabel}>your people</Text>
+          {user?.id && (
+            <Pressable onPress={() => setShowSearch(!showSearch)} style={styles.subtleAction}>
+              <Text style={styles.subtleActionText}>{showSearch ? 'done' : '\uD83D\uDD0D+'}</Text>
+            </Pressable>
+          )}
         </View>
 
-        {error && <Text style={styles.errorText}>{error}</Text>}
-      </View>
+        {/* Inline search (shown when magnifier tapped) */}
+        {showSearch && (
+          <Animated.View entering={FadeIn.duration(200)}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="search people or enter code..."
+              placeholderTextColor={colors.textMuted}
+              value={searchQuery}
+              onChangeText={(text) => {
+                setSearchQuery(text);
+                // Auto-detect 6-char code
+                const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                if (cleaned.length === 6) {
+                  (async () => {
+                    setLoading(true);
+                    const c = await challengeService.getChallengeByCode(cleaned);
+                    if (c) {
+                      setChallenge(c);
+                      if (c.status === 'complete' && c.results) {
+                        setResults(c.results as ChallengeResults);
+                        setStep('results');
+                      } else if (user?.id) {
+                        const autoName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
+                        setChallengerName(autoName);
+                        const { challenge: updated } = await challengeService.joinChallenge(c.code, autoName, user.id);
+                        if (updated) {
+                          setChallenge(updated);
+                          if (updated.status === 'complete' && updated.results) {
+                            setResults(updated.results as ChallengeResults);
+                            setStep('results');
+                          } else {
+                            const pairs = generateSwissPairs((updated || c).movies);
+                            setRankingPairs(pairs);
+                            setCurrentPairIndex(0);
+                            setScores(new Map((updated || c).movies.map(m => [m.id, 0])));
+                            setStep('rank');
+                          }
+                        }
+                      } else {
+                        setStep('name');
+                      }
+                    } else {
+                      // Not a code, treat as search
+                      handleSearch(text);
+                    }
+                    setLoading(false);
+                  })();
+                } else {
+                  handleSearch(text);
+                }
+              }}
+              autoFocus
+              autoCapitalize="none"
+            />
+            {/* Search results */}
+            {searchResults.map(result => (
+              <View key={result.id} style={styles.searchResultRow}>
+                <Text style={styles.searchResultName}>{result.display_name}</Text>
+                {result.is_friend ? (
+                  <Text style={styles.searchResultStatus}>friends</Text>
+                ) : result.request_pending ? (
+                  <Text style={styles.searchResultStatus}>pending</Text>
+                ) : (
+                  <Pressable onPress={() => handleSendRequest(result.id)} style={styles.addButton}>
+                    <Text style={styles.addButtonText}>add</Text>
+                  </Pressable>
+                )}
+              </View>
+            ))}
+            {/* Pending requests inline */}
+            {friendRequests.length > 0 && (
+              <View style={{ marginTop: spacing.sm }}>
+                <Text style={[styles.sectionLabel, { marginBottom: spacing.xs }]}>{friendRequests.length} pending</Text>
+                {friendRequests.map(req => (
+                  <View key={req.id} style={styles.requestRow}>
+                    <Text style={styles.requestName}>{req.from_user.display_name}</Text>
+                    <View style={styles.requestActions}>
+                      <Pressable style={styles.acceptButton} onPress={() => handleAcceptRequest(req.id)}>
+                        <Text style={styles.acceptText}>accept</Text>
+                      </Pressable>
+                      <Pressable onPress={() => handleRejectRequest(req.id)}>
+                        <Text style={styles.rejectText}>decline</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </Animated.View>
+        )}
 
-      {/* Unified Leaderboard: friends ranked by avg challenge match % */}
-      {friends.length > 0 && (
-        <View style={styles.sectionBlock}>
-          <Text style={styles.sectionLabel}>your people</Text>
-          {friends
+        {/* Friend leaderboard */}
+        {friends.length > 0 ? (
+          friends
             .map(friend => {
               const name = friend.friend?.display_name || 'Anonymous';
               const friendGames = leaderboard.filter(l => l.name === name);
@@ -639,7 +664,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
               const topMovies = friendTopMovies.get(friend.friend_id);
               const rankLabel = avgMatch !== null && rank < 3 ? `#${rank + 1}` : '';
               return (
-                <View key={friend.friend_id}>
+                <Animated.View key={friend.friend_id} entering={FadeInDown.delay(150 + rank * 50)}>
                   <View style={styles.friendRow}>
                     {rankLabel ? (
                       <Text style={styles.rankBadge}>{rankLabel}</Text>
@@ -666,7 +691,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
                       )}
                       {friendGames.length > 0 && (
                         <Text style={styles.friendStat}>
-                          avg match: {avgMatch}% · last played: {friendGames[0]?.date ? new Date(friendGames[0].date).toLocaleDateString() : '—'}
+                          avg match: {avgMatch}% · last played: {friendGames[0]?.date ? new Date(friendGames[0].date).toLocaleDateString() : '\u2014'}
                         </Text>
                       )}
                       {friendGames.length === 0 && (
@@ -674,15 +699,26 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
                       )}
                     </Animated.View>
                   )}
-                </View>
+                </Animated.View>
               );
-            })}
-        </View>
-      )}
+            })
+        ) : !showSearch && user?.id ? (
+          <Pressable onPress={() => setShowSearch(true)}>
+            <Text style={styles.emptyPrompt}>add friends to challenge them +</Text>
+          </Pressable>
+        ) : null}
 
-      {/* Active challenges */}
+        {/* Pending requests badge (when search is closed) */}
+        {!showSearch && friendRequests.length > 0 && (
+          <Pressable onPress={() => setShowSearch(true)}>
+            <Text style={styles.pendingBadge}>{friendRequests.length} pending request{friendRequests.length !== 1 ? 's' : ''} ›</Text>
+          </Pressable>
+        )}
+      </Animated.View>
+
+      {/* ACTIVE - in-progress challenges */}
       {activeChallenges.filter(c => c.status !== 'complete').length > 0 && (
-        <View style={styles.sectionBlock}>
+        <Animated.View entering={FadeInDown.delay(200)} style={styles.sectionBlock}>
           <Text style={styles.sectionLabel}>active</Text>
           {activeChallenges.filter(c => c.status !== 'complete').map(c => {
             const isCreator = c.creator_id === user?.id;
@@ -706,31 +742,10 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
               </Pressable>
             );
           })}
-        </View>
+        </Animated.View>
       )}
 
-      {/* Pending requests */}
-      {friendRequests.length > 0 && (
-        <View style={styles.sectionBlock}>
-          <Pressable onPress={() => setShowRequests(!showRequests)} style={styles.requestsHeader}>
-            <Text style={styles.sectionLabel}>{friendRequests.length} pending request{friendRequests.length !== 1 ? 's' : ''}</Text>
-            <Text style={styles.chevron}>{showRequests ? '\u25BE' : '\u203A'}</Text>
-          </Pressable>
-          {showRequests && friendRequests.map(req => (
-            <View key={req.id} style={styles.requestRow}>
-              <Text style={styles.requestName}>{req.from_user.display_name}</Text>
-              <View style={styles.requestActions}>
-                <Pressable style={styles.acceptButton} onPress={() => handleAcceptRequest(req.id)}>
-                  <Text style={styles.acceptText}>accept</Text>
-                </Pressable>
-                <Pressable onPress={() => handleRejectRequest(req.id)}>
-                  <Text style={styles.rejectText}>decline</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
+      {error && <Text style={styles.errorText}>{error}</Text>}
     </ScrollView>
   );
 
@@ -1358,23 +1373,38 @@ const styles = StyleSheet.create({
   homeScrollContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl },
 
   // Search
-  searchSection: { marginTop: spacing.md, marginBottom: spacing.md },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   searchInput: {
-    flex: 1, ...typography.body, color: colors.textPrimary,
+    ...typography.body, color: colors.textPrimary,
     backgroundColor: colors.surface, borderRadius: borderRadius.md,
     paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
     borderWidth: 1, borderColor: colors.border,
   },
-  searchCancel: { ...typography.caption, color: colors.textMuted },
-  searchTrigger: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: spacing.md, paddingHorizontal: spacing.md,
-    backgroundColor: colors.card, borderRadius: borderRadius.lg,
-    borderWidth: 1, borderColor: colors.border,
+  // Section header row
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
   },
-  searchTriggerText: { ...typography.caption, color: colors.textMuted },
-  searchTriggerPlus: { ...typography.bodyMedium, color: colors.accent, fontWeight: '700' },
+  subtleAction: {
+    padding: spacing.xs,
+  },
+  subtleActionText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  emptyPrompt: {
+    ...typography.caption,
+    color: colors.textMuted,
+    paddingVertical: spacing.lg,
+    textAlign: 'center',
+  },
+  pendingBadge: {
+    ...typography.caption,
+    color: colors.accent,
+    paddingVertical: spacing.sm,
+  },
   searchResultRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
@@ -1423,10 +1453,6 @@ const styles = StyleSheet.create({
   friendStat: { ...typography.caption, color: colors.textMuted },
 
   // Requests
-  requestsHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-  },
-  chevron: { ...typography.caption, color: colors.textMuted },
   requestRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: spacing.sm,
@@ -1448,8 +1474,4 @@ const styles = StyleSheet.create({
   },
   challengeRowName: { ...typography.body, color: colors.textPrimary },
   challengeRowStatus: { ...typography.caption, color: colors.textMuted },
-  challengeRowPercent: { ...typography.bodyMedium, color: colors.accent },
-
-  // Create section
-  createSection: { marginTop: spacing.xl },
 });
