@@ -2334,6 +2334,7 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
   },
   guestContainer: {
     flex: 1,
@@ -2473,8 +2474,8 @@ const styles = StyleSheet.create({
     width: 140,
     height: 180,
     borderRadius: borderRadius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 2,
+    backgroundColor: colors.card,
+    borderWidth: 1,
     borderColor: colors.border,
   },
   preferenceCardSelectedA: {
@@ -2647,11 +2648,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   resultLabel: {
-    ...typography.caption,
-    color: colors.accent,
+    ...typography.captionMedium,
+    color: colors.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 2,
-    fontWeight: '600',
+    letterSpacing: 1.5,
+    fontSize: 11,
     marginBottom: spacing.lg,
   },
   resultPoster: {
@@ -2755,10 +2756,10 @@ const styles = StyleSheet.create({
   },
   groupOptionCard: {
     backgroundColor: colors.card,
-    borderRadius: borderRadius.xl,
+    borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.xl,
+    padding: spacing.md,
     minHeight: 100,
     justifyContent: 'center',
   },
@@ -2871,7 +2872,7 @@ const styles = StyleSheet.create({
   startButton: {
     backgroundColor: colors.accent,
     borderRadius: borderRadius.lg,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
     alignItems: 'center',
     marginBottom: spacing.xl,
   },
@@ -2897,10 +2898,11 @@ const styles = StyleSheet.create({
 
   // Tournament Group
   roundLabel: {
-    ...typography.caption,
-    color: colors.accent,
+    ...typography.captionMedium,
+    color: colors.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.5,
+    fontSize: 11,
     marginBottom: spacing.sm,
   },
   countdownContainer: {

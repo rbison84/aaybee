@@ -1653,7 +1653,7 @@ const styles = StyleSheet.create({
   },
   copyButton: {
     backgroundColor: colors.accent,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
     borderRadius: borderRadius.lg,
     alignItems: 'center',
   },
@@ -1836,7 +1836,6 @@ const styles = StyleSheet.create({
   crewName: {
     ...typography.bodyMedium,
     color: colors.textPrimary,
-    fontWeight: '600',
   },
   crewPlayCount: {
     ...typography.caption,
@@ -1875,10 +1874,11 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
   },
   worldStatsTitle: {
-    ...typography.caption,
+    ...typography.captionMedium,
     color: colors.textMuted,
     textTransform: 'uppercase' as any,
-    letterSpacing: 2,
+    letterSpacing: 1.5,
+    fontSize: 11,
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
