@@ -10,20 +10,16 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 import Svg, { Path, Circle, Rect, Line } from 'react-native-svg';
-import ViewShot from 'react-native-view-shot';
 import { useAppStore } from '../store/useAppStore';
 import { useHaptics } from '../hooks/useHaptics';
 import { Movie } from '../types';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
 import { CinematicCard } from '../components/cinematic';
 import { OnboardingProgressBar } from '../components/onboarding/OnboardingProgressBar';
-import { UnderlineTabs } from '../components/UnderlineTabs';
-import { ShareableCollectionsGrid } from '../components/ShareableImages';
 import {
   getTodaysDailyCategory,
   getDailyNumber,
   DAILY_CATEGORIES,
-  DailyCategory,
 } from '../data/dailyCategories';
 import {
   dailyStreakService,
@@ -32,7 +28,6 @@ import {
   DailySessionData,
   DailyCollectionEntry,
 } from '../services/dailyStreakService';
-import { CategoryCellEmpty } from '../components/daily/CategoryCellEmpty';
 import {
   createDailySwiss,
   recordDailyChoice,
@@ -48,8 +43,6 @@ import { shareService } from '../services/shareService';
 import { crewService, Crew, CrewMember, CrewDailyResult } from '../services/crewService';
 import { useAuth } from '../contexts/AuthContext';
 
-type DailyTab = 'today' | 'collection';
-
 interface DailyScreenProps {
   onNavigateToCompare?: () => void;
 }
@@ -61,7 +54,11 @@ export function triggerDailyRefresh() {
 }
 
 export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
-  const [activeTab, setActiveTab] = useState<DailyTab>('today');
+  // Crew navigation
+  const [crewView, setCrewView] = useState<'home' | 'detail'>('home');
+  const [selectedCrew, setSelectedCrew] = useState<Crew | null>(null);
+  const [crewDetailTab, setCrewDetailTab] = useState<'today' | 'collection'>('today');
+  const [crewCollections, setCrewCollections] = useState<number[]>([]);
 
   // Today sub-state
   const [step, setStep] = useState<DailyStep>('intro');
@@ -93,17 +90,12 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
   const [completedCategoryIds, setCompletedCategoryIds] = useState<string[]>([]);
   const [collections, setCollections] = useState<DailyCollectionEntry[]>([]);
 
-  // Capture state for collection sharing
-  const [isCapturing, setIsCapturing] = useState(false);
-  const collectionViewRef = useRef<ViewShot>(null);
-
   const { movies, recordComparison, undoLastComparison } = useAppStore();
   const haptics = useHaptics();
   const { user } = useAuth();
   const [crews, setCrews] = useState<Crew[]>([]);
   const [crewResults, setCrewResults] = useState<Map<string, CrewDailyResult>>(new Map());
   const [crewMembers, setCrewMembers] = useState<Map<string, CrewMember[]>>(new Map());
-  const [expandedCrewId, setExpandedCrewId] = useState<string | null>(null);
   const [crewCreateMode, setCrewCreateMode] = useState(false);
   const [crewJoinMode, setCrewJoinMode] = useState(false);
   const [crewName, setCrewName] = useState('');
@@ -154,6 +146,12 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     if (!category) return [];
     return category.movieIds;
   }, [movies]);
+
+  // Load crew collection (distinct daily numbers)
+  const loadCrewCollection = useCallback(async (crewId: string) => {
+    const numbers = await crewService.getCrewDailyNumbers(crewId);
+    setCrewCollections(numbers);
+  }, []);
 
   // Try to restore session when a category is activated
   useEffect(() => {
@@ -385,51 +383,6 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     }
   }, [activeCategory, fullRanking, swissState, dailyNumber, movies, haptics, crews, crewResults, user?.id]);
 
-  // Handle share collection
-  const handleShareCollection = useCallback(async () => {
-    if (collections.length === 0) return;
-
-    if (Platform.OS !== 'web') {
-      try {
-        setIsCapturing(true);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        if (collectionViewRef.current) {
-          const uri = await (collectionViewRef.current as any).capture();
-          if (uri) {
-            if (Platform.OS === 'ios') {
-              await Share.share({ url: uri, message: 'my aaybee collection \u2192 aaybee.netlify.app' });
-            } else {
-              await Share.share({ message: 'my aaybee collection \u2192 aaybee.netlify.app' });
-            }
-            setIsCapturing(false);
-            return;
-          }
-        }
-      } catch (e) {
-        console.error('ViewShot capture error:', e);
-      } finally {
-        setIsCapturing(false);
-      }
-    }
-
-    const filledEntries = collections.map(entry => {
-      const cat = DAILY_CATEGORIES.find(c => c.id === entry.categoryId);
-      const movie = movies.get(entry.championId);
-      return cat && movie ? `${cat.emoji} ${cat.title}: ${movie.title}` : null;
-    }).filter(Boolean);
-
-    const shareText = `my aaybee collection\n\n${filledEntries.join('\n')}\n\naaybee.netlify.app`;
-    try {
-      if (Platform.OS === 'web' && navigator?.clipboard) {
-        await navigator.clipboard.writeText(shareText);
-      } else {
-        await Share.share({ message: shareText });
-      }
-    } catch (e) {
-      console.error('Fallback share error:', e);
-    }
-  }, [collections, movies]);
-
   // Back to intro from results
   const handleBackToIntro = useCallback(() => {
     setStep('intro');
@@ -456,370 +409,345 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
   // ---- RENDER: INTRO (Seen/Unseen Selection) ----
 
   const renderIntro = () => {
-    // If no active category, show the featured category intro
+    if (!activeCategoryId) return null;
     const category = activeCategory || featuredCategory;
-    const isSelectingMode = !!activeCategoryId;
-    const currentStreak = streakData?.currentStreak || 0;
-    const streakAtRisk = streakData?.lastCompletedDate === new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    const isCompleted = completedCategoryIds.includes(category.id);
-
     const categoryMovieIds = category.movieIds;
     const missing = categoryMovieIds.filter(id => !movies.has(id));
     if (missing.length > 0) console.log('[Daily] Missing movie IDs for', category.id, ':', missing.join(', '));
     const gridMovies = categoryMovieIds.slice(0, 9).map(id => movies.get(id) || { id, title: id, posterUrl: null } as any) as Movie[];
-    const seenCount = isSelectingMode
-      ? Array.from(seenSelection).filter(id => categoryMovieIds.includes(id)).length
-      : 0;
+    const seenCount = Array.from(seenSelection).filter(id => categoryMovieIds.includes(id)).length;
 
     return (
       <ScrollView contentContainerStyle={styles.centerContainer}>
         <Animated.View style={styles.introInner} entering={FadeIn.duration(300)}>
+          <Text style={styles.dailyLabel}>Daily #{dailyNumber}</Text>
+          <Text style={styles.introTitle}>{category.title}</Text>
 
-          {isSelectingMode ? (
-            <>
-              <Text style={styles.dailyLabel}>Daily #{dailyNumber}</Text>
-              <Text style={styles.introTitle}>{category.title}</Text>
-
-              {/* 3x3 poster grid */}
-              <View style={styles.posterGrid}>
-                {gridMovies.map((movie, i) => {
-                  const isSeen = seenSelection.has(movie.id);
-                  return (
-                    <Animated.View key={movie.id} style={styles.posterGridCell} entering={FadeInDown.delay(i * 50).duration(300)}>
-                      <Pressable
-                        onPress={() => toggleSeen(movie.id)}
-                        style={styles.posterPressable}
-                      >
-                        {movie.posterUrl ? (
-                          <Image
-                            source={{ uri: movie.posterUrl }}
-                            style={[
-                              styles.posterGridImage,
-                              !isSeen && styles.posterDimmed,
-                            ]}
-                          />
-                        ) : (
-                          <View style={styles.posterGridPlaceholder}>
-                            <Text style={styles.posterGridPlaceholderText}>?</Text>
-                          </View>
-                        )}
-                        {!isSeen && (
-                          <View style={styles.posterGrayOverlay} />
-                        )}
-                      </Pressable>
-                    </Animated.View>
-                  );
-                })}
-              </View>
-
-              <Text style={styles.introSubtitle}>Deselect movies you haven't seen</Text>
-              <Text style={styles.seenCounter}>{seenCount} of {gridMovies.length} seen</Text>
-
-              <Pressable
-                style={[styles.startButton, seenCount < 3 && styles.startButtonDisabled]}
-                onPress={seenCount >= 3 ? beginRanking : undefined}
-                disabled={seenCount < 3}
-              >
-                <Text style={[styles.startButtonText, seenCount < 3 && styles.startButtonTextDisabled]}>
-                  Rank {seenCount} Movies
-                </Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              {/* YOUR CREWS - at top */}
-              {user?.id && crews.length > 0 && (
-                <Animated.View entering={FadeInDown.delay(50)} style={styles.crewSection}>
-                  <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.crewSectionTitle}>your crews</Text>
-                    <Pressable onPress={() => setCrewCreateMode(!crewCreateMode && !crewJoinMode)} style={styles.subtleAction}>
-                      <Text style={styles.subtleActionText}>+</Text>
-                    </Pressable>
-                  </View>
-                  {crews.map(crew => {
-                    const members = crewMembers.get(crew.id) || [];
-                    const playedCount = members.filter(m => m.played_today).length;
-                    const isExpanded = expandedCrewId === crew.id;
-                    return (
-                      <View key={crew.id}>
-                        <Pressable
-                          style={styles.crewCardInline}
-                          onPress={() => setExpandedCrewId(isExpanded ? null : crew.id)}
-                        >
-                          <Text style={styles.crewCardName}>{crew.name}</Text>
-                          <Text style={styles.crewCardStatus}>{playedCount}/{members.length} played</Text>
-                        </Pressable>
-                        {isExpanded && (
-                          <View style={styles.crewExpanded}>
-                            <View style={styles.crewCodeRow}>
-                              <Text style={styles.crewCodeLabel}>code: </Text>
-                              <Text style={styles.crewCodeValue}>{crew.code}</Text>
-                              <Pressable
-                                style={styles.crewShareButton}
-                                onPress={async () => {
-                                  const msg = `join my crew "${crew.name}" on aaybee! code: ${crew.code}`;
-                                  if (Platform.OS === 'web' && navigator?.clipboard) {
-                                    await navigator.clipboard.writeText(msg);
-                                  } else {
-                                    await Share.share({ message: msg });
-                                  }
-                                }}
-                              >
-                                <Text style={styles.crewShareText}>share</Text>
-                              </Pressable>
-                            </View>
-                            {members.map(m => (
-                              <View key={m.id} style={styles.crewMemberRow}>
-                                <Text style={styles.crewMemberName}>{m.display_name}</Text>
-                                <Text style={[styles.crewMemberStatus, m.played_today && styles.crewMemberPlayed]}>
-                                  {m.played_today ? 'played' : '\u2014'}
-                                </Text>
-                              </View>
-                            ))}
-                            <Pressable
-                              style={styles.crewLeaveButton}
-                              onPress={async () => {
-                                if (!user?.id) return;
-                                await crewService.leaveCrew(user.id, crew.id);
-                                setCrews(prev => prev.filter(c => c.id !== crew.id));
-                                setExpandedCrewId(null);
-                              }}
-                            >
-                              <Text style={styles.crewLeaveText}>leave crew</Text>
-                            </Pressable>
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
-
-                  {crewCreateMode && (
-                    <View style={styles.crewInlineForm}>
-                      <TextInput
-                        style={styles.crewFormInput}
-                        placeholder="crew name"
-                        placeholderTextColor={colors.textMuted}
-                        value={crewName}
-                        onChangeText={setCrewName}
-                        maxLength={30}
-                        autoFocus
+          {/* 3x3 poster grid */}
+          <View style={styles.posterGrid}>
+            {gridMovies.map((movie, i) => {
+              const isSeen = seenSelection.has(movie.id);
+              return (
+                <Animated.View key={movie.id} style={styles.posterGridCell} entering={FadeInDown.delay(i * 50).duration(300)}>
+                  <Pressable
+                    onPress={() => toggleSeen(movie.id)}
+                    style={styles.posterPressable}
+                  >
+                    {movie.posterUrl ? (
+                      <Image
+                        source={{ uri: movie.posterUrl }}
+                        style={[
+                          styles.posterGridImage,
+                          !isSeen && styles.posterDimmed,
+                        ]}
                       />
-                      <View style={styles.crewFormButtons}>
-                        <Pressable
-                          style={[styles.crewFormButton, !crewName.trim() && { opacity: 0.4 }]}
-                          onPress={async () => {
-                            if (!user?.id || !crewName.trim()) return;
-                            setCrewLoading(true);
-                            const { crew, error } = await crewService.createCrew(user.id, crewName.trim());
-                            if (crew) {
-                              setCrews(prev => [...prev, crew]);
-                              setCrewName('');
-                              setCrewCreateMode(false);
-                            }
-                            if (error) setCrewError(error);
-                            setCrewLoading(false);
-                          }}
-                          disabled={!crewName.trim() || crewLoading}
-                        >
-                          <Text style={styles.crewFormButtonText}>create</Text>
-                        </Pressable>
-                        <Pressable onPress={() => { setCrewCreateMode(false); setCrewJoinMode(true); }}>
-                          <Text style={styles.crewFormCancel}>join instead</Text>
-                        </Pressable>
+                    ) : (
+                      <View style={styles.posterGridPlaceholder}>
+                        <Text style={styles.posterGridPlaceholderText}>?</Text>
                       </View>
-                    </View>
-                  )}
-
-                  {crewJoinMode && (
-                    <View style={styles.crewInlineForm}>
-                      <TextInput
-                        style={styles.crewFormInput}
-                        placeholder="enter code"
-                        placeholderTextColor={colors.textMuted}
-                        value={crewJoinCode}
-                        onChangeText={t => setCrewJoinCode(t.toUpperCase())}
-                        maxLength={6}
-                        autoCapitalize="characters"
-                        autoFocus
-                      />
-                      <View style={styles.crewFormButtons}>
-                        <Pressable
-                          style={[styles.crewFormButton, crewJoinCode.length < 6 && { opacity: 0.4 }]}
-                          onPress={async () => {
-                            if (!user?.id || crewJoinCode.length < 6) return;
-                            setCrewLoading(true);
-                            const { crew, error } = await crewService.joinCrew(user.id, crewJoinCode);
-                            if (crew) {
-                              setCrews(prev => [...prev, crew]);
-                              setCrewJoinCode('');
-                              setCrewJoinMode(false);
-                            }
-                            if (error) setCrewError(error);
-                            setCrewLoading(false);
-                          }}
-                          disabled={crewJoinCode.length < 6 || crewLoading}
-                        >
-                          <Text style={styles.crewFormButtonText}>join</Text>
-                        </Pressable>
-                        <Pressable onPress={() => { setCrewJoinMode(false); setCrewJoinCode(''); }}>
-                          <Text style={styles.crewFormCancel}>cancel</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  )}
-
-                  {crewError && <Text style={styles.crewErrorInline}>{crewError}</Text>}
+                    )}
+                    {!isSeen && (
+                      <View style={styles.posterGrayOverlay} />
+                    )}
+                  </Pressable>
                 </Animated.View>
-              )}
+              );
+            })}
+          </View>
 
-              {/* Whisper for users without crews */}
-              {user?.id && crews.length === 0 && !crewCreateMode && !crewJoinMode && (
-                <Pressable onPress={() => setCrewCreateMode(true)}>
-                  <Text style={styles.crewWhisper}>play daily with friends +</Text>
-                </Pressable>
-              )}
+          <Text style={styles.introSubtitle}>Deselect movies you haven't seen</Text>
+          <Text style={styles.seenCounter}>{seenCount} of {gridMovies.length} seen</Text>
 
-              {/* Inline create/join for users without crews */}
-              {user?.id && crews.length === 0 && crewCreateMode && (
-                <View style={styles.crewInlineForm}>
-                  <TextInput
-                    style={styles.crewFormInput}
-                    placeholder="crew name"
-                    placeholderTextColor={colors.textMuted}
-                    value={crewName}
-                    onChangeText={setCrewName}
-                    maxLength={30}
-                    autoFocus
-                  />
-                  <View style={styles.crewFormButtons}>
-                    <Pressable
-                      style={[styles.crewFormButton, !crewName.trim() && { opacity: 0.4 }]}
-                      onPress={async () => {
-                        if (!user?.id || !crewName.trim()) return;
-                        setCrewLoading(true);
-                        const { crew, error } = await crewService.createCrew(user.id, crewName.trim());
-                        if (crew) {
-                          setCrews(prev => [...prev, crew]);
-                          setCrewName('');
-                          setCrewCreateMode(false);
-                        }
-                        if (error) setCrewError(error);
-                        setCrewLoading(false);
-                      }}
-                      disabled={!crewName.trim() || crewLoading}
-                    >
-                      <Text style={styles.crewFormButtonText}>create</Text>
-                    </Pressable>
-                    <Pressable onPress={() => { setCrewCreateMode(false); setCrewJoinMode(true); }}>
-                      <Text style={styles.crewFormCancel}>join instead</Text>
-                    </Pressable>
-                  </View>
-                  {crewError && <Text style={styles.crewErrorInline}>{crewError}</Text>}
-                </View>
-              )}
-
-              {user?.id && crews.length === 0 && crewJoinMode && (
-                <View style={styles.crewInlineForm}>
-                  <TextInput
-                    style={styles.crewFormInput}
-                    placeholder="enter code"
-                    placeholderTextColor={colors.textMuted}
-                    value={crewJoinCode}
-                    onChangeText={t => setCrewJoinCode(t.toUpperCase())}
-                    maxLength={6}
-                    autoCapitalize="characters"
-                    autoFocus
-                  />
-                  <View style={styles.crewFormButtons}>
-                    <Pressable
-                      style={[styles.crewFormButton, crewJoinCode.length < 6 && { opacity: 0.4 }]}
-                      onPress={async () => {
-                        if (!user?.id || crewJoinCode.length < 6) return;
-                        setCrewLoading(true);
-                        const { crew, error } = await crewService.joinCrew(user.id, crewJoinCode);
-                        if (crew) {
-                          setCrews(prev => [...prev, crew]);
-                          setCrewJoinCode('');
-                          setCrewJoinMode(false);
-                        }
-                        if (error) setCrewError(error);
-                        setCrewLoading(false);
-                      }}
-                      disabled={crewJoinCode.length < 6 || crewLoading}
-                    >
-                      <Text style={styles.crewFormButtonText}>join</Text>
-                    </Pressable>
-                    <Pressable onPress={() => { setCrewJoinMode(false); setCrewJoinCode(''); }}>
-                      <Text style={styles.crewFormCancel}>cancel</Text>
-                    </Pressable>
-                  </View>
-                  {crewError && <Text style={styles.crewErrorInline}>{crewError}</Text>}
-                </View>
-              )}
-
-              {/* Category info */}
-              <Text style={styles.dailyLabel}>Daily #{dailyNumber}</Text>
-              <Text style={styles.introTitle}>{category.title}</Text>
-
-              {/* 3x3 poster grid */}
-              <View style={styles.posterGrid}>
-                {gridMovies.map((movie, i) => {
-                  return (
-                    <Animated.View key={movie.id} style={styles.posterGridCell} entering={FadeInDown.delay(i * 50).duration(300)}>
-                      <View style={styles.posterPressable}>
-                        {movie.posterUrl ? (
-                          <Image
-                            source={{ uri: movie.posterUrl }}
-                            style={styles.posterGridImage}
-                          />
-                        ) : (
-                          <View style={styles.posterGridPlaceholder}>
-                            <Text style={styles.posterGridPlaceholderText}>?</Text>
-                          </View>
-                        )}
-                      </View>
-                    </Animated.View>
-                  );
-                })}
-              </View>
-
-              <Text style={styles.introSubtitle}>{category.subtitle}</Text>
-
-              {currentStreak > 0 && (
-                <View style={[styles.streakBadge, streakAtRisk && styles.streakBadgeAtRisk]}>
-                  <View style={styles.streakBadgeContent}>
-                    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                      <Path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z" stroke={colors.accent} strokeWidth={1.75} strokeLinejoin="round" />
-                      <Path d="M12 12c0 2-1.5 3-1.5 4.5a1.5 1.5 0 0 0 3 0c0-1.5-1.5-2.5-1.5-4.5z" stroke={colors.accent} strokeWidth={1.25} strokeLinejoin="round" />
-                    </Svg>
-                    <Text style={styles.streakBadgeText}>
-                      {streakAtRisk ? `${currentStreak} day streak at risk!` : `${currentStreak} day streak`}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {isCompleted ? (
-                <View style={styles.completedBadge}>
-                  <View style={styles.completedBadgeContent}>
-                    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                      <Path d="M5 13l4 4L19 7" stroke={colors.accent} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                    </Svg>
-                    <Text style={styles.completedBadgeText}>Completed today</Text>
-                  </View>
-                </View>
-              ) : (
-                <Pressable
-                  style={styles.startButton}
-                  onPress={() => startCategory(featuredCategory.id)}
-                >
-                  <Text style={styles.startButtonText}>Begin Aaybee Daily</Text>
-                </Pressable>
-              )}
-            </>
-          )}
+          <Pressable
+            style={[styles.startButton, seenCount < 3 && styles.startButtonDisabled]}
+            onPress={seenCount >= 3 ? beginRanking : undefined}
+            disabled={seenCount < 3}
+          >
+            <Text style={[styles.startButtonText, seenCount < 3 && styles.startButtonTextDisabled]}>
+              Rank {seenCount} Movies
+            </Text>
+          </Pressable>
         </Animated.View>
       </ScrollView>
+    );
+  };
+
+  // ---- RENDER: CREWS HOME ----
+
+  const renderCrewsHome = () => (
+    <ScrollView style={styles.flexOne} contentContainerStyle={styles.homeContent}>
+      {/* Title */}
+      <Text style={styles.crewsTitle}>CREWS</Text>
+
+      {/* Today's Daily - compact card */}
+      <Animated.View entering={FadeInDown.delay(50)} style={styles.todayCard}>
+        <View style={styles.todayInfo}>
+          <Text style={styles.todayLabel}>Daily #{dailyNumber}</Text>
+          <Text style={styles.todayCategory}>{featuredCategory.title}</Text>
+        </View>
+        <Pressable
+          style={styles.playButton}
+          onPress={() => {
+            setActiveCategoryId(featuredCategory.id);
+            // The existing useEffect will restore session or start fresh
+          }}
+        >
+          <Text style={styles.playButtonText}>
+            {completedCategoryIds.includes(featuredCategory.id) ? 'done' : 'play'}
+          </Text>
+        </Pressable>
+      </Animated.View>
+
+      {/* Crews List */}
+      {crews.length > 0 && (
+        <Animated.View entering={FadeInDown.delay(100)}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionLabel}>your crews</Text>
+            <Pressable onPress={() => setCrewCreateMode(!crewCreateMode && !crewJoinMode)} style={styles.subtleAction}>
+              <Text style={styles.subtleActionText}>+</Text>
+            </Pressable>
+          </View>
+
+          {crews.map(crew => {
+            const members = crewMembers.get(crew.id) || [];
+            const playedCount = members.filter(m => m.played_today).length;
+            const allPlayed = playedCount === members.length && members.length > 0;
+            return (
+              <Pressable
+                key={crew.id}
+                style={styles.crewListCard}
+                onPress={() => {
+                  setSelectedCrew(crew);
+                  setCrewView('detail');
+                  setCrewDetailTab('today');
+                  // Load crew results for today
+                  crewService.getCrewDailyResults(crew.id, dailyNumber).then(result => {
+                    if (result) setCrewResults(prev => new Map(prev).set(crew.id, result));
+                  });
+                  // Load collection (distinct daily numbers for this crew)
+                  loadCrewCollection(crew.id);
+                }}
+              >
+                <Text style={styles.crewListName}>{crew.name}</Text>
+                <Text style={styles.crewListStatus}>{playedCount}/{members.length}</Text>
+                <Text style={[styles.crewListAction, allPlayed && styles.crewListActionReady]}>
+                  {allPlayed ? 'view' : 'waiting'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </Animated.View>
+      )}
+
+      {/* Create/Join crew inline */}
+      {crewCreateMode && (
+        <Animated.View entering={FadeIn.duration(200)} style={styles.crewInlineForm}>
+          <TextInput style={styles.crewFormInput} placeholder="crew name" placeholderTextColor={colors.textMuted}
+            value={crewName} onChangeText={setCrewName} maxLength={30} autoFocus />
+          <View style={styles.crewFormButtons}>
+            <Pressable style={[styles.crewFormButton, !crewName.trim() && { opacity: 0.4 }]}
+              onPress={async () => {
+                if (!user?.id || !crewName.trim()) return;
+                setCrewLoading(true);
+                const { crew, error } = await crewService.createCrew(user.id, crewName.trim());
+                if (crew) { setCrews(prev => [...prev, crew]); setCrewName(''); setCrewCreateMode(false); }
+                if (error) setCrewError(error);
+                setCrewLoading(false);
+              }} disabled={!crewName.trim() || crewLoading}>
+              <Text style={styles.crewFormButtonText}>create</Text>
+            </Pressable>
+            <Pressable onPress={() => setCrewJoinMode(true)}>
+              <Text style={styles.crewFormCancel}>join instead</Text>
+            </Pressable>
+            <Pressable onPress={() => { setCrewCreateMode(false); setCrewName(''); }}>
+              <Text style={styles.crewFormCancel}>cancel</Text>
+            </Pressable>
+          </View>
+        </Animated.View>
+      )}
+
+      {crewJoinMode && (
+        <Animated.View entering={FadeIn.duration(200)} style={styles.crewInlineForm}>
+          <TextInput style={styles.crewFormInput} placeholder="enter code" placeholderTextColor={colors.textMuted}
+            value={crewJoinCode} onChangeText={t => setCrewJoinCode(t.toUpperCase())} maxLength={6} autoCapitalize="characters" autoFocus />
+          <View style={styles.crewFormButtons}>
+            <Pressable style={[styles.crewFormButton, crewJoinCode.length < 6 && { opacity: 0.4 }]}
+              onPress={async () => {
+                if (!user?.id || crewJoinCode.length < 6) return;
+                setCrewLoading(true);
+                const { crew, error } = await crewService.joinCrew(user.id, crewJoinCode);
+                if (crew) { setCrews(prev => [...prev, crew]); setCrewJoinCode(''); setCrewJoinMode(false); setCrewCreateMode(false); }
+                if (error) setCrewError(error);
+                setCrewLoading(false);
+              }} disabled={crewJoinCode.length < 6 || crewLoading}>
+              <Text style={styles.crewFormButtonText}>join</Text>
+            </Pressable>
+            <Pressable onPress={() => { setCrewJoinMode(false); setCrewJoinCode(''); setCrewCreateMode(true); }}>
+              <Text style={styles.crewFormCancel}>create instead</Text>
+            </Pressable>
+            <Pressable onPress={() => { setCrewJoinMode(false); setCrewCreateMode(false); setCrewJoinCode(''); }}>
+              <Text style={styles.crewFormCancel}>cancel</Text>
+            </Pressable>
+          </View>
+        </Animated.View>
+      )}
+
+      {crewError && <Text style={styles.crewErrorText}>{crewError}</Text>}
+
+      {/* Whisper prompt for no crews */}
+      {user?.id && crews.length === 0 && !crewCreateMode && !crewJoinMode && (
+        <Pressable onPress={() => setCrewCreateMode(true)}>
+          <Text style={styles.crewWhisper}>play daily with friends +</Text>
+        </Pressable>
+      )}
+
+      {/* Streak */}
+      {streakData && streakData.currentStreak > 0 && (
+        <Animated.View entering={FadeInDown.delay(150)} style={styles.streakRow}>
+          <Text style={styles.streakText}>{streakData.currentStreak} day streak</Text>
+        </Animated.View>
+      )}
+    </ScrollView>
+  );
+
+  // ---- RENDER: CREW DETAIL ----
+
+  const renderCrewDetail = () => {
+    if (!selectedCrew) return null;
+    const members = crewMembers.get(selectedCrew.id) || [];
+    const result = crewResults.get(selectedCrew.id);
+
+    return (
+      <View style={styles.flexOne}>
+        {/* Back button + crew name */}
+        <View style={styles.crewDetailHeader}>
+          <Pressable onPress={() => { setCrewView('home'); setSelectedCrew(null); }} style={styles.backButton}>
+            <Text style={styles.backText}>{'\u2039'} back</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.crewDetailTitleRow}>
+          <Text style={styles.crewDetailName}>{selectedCrew.name.toUpperCase()}</Text>
+          <Pressable
+            onPress={async () => {
+              const msg = `join my crew "${selectedCrew.name}" on aaybee! code: ${selectedCrew.code}`;
+              if (Platform.OS === 'web' && navigator?.clipboard) {
+                await navigator.clipboard.writeText(msg);
+              } else {
+                await Share.share({ message: msg });
+              }
+            }}
+            style={styles.subtleAction}
+          >
+            <Text style={styles.subtleActionText}>+</Text>
+          </Pressable>
+        </View>
+
+        {/* Today / Collection tabs */}
+        <View style={styles.crewTabs}>
+          <Pressable onPress={() => setCrewDetailTab('today')} style={styles.crewTab}>
+            <Text style={[styles.crewTabText, crewDetailTab === 'today' && styles.crewTabActive]}>Today</Text>
+            {crewDetailTab === 'today' && <View style={styles.crewTabIndicator} />}
+          </Pressable>
+          <Pressable onPress={() => setCrewDetailTab('collection')} style={styles.crewTab}>
+            <Text style={[styles.crewTabText, crewDetailTab === 'collection' && styles.crewTabActive]}>Collection</Text>
+            {crewDetailTab === 'collection' && <View style={styles.crewTabIndicator} />}
+          </Pressable>
+        </View>
+
+        {crewDetailTab === 'today' ? (
+          <ScrollView style={styles.flexOne} contentContainerStyle={styles.crewDetailContent}>
+            <Text style={styles.crewDailyLabel}>Daily #{dailyNumber} {'\u00B7'} {featuredCategory.title}</Text>
+
+            {result && result.memberResults.length > 0 ? (
+              result.memberResults
+                .sort((a, b) => b.alignmentPercent - a.alignmentPercent)
+                .map((member, i) => (
+                  <View key={member.userId} style={styles.memberRankRow}>
+                    <Text style={styles.memberRankPosition}>#{i + 1}</Text>
+                    <Text style={styles.memberRankName}>
+                      {member.userId === user?.id ? 'You' : member.displayName}
+                    </Text>
+                    <Text style={styles.memberRankPercent}>{member.alignmentPercent}%</Text>
+                  </View>
+                ))
+            ) : (
+              <View style={styles.emptyCrewState}>
+                {members.filter(m => m.played_today).length === 0 ? (
+                  <Text style={styles.emptyCrewText}>no one has played today yet</Text>
+                ) : members.filter(m => m.played_today).length < 2 ? (
+                  <Text style={styles.emptyCrewText}>waiting for more members to play...</Text>
+                ) : (
+                  <Text style={styles.emptyCrewText}>play today's daily to see crew results</Text>
+                )}
+              </View>
+            )}
+
+            {/* Members list */}
+            <View style={styles.memberListSection}>
+              <Text style={styles.sectionLabel}>members</Text>
+              {members.map(m => (
+                <View key={m.id} style={styles.memberRow}>
+                  <Text style={styles.memberName}>{m.display_name}</Text>
+                  <Text style={[styles.memberStatus, m.played_today && styles.memberPlayed]}>
+                    {m.played_today ? 'played' : '\u2014'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Crew code */}
+            <View style={styles.crewCodeSection}>
+              <Text style={styles.sectionLabel}>invite code</Text>
+              <Text style={styles.crewCodeDisplay}>{selectedCrew.code}</Text>
+            </View>
+
+            {/* Leave */}
+            <Pressable
+              style={styles.leaveButton}
+              onPress={async () => {
+                if (!user?.id) return;
+                await crewService.leaveCrew(user.id, selectedCrew.id);
+                setCrews(prev => prev.filter(c => c.id !== selectedCrew.id));
+                setCrewView('home');
+                setSelectedCrew(null);
+              }}
+            >
+              <Text style={styles.leaveText}>leave crew</Text>
+            </Pressable>
+          </ScrollView>
+        ) : (
+          <ScrollView style={styles.flexOne} contentContainerStyle={styles.crewDetailContent}>
+            {crewCollections.length > 0 ? (
+              crewCollections.map(num => {
+                const catIndex = (num - 1) % DAILY_CATEGORIES.length;
+                const cat = DAILY_CATEGORIES[catIndex];
+                const hasPlayed = completedCategoryIds.includes(cat?.id || '');
+                return (
+                  <Pressable
+                    key={num}
+                    style={styles.collectionRow}
+                    onPress={() => {
+                      if (!hasPlayed && cat) {
+                        setActiveCategoryId(cat.id);
+                        setCrewView('home'); // go back to play flow
+                      }
+                    }}
+                  >
+                    <Text style={styles.collectionNumber}>#{num}</Text>
+                    <Text style={styles.collectionCategory}>{cat?.title || 'Unknown'}</Text>
+                    <Text style={[styles.collectionAction, hasPlayed && styles.collectionDone]}>
+                      {hasPlayed ? 'view' : 'play'}
+                    </Text>
+                  </Pressable>
+                );
+              })
+            ) : (
+              <Text style={styles.emptyCrewText}>no dailies played yet</Text>
+            )}
+          </ScrollView>
+        )}
+      </View>
     );
   };
 
@@ -1026,14 +954,8 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
             <Pressable style={styles.copyButton} onPress={handleShareResult}>
               <Text style={styles.copyButtonText}>Share My Result</Text>
             </Pressable>
-            <Pressable style={styles.viewCollectionButton} onPress={() => {
-              handleBackToIntro();
-              setActiveTab('collection');
-            }}>
-              <Text style={styles.viewCollectionText}>View Collection</Text>
-            </Pressable>
             <Pressable style={styles.backToTodayButton} onPress={handleBackToIntro}>
-              <Text style={styles.backToTodayText}>Back to Today</Text>
+              <Text style={styles.backToTodayText}>Back to Crews</Text>
             </Pressable>
           </View>
 
@@ -1081,95 +1003,10 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     );
   };
 
-  // ---- RENDER: COLLECTION TAB ----
-
-  const renderCollection = () => {
-    const collectionMap = new Map<string, DailyCollectionEntry>();
-    for (const entry of collections) {
-      const existing = collectionMap.get(entry.categoryId);
-      if (!existing || entry.dailyNumber > existing.dailyNumber) {
-        collectionMap.set(entry.categoryId, entry);
-      }
-    }
-
-    const filledCount = collectionMap.size;
-    const columns = filledCount <= 9 ? 3 : filledCount <= 16 ? 4 : 5;
-
-    return (
-      <ScrollView contentContainerStyle={styles.collectionScrollContent}>
-        <Animated.View entering={FadeIn.duration(300)}>
-          <Text style={styles.collectionTitle}>Your Collection</Text>
-          <Text style={styles.collectionSubtitle}>{filledCount} / {DAILY_CATEGORIES.length} categories</Text>
-
-          <View style={[styles.collectionGrid, { gap: spacing.sm }]}>
-            {DAILY_CATEGORIES.map((category) => {
-              const entry = collectionMap.get(category.id);
-              const championMovie = entry ? movies.get(entry.championId) : null;
-
-              return (
-                <View
-                  key={category.id}
-                  style={[
-                    styles.collectionCell,
-                    { width: `${Math.floor(100 / columns) - 2}%` as any },
-                  ]}
-                >
-                  {championMovie?.posterUrl ? (
-                    <View style={styles.filledCell}>
-                      <Image
-                        source={{ uri: championMovie.posterUrl }}
-                        style={styles.collectionPoster}
-                      />
-                    </View>
-                  ) : (
-                    <Pressable
-                      style={styles.emptyCellPressable}
-                      onPress={() => {
-                        startCategory(category.id);
-                        setActiveTab('today');
-                      }}
-                    >
-                      <CategoryCellEmpty category={category} movies={movies} />
-                    </Pressable>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-
-          {filledCount > 0 && (
-            <Pressable style={styles.shareCollectionButton} onPress={handleShareCollection}>
-              <Text style={styles.shareCollectionText}>Share Collection</Text>
-            </Pressable>
-          )}
-        </Animated.View>
-
-        {Platform.OS !== 'web' && isCapturing && (
-          <View style={styles.captureWrapper}>
-            <ViewShot
-              ref={collectionViewRef}
-              options={{ format: 'png', quality: 1, width: 1080, height: 1080 }}
-            >
-              <ShareableCollectionsGrid
-                categories={DAILY_CATEGORIES}
-                collections={collections}
-                movies={movies}
-              />
-            </ViewShot>
-          </View>
-        )}
-      </ScrollView>
-    );
-  };
-
   // ---- MAIN RENDER ----
 
-  const tabs = useMemo(() => [
-    { key: 'today' as DailyTab, label: 'Today' },
-    { key: 'collection' as DailyTab, label: 'Collection', badge: collections.length > 0 ? collections.length : undefined },
-  ], [collections.length]);
-
-  if (step === 'playing' && activeTab === 'today') {
+  // If playing or viewing results, show the game flow
+  if (step === 'playing') {
     return (
       <View style={styles.container}>
         {renderPlaying()}
@@ -1177,7 +1014,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     );
   }
 
-  if (step === 'results' && activeTab === 'today') {
+  if (step === 'results') {
     return (
       <View style={styles.container}>
         {renderResults()}
@@ -1185,13 +1022,28 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     );
   }
 
+  // If in seen/unseen selection mode (activeCategoryId set but step is intro)
+  if (activeCategoryId) {
+    return (
+      <View style={styles.container}>
+        {renderIntro()}
+      </View>
+    );
+  }
+
+  // If viewing crew detail
+  if (crewView === 'detail' && selectedCrew) {
+    return (
+      <View style={styles.container}>
+        {renderCrewDetail()}
+      </View>
+    );
+  }
+
+  // Crews home
   return (
     <View style={styles.container}>
-      {!activeCategoryId && (
-        <UnderlineTabs tabs={tabs} activeTab={activeTab} onTabPress={setActiveTab} />
-      )}
-      {activeTab === 'today' && renderIntro()}
-      {activeTab === 'collection' && !activeCategoryId && renderCollection()}
+      {renderCrewsHome()}
     </View>
   );
 }
@@ -1662,17 +1514,6 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontWeight: '700',
   },
-  viewCollectionButton: {
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    alignItems: 'center',
-  },
-  viewCollectionText: {
-    ...typography.bodyMedium,
-    color: colors.accent,
-  },
   backToTodayButton: {
     paddingVertical: spacing.md,
     alignItems: 'center',
@@ -1682,71 +1523,267 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
 
-  // Collection
-  collectionScrollContent: {
+  // Crews Home
+  homeContent: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.xxxl,
   },
-  collectionTitle: {
-    ...typography.h2,
+  crewsTitle: {
+    fontSize: 32,
+    fontWeight: '800',
     color: colors.textPrimary,
     textAlign: 'center',
-    marginBottom: spacing.xs,
-  },
-  collectionSubtitle: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    textAlign: 'center',
+    letterSpacing: 4,
+    marginTop: spacing.lg,
     marginBottom: spacing.lg,
   },
-  collectionGrid: {
+  todayCard: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  collectionCell: {
-    aspectRatio: 2 / 3,
-    marginBottom: spacing.sm,
-  },
-  filledCell: {
-    flex: 1,
-    borderRadius: borderRadius.md,
-    overflow: 'hidden',
-  },
-  emptyCellPressable: {
-    flex: 1,
-  },
-  collectionPoster: {
-    width: '100%',
-    height: '100%',
-    borderRadius: borderRadius.md,
-  },
-  shareCollectionButton: {
-    backgroundColor: colors.accent,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
     alignItems: 'center',
-    marginTop: spacing.lg,
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.lg,
   },
-  shareCollectionText: {
+  todayInfo: {
+    flex: 1,
+  },
+  todayLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  todayCategory: {
     ...typography.bodyMedium,
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  playButton: {
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.md,
+  },
+  playButtonText: {
+    ...typography.captionMedium,
     color: colors.background,
     fontWeight: '700',
   },
-  captureWrapper: {
-    position: 'absolute',
-    left: -9999,
-    top: -9999,
+  sectionLabel: {
+    ...typography.captionMedium,
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1.5,
+    fontSize: 11,
+    marginBottom: spacing.sm,
+  },
+  crewListCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  crewListName: {
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  crewListStatus: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginRight: spacing.sm,
+  },
+  crewListAction: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  crewListActionReady: {
+    color: colors.accent,
+  },
+  streakRow: {
+    marginTop: spacing.lg,
+    alignItems: 'center',
+  },
+  streakText: {
+    ...typography.caption,
+    color: colors.accent,
+  },
+  crewErrorText: {
+    ...typography.caption,
+    color: colors.error,
+    marginTop: spacing.xs,
   },
 
-  // Crew Results
+  // Crew Detail
+  crewDetailHeader: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  backButton: {
+    paddingVertical: spacing.sm,
+  },
+  backText: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  crewDetailTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  crewDetailName: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: 2,
+  },
+  crewTabs: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  crewTab: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginRight: spacing.lg,
+    position: 'relative',
+  },
+  crewTabText: {
+    ...typography.captionMedium,
+    color: colors.textMuted,
+  },
+  crewTabActive: {
+    color: colors.textPrimary,
+  },
+  crewTabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: colors.accent,
+  },
+  crewDetailContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxxl,
+  },
+  crewDailyLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginBottom: spacing.md,
+  },
+  memberRankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  memberRankPosition: {
+    ...typography.bodyMedium,
+    color: colors.accent,
+    width: 32,
+  },
+  memberRankName: {
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  memberRankPercent: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  emptyCrewState: {
+    paddingVertical: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyCrewText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    paddingVertical: spacing.lg,
+  },
+  memberListSection: {
+    marginTop: spacing.xl,
+  },
+  memberRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  memberName: {
+    ...typography.caption,
+    color: colors.textPrimary,
+  },
+  memberStatus: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  memberPlayed: {
+    color: colors.success,
+  },
+  crewCodeSection: {
+    marginTop: spacing.lg,
+  },
+  crewCodeDisplay: {
+    ...typography.bodyMedium,
+    color: colors.accent,
+    letterSpacing: 3,
+    marginTop: spacing.xs,
+  },
+  leaveButton: {
+    marginTop: spacing.xl,
+    paddingVertical: spacing.sm,
+  },
+  leaveText: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  collectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  collectionNumber: {
+    ...typography.caption,
+    color: colors.textMuted,
+    width: 40,
+  },
+  collectionCategory: {
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  collectionAction: {
+    ...typography.caption,
+    color: colors.accent,
+  },
+  collectionDone: {
+    color: colors.textMuted,
+  },
+
+  // Crew Results (in results view)
   crewResultsSection: {
     width: '100%',
     marginTop: spacing.lg,
     marginBottom: spacing.lg,
     gap: spacing.sm,
   },
-  crewSection: { marginTop: spacing.lg, marginBottom: spacing.lg, width: '100%' },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1767,42 +1804,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginBottom: spacing.sm,
   },
-  crewCardInline: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: colors.card, borderRadius: borderRadius.lg,
-    padding: spacing.md, marginBottom: spacing.sm,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  crewCardName: { ...typography.bodyMedium, color: colors.textPrimary },
-  crewCardStatus: { ...typography.caption, color: colors.textMuted },
-  crewExpanded: {
-    backgroundColor: colors.card, borderRadius: borderRadius.lg,
-    padding: spacing.lg, marginBottom: spacing.sm,
-    borderWidth: 1, borderColor: colors.border, borderTopWidth: 0,
-    borderTopLeftRadius: 0, borderTopRightRadius: 0,
-    marginTop: -spacing.xs,
-  },
-  crewCodeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
-  crewCodeLabel: { ...typography.caption, color: colors.textMuted },
-  crewCodeValue: { ...typography.bodyMedium, color: colors.accent, letterSpacing: 2, marginRight: spacing.sm },
-  crewShareButton: {
-    paddingVertical: 2, paddingHorizontal: spacing.sm,
-    backgroundColor: colors.accentSubtle, borderRadius: borderRadius.sm,
-  },
-  crewShareText: { ...typography.caption, color: colors.accent, fontWeight: '600' },
-  crewMemberRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
-  crewMemberName: { ...typography.caption, color: colors.textPrimary },
-  crewMemberStatus: { ...typography.caption, color: colors.textMuted },
-  crewMemberPlayed: { color: colors.success },
-  crewLeaveButton: { marginTop: spacing.sm },
-  crewLeaveText: { ...typography.caption, color: colors.textMuted },
-  crewActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  crewActionButton: {
-    flex: 1, paddingVertical: spacing.sm, alignItems: 'center',
-    backgroundColor: colors.card, borderRadius: borderRadius.md,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  crewActionText: { ...typography.caption, color: colors.textSecondary },
   crewInlineForm: { marginTop: spacing.sm },
   crewFormInput: {
     ...typography.body, color: colors.textPrimary, backgroundColor: colors.card,
@@ -1816,7 +1817,6 @@ const styles = StyleSheet.create({
   },
   crewFormButtonText: { ...typography.caption, color: colors.background, fontWeight: '700' },
   crewFormCancel: { ...typography.caption, color: colors.textMuted },
-  crewErrorInline: { ...typography.caption, color: colors.error, marginTop: spacing.xs },
   crewSectionTitle: {
     ...typography.captionMedium,
     color: colors.textMuted,

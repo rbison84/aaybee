@@ -321,6 +321,20 @@ export const crewService = {
       return null;
     }
   },
+
+  getCrewDailyNumbers: async (crewId: string): Promise<number[]> => {
+    try {
+      const { data } = await supabase
+        .from('crew_daily_picks')
+        .select('daily_number')
+        .eq('crew_id', crewId);
+      if (!data) return [];
+      const numbers = [...new Set(data.map((d: any) => d.daily_number))].sort((a: number, b: number) => b - a);
+      return numbers;
+    } catch {
+      return [];
+    }
+  },
 };
 
 export default crewService;
