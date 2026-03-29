@@ -477,69 +477,40 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
   const renderCrewsHome = () => (
     <ScrollView style={styles.flexOne} contentContainerStyle={styles.homeContent}>
       {/* Title */}
-      <Text style={styles.crewsTitle}>CREWS</Text>
+      <Text style={styles.crewsTitle}>DAILY</Text>
 
-      {/* Today's Daily - compact card */}
-      <Animated.View entering={FadeInDown.delay(50)} style={styles.todayCard}>
-        <View style={styles.todayInfo}>
-          <Text style={styles.todayLabel}>Daily #{dailyNumber}</Text>
-          <Text style={styles.todayCategory}>{featuredCategory.title}</Text>
-        </View>
+      {/* Three action buttons: Create / Join / Play */}
+      <Animated.View entering={FadeInDown.delay(50)} style={styles.actionRow}>
         <Pressable
-          style={styles.playButton}
+          style={styles.actionCard}
           onPress={() => {
-            setActiveCategoryId(featuredCategory.id);
-            // The existing useEffect will restore session or start fresh
+            if (user?.id) setCrewCreateMode(true);
           }}
         >
-          <Text style={styles.playButtonText}>
-            {completedCategoryIds.includes(featuredCategory.id) ? 'done' : 'play'}
-          </Text>
+          <Text style={styles.actionCardLabel}>create</Text>
+          <Text style={styles.actionCardHint}>new crew</Text>
+        </Pressable>
+        <Pressable
+          style={styles.actionCard}
+          onPress={() => {
+            if (user?.id) setCrewJoinMode(true);
+          }}
+        >
+          <Text style={styles.actionCardLabel}>join</Text>
+          <Text style={styles.actionCardHint}>a crew</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.actionCard, styles.actionCardPrimary]}
+          onPress={() => {
+            setActiveCategoryId(featuredCategory.id);
+          }}
+        >
+          <Text style={styles.actionCardLabelPrimary}>play</Text>
+          <Text style={styles.actionCardHintPrimary}>#{dailyNumber}</Text>
         </Pressable>
       </Animated.View>
 
-      {/* Crews List */}
-      {crews.length > 0 && (
-        <Animated.View entering={FadeInDown.delay(100)}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionLabel}>your crews</Text>
-            <Pressable onPress={() => setCrewCreateMode(!crewCreateMode && !crewJoinMode)} style={styles.subtleAction}>
-              <Text style={styles.subtleActionText}>+</Text>
-            </Pressable>
-          </View>
-
-          {crews.map(crew => {
-            const members = crewMembers.get(crew.id) || [];
-            const playedCount = members.filter(m => m.played_today).length;
-            const allPlayed = playedCount === members.length && members.length > 0;
-            return (
-              <Pressable
-                key={crew.id}
-                style={styles.crewListCard}
-                onPress={() => {
-                  setSelectedCrew(crew);
-                  setCrewView('detail');
-                  setCrewDetailTab('today');
-                  // Load crew results for today
-                  crewService.getCrewDailyResults(crew.id, dailyNumber).then(result => {
-                    if (result) setCrewResults(prev => new Map(prev).set(crew.id, result));
-                  });
-                  // Load collection (distinct daily numbers for this crew)
-                  loadCrewCollection(crew.id);
-                }}
-              >
-                <Text style={styles.crewListName}>{crew.name}</Text>
-                <Text style={styles.crewListStatus}>{playedCount}/{members.length}</Text>
-                <Text style={[styles.crewListAction, allPlayed && styles.crewListActionReady]}>
-                  {allPlayed ? 'view' : 'waiting'}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </Animated.View>
-      )}
-
-      {/* Create/Join crew inline */}
+      {/* Create crew inline form */}
       {crewCreateMode && (
         <Animated.View entering={FadeIn.duration(200)} style={styles.crewInlineForm}>
           <TextInput style={styles.crewFormInput} placeholder="crew name" placeholderTextColor={colors.textMuted}
@@ -556,9 +527,6 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
               }} disabled={!crewName.trim() || crewLoading}>
               <Text style={styles.crewFormButtonText}>create</Text>
             </Pressable>
-            <Pressable onPress={() => setCrewJoinMode(true)}>
-              <Text style={styles.crewFormCancel}>join instead</Text>
-            </Pressable>
             <Pressable onPress={() => { setCrewCreateMode(false); setCrewName(''); }}>
               <Text style={styles.crewFormCancel}>cancel</Text>
             </Pressable>
@@ -566,6 +534,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
         </Animated.View>
       )}
 
+      {/* Join crew inline form */}
       {crewJoinMode && (
         <Animated.View entering={FadeIn.duration(200)} style={styles.crewInlineForm}>
           <TextInput style={styles.crewFormInput} placeholder="enter code" placeholderTextColor={colors.textMuted}
@@ -576,16 +545,13 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
                 if (!user?.id || crewJoinCode.length < 6) return;
                 setCrewLoading(true);
                 const { crew, error } = await crewService.joinCrew(user.id, crewJoinCode);
-                if (crew) { setCrews(prev => [...prev, crew]); setCrewJoinCode(''); setCrewJoinMode(false); setCrewCreateMode(false); }
+                if (crew) { setCrews(prev => [...prev, crew]); setCrewJoinCode(''); setCrewJoinMode(false); }
                 if (error) setCrewError(error);
                 setCrewLoading(false);
               }} disabled={crewJoinCode.length < 6 || crewLoading}>
               <Text style={styles.crewFormButtonText}>join</Text>
             </Pressable>
-            <Pressable onPress={() => { setCrewJoinMode(false); setCrewJoinCode(''); setCrewCreateMode(true); }}>
-              <Text style={styles.crewFormCancel}>create instead</Text>
-            </Pressable>
-            <Pressable onPress={() => { setCrewJoinMode(false); setCrewCreateMode(false); setCrewJoinCode(''); }}>
+            <Pressable onPress={() => { setCrewJoinMode(false); setCrewJoinCode(''); }}>
               <Text style={styles.crewFormCancel}>cancel</Text>
             </Pressable>
           </View>
@@ -594,11 +560,40 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
 
       {crewError && <Text style={styles.crewErrorText}>{crewError}</Text>}
 
-      {/* Whisper prompt for no crews */}
-      {user?.id && crews.length === 0 && !crewCreateMode && !crewJoinMode && (
-        <Pressable onPress={() => setCrewCreateMode(true)}>
-          <Text style={styles.crewWhisper}>play daily with friends +</Text>
-        </Pressable>
+      {/* Crews List */}
+      {crews.length > 0 && (
+        <Animated.View entering={FadeInDown.delay(100)}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionLabel}>your crews</Text>
+          </View>
+
+          {crews.map(crew => {
+            const members = crewMembers.get(crew.id) || [];
+            const playedCount = members.filter(m => m.played_today).length;
+            const allPlayed = playedCount === members.length && members.length > 0;
+            return (
+              <Pressable
+                key={crew.id}
+                style={styles.crewListCard}
+                onPress={() => {
+                  setSelectedCrew(crew);
+                  setCrewView('detail');
+                  setCrewDetailTab('today');
+                  crewService.getCrewDailyResults(crew.id, dailyNumber).then(result => {
+                    if (result) setCrewResults(prev => new Map(prev).set(crew.id, result));
+                  });
+                  loadCrewCollection(crew.id);
+                }}
+              >
+                <Text style={styles.crewListName}>{crew.name}</Text>
+                <Text style={styles.crewListStatus}>{playedCount}/{members.length}</Text>
+                <Text style={[styles.crewListAction, allPlayed && styles.crewListActionReady]}>
+                  {allPlayed ? 'view' : 'waiting'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </Animated.View>
       )}
 
       {/* Streak */}
@@ -1535,42 +1530,47 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 4,
     marginTop: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
     marginBottom: spacing.lg,
   },
-  todayCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  actionCard: {
+    flex: 1,
     backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: spacing.lg,
+    alignItems: 'center',
   },
-  todayInfo: {
-    flex: 1,
+  actionCardPrimary: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
-  todayLabel: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
-  todayCategory: {
+  actionCardLabel: {
     ...typography.bodyMedium,
     color: colors.textPrimary,
-    marginTop: 2,
+    fontWeight: '700',
   },
-  playButton: {
-    backgroundColor: colors.accent,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: borderRadius.md,
-  },
-  playButtonText: {
-    ...typography.captionMedium,
+  actionCardLabelPrimary: {
+    ...typography.bodyMedium,
     color: colors.background,
     fontWeight: '700',
   },
+  actionCardHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  actionCardHintPrimary: {
+    ...typography.caption,
+    color: 'rgba(0,0,0,0.5)',
+    marginTop: 2,
+  },
+  // todayCard styles removed — replaced by actionRow
   sectionLabel: {
     ...typography.captionMedium,
     color: colors.textMuted,

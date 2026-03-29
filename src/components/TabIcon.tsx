@@ -141,18 +141,13 @@ export function TabIcon({ name, active, size = 24 }: TabIconProps) {
 
     case 'party':
     case 'crews':
-      // People/group icon
+      // Falls through to daily (calendar icon)
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-          {/* Center person */}
-          <Circle cx="12" cy="8" r="3" stroke={color} strokeWidth={strokeWidth} fill="none" />
-          <Path d="M6 21v-1a6 6 0 0112 0v1" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" fill="none" />
-          {/* Left person (smaller) */}
-          <Circle cx="5" cy="9" r="2" stroke={color} strokeWidth={1.5} fill="none" />
-          <Path d="M1 21v-1a4 4 0 014-4" stroke={color} strokeWidth={1.5} strokeLinecap="round" fill="none" />
-          {/* Right person (smaller) */}
-          <Circle cx="19" cy="9" r="2" stroke={color} strokeWidth={1.5} fill="none" />
-          <Path d="M23 21v-1a4 4 0 00-4-4" stroke={color} strokeWidth={1.5} strokeLinecap="round" fill="none" />
+          <Rect x="3" y="5" width="18" height="16" rx="2" stroke={color} strokeWidth={strokeWidth} fill="none" />
+          <Path d="M3 9h18" stroke={color} strokeWidth={strokeWidth} />
+          <Path d="M8 3v4M16 3v4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+          <Path d="M12 12l1.12 2.27 2.5.36-1.81 1.77.43 2.5L12 17.77l-2.24 1.18.43-2.5-1.81-1.77 2.5-.36L12 12z" stroke={color} strokeWidth={1.5} strokeLinejoin="round" fill={active ? color : 'none'} />
         </Svg>
       );
 
