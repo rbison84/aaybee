@@ -14,6 +14,7 @@ import { AuthProvider } from './src/contexts/AuthContext';
 import { SyncProvider } from './src/contexts/SyncContext';
 import { DimensionsProvider, useAppDimensions, DESKTOP_SIDEBAR_WIDTH } from './src/contexts/DimensionsContext';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
+import { MiniOnboardingScreen } from './src/screens/MiniOnboardingScreen';
 import { ComparisonScreen } from './src/screens/ComparisonScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
@@ -98,7 +99,7 @@ function ModeToggle({ mode, onModeChange, socialBadge }: { mode: AppMode; onMode
           styles.modeToggleText,
           mode === 'social' && styles.modeToggleTextActive,
         ]}>
-          PLAY
+          ▶ PLAY
         </Text>
         {socialBadge && <View style={styles.modeBadgeDot} />}
       </Pressable>
@@ -110,7 +111,7 @@ function ModeToggle({ mode, onModeChange, socialBadge }: { mode: AppMode; onMode
           styles.modeToggleText,
           mode === 'solo' && styles.modeToggleTextActive,
         ]}>
-          FOR YOU
+          ✦ FOR YOU
         </Text>
       </Pressable>
       {/* Active indicator */}
@@ -235,7 +236,7 @@ function DesktopSidebar({
       <Text style={sidebarStyles.logo}>aaybee</Text>
 
       {/* PLAY section (social) */}
-      <Text style={sidebarStyles.sectionHeader}>PLAY</Text>
+      <Text style={sidebarStyles.sectionHeader}>▶ PLAY</Text>
       <View style={sidebarStyles.navSection}>
         {socialTabs.map((tab) => {
           const isActive = activeTab === tab.key && mode === 'social';
@@ -266,7 +267,7 @@ function DesktopSidebar({
       <View style={sidebarStyles.divider} />
 
       {/* FOR YOU section (solo) */}
-      <Text style={sidebarStyles.sectionHeader}>FOR YOU</Text>
+      <Text style={sidebarStyles.sectionHeader}>✦ FOR YOU</Text>
       <View style={sidebarStyles.navSection}>
         {soloTabs.map((tab) => {
           const isActive = activeTab === tab.key && mode === 'solo';
@@ -444,6 +445,7 @@ function MainApp() {
   const [challengeInitialCode, setChallengeInitialCode] = useState<string | undefined>();
   const [rankingReveal, setRankingReveal] = useState<'classic' | 'top25' | 'all' | null>(null);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
+  const [showMiniOnboarding, setShowMiniOnboarding] = useState(false);
 
   // Load persisted mode on mount + smart default landing
   useEffect(() => {
@@ -467,9 +469,14 @@ function MainApp() {
 
   // Save mode on change
   const handleModeChange = useCallback((newMode: AppMode) => {
+    if (newMode === 'solo' && !hasCompletedOnboarding) {
+      // First time tapping FOR YOU — show mini onboarding
+      setShowMiniOnboarding(true);
+      return;
+    }
     setMode(newMode);
     AsyncStorage.setItem('aaybee_mode', newMode).catch(() => {});
-  }, []);
+  }, [hasCompletedOnboarding]);
 
   // Deep link: parse URL on mount
   const [deepLink] = useState<DeepLinkIntent>(() => parseDeepLink());
@@ -603,11 +610,14 @@ function MainApp() {
     // Only reset when onboarding JUST completed (false -> true)
     if (hasCompletedOnboarding && !prevOnboardingComplete.current) {
       setShowProfile(false);
-      handleModeChange('solo');
-      setSoloTab('compare');
+      // Only switch to solo if coming from mini-onboarding (not if they're already playing)
+      if (showMiniOnboarding) {
+        handleModeChange('solo');
+        setSoloTab('compare');
+      }
     }
     prevOnboardingComplete.current = hasCompletedOnboarding;
-  }, [hasCompletedOnboarding, handleModeChange]);
+  }, [hasCompletedOnboarding, handleModeChange, showMiniOnboarding]);
 
   // Deep link: consume after app is ready (no onboarding required)
   const deepLinkConsumed = useRef(false);
@@ -684,18 +694,6 @@ function MainApp() {
     return (
       <>
         <LoadingScreen />
-        <DebugPanel visible={debugVisible} onClose={() => setDebugVisible(false)} />
-      </>
-    );
-  }
-
-  // Show onboarding for new users — but let /daily and /vs deep links through
-  if (!hasCompletedOnboarding && !deepLink) {
-    return (
-      <>
-        <OnboardingScreen
-          onComplete={() => {}}
-        />
         <DebugPanel visible={debugVisible} onClose={() => setDebugVisible(false)} />
       </>
     );
@@ -930,6 +928,19 @@ function MainApp() {
               </Pressable>
             </Pressable>
           </Pressable>
+        </View>
+      )}
+
+      {/* Mini onboarding overlay — shown when tapping FOR YOU without completing onboarding */}
+      {showMiniOnboarding && (
+        <View style={styles.overlay}>
+          <MiniOnboardingScreen
+            onComplete={() => {
+              setShowMiniOnboarding(false);
+              setMode('solo');
+              setSoloTab('compare');
+            }}
+          />
         </View>
       )}
 
