@@ -785,12 +785,6 @@ function MainApp() {
             onClose={handleProfileClose}
             isGuestMode={isGuestMode}
             onOpenAuth={() => { setShowProfile(false); setShowAuth(true); }}
-            onOpenVsChallenge={(code) => {
-              setShowProfile(false);
-              closeAllOverlays();
-              setVsInitialCode(code);
-              setShowVs(true);
-            }}
             onOpenTv={() => { setShowProfile(false); closeAllOverlays(); setShowTv(true); }}
           />
         </View>

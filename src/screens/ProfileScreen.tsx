@@ -14,9 +14,7 @@ import { useLockedFeature } from '../contexts/LockedFeatureContext';
 import { useDevSettings } from '../contexts/DevSettingsContext';
 import { useHaptics } from '../hooks/useHaptics';
 import { SettingsScreen } from './SettingsScreen';
-import { FriendsScreen } from './FriendsScreen';
 import { TasteProfileScreen } from './TasteProfileScreen';
-import { CrewManagementScreen } from './CrewManagementScreen';
 
 const MIN_COMPARISONS_FOR_TASTE_PROFILE = 100;
 
@@ -51,30 +49,6 @@ function ChevronIcon() {
   );
 }
 
-// Friends icon
-function FriendsIcon() {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Circle cx="9" cy="7" r="3" stroke={colors.textSecondary} strokeWidth={2} fill="none" />
-      <Path
-        d="M3 20c0-3.314 2.686-6 6-6s6 2.686 6 6"
-        stroke={colors.textSecondary}
-        strokeWidth={2}
-        strokeLinecap="round"
-        fill="none"
-      />
-      <Circle cx="16" cy="7" r="3" stroke={colors.textSecondary} strokeWidth={2} fill="none" />
-      <Path
-        d="M17 14c2.21 0 4 1.79 4 4v2"
-        stroke={colors.textSecondary}
-        strokeWidth={2}
-        strokeLinecap="round"
-        fill="none"
-      />
-    </Svg>
-  );
-}
-
 // Taste Profile icon (sparkle/star)
 function TasteProfileIcon() {
   return (
@@ -95,22 +69,18 @@ interface ProfileScreenProps {
   onClose?: () => void;
   isGuestMode?: boolean;
   onOpenAuth?: () => void;
-  onOpenVsChallenge?: (code: string) => void;
   onOpenTv?: () => void;
 }
 
-export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, onOpenVsChallenge, onOpenTv }: ProfileScreenProps) {
+export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, onOpenTv }: ProfileScreenProps) {
   const { postOnboardingComparisons } = useAppStore();
   const { showLockedFeature } = useLockedFeature();
   const { unlockAllFeatures } = useDevSettings();
   const haptics = useHaptics();
   const [showSettings, setShowSettings] = useState(false);
-  const [showFriends, setShowFriends] = useState(false);
-  const [showCrews, setShowCrews] = useState(false);
   const [showTasteProfile, setShowTasteProfile] = useState(false);
 
   const isTasteProfileLocked = isGuestMode || (unlockAllFeatures ? false : postOnboardingComparisons < MIN_COMPARISONS_FOR_TASTE_PROFILE);
-  const isFriendsLocked = !!isGuestMode;
   const tasteProfileRemaining = MIN_COMPARISONS_FOR_TASTE_PROFILE - postOnboardingComparisons;
 
   const handleTasteProfilePress = () => {
@@ -137,37 +107,10 @@ export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, o
     }
   };
 
-  const handleFriendsPress = () => {
-    if (isFriendsLocked) {
-      haptics.light();
-      showLockedFeature({
-        feature: 'friends',
-        requirement: 'create an account to add friends',
-      });
-      return;
-    }
-    setShowFriends(true);
-  };
-
   if (showTasteProfile) {
     return (
       <TasteProfileScreen
         onClose={() => setShowTasteProfile(false)}
-      />
-    );
-  }
-
-  if (showCrews) {
-    return (
-      <CrewManagementScreen onClose={() => setShowCrews(false)} />
-    );
-  }
-
-  if (showFriends) {
-    return (
-      <FriendsScreen
-        onClose={() => setShowFriends(false)}
-        onOpenVsChallenge={onOpenVsChallenge}
       />
     );
   }
@@ -211,36 +154,6 @@ export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, o
               {!isTasteProfileLocked && <ChevronIcon />}
             </Pressable>
           </Animated.View>
-
-          {/* FRIENDS BUTTON */}
-          <Animated.View entering={FadeInDown.delay(100)} style={styles.settingsSection}>
-            <Pressable
-              style={[styles.settingsButton, isFriendsLocked && styles.settingsButtonLocked]}
-              onPress={handleFriendsPress}
-            >
-              <View style={styles.settingsLeft}>
-                <FriendsIcon />
-                <Text style={[styles.settingsText, isFriendsLocked && styles.settingsTextLocked]}>friends</Text>
-              </View>
-              {!isFriendsLocked && <ChevronIcon />}
-            </Pressable>
-          </Animated.View>
-
-          {/* CREWS BUTTON */}
-          {!isGuestMode && (
-            <Animated.View entering={FadeInDown.delay(125)} style={styles.settingsSection}>
-              <Pressable
-                style={styles.settingsButton}
-                onPress={() => setShowCrews(true)}
-              >
-                <View style={styles.settingsLeft}>
-                  <FriendsIcon />
-                  <Text style={styles.settingsText}>crews</Text>
-                </View>
-                <ChevronIcon />
-              </Pressable>
-            </Animated.View>
-          )}
 
           {/* TRAILERS BUTTON */}
           {onOpenTv && (

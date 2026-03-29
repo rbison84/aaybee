@@ -103,7 +103,9 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
   const [crews, setCrews] = useState<Crew[]>([]);
   const [crewResults, setCrewResults] = useState<Map<string, CrewDailyResult>>(new Map());
   const [crewMembers, setCrewMembers] = useState<Map<string, CrewMember[]>>(new Map());
-  const [showCrewSetup, setShowCrewSetup] = useState(false);
+  const [expandedCrewId, setExpandedCrewId] = useState<string | null>(null);
+  const [crewCreateMode, setCrewCreateMode] = useState(false);
+  const [crewJoinMode, setCrewJoinMode] = useState(false);
   const [crewName, setCrewName] = useState('');
   const [crewJoinCode, setCrewJoinCode] = useState('');
   const [crewLoading, setCrewLoading] = useState(false);
@@ -540,19 +542,154 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
                 </View>
               )}
 
-              {/* Crew Status */}
-              {user?.id && crews.length > 0 && (
-                <View style={styles.crewIntroSection}>
+              {/* Crews */}
+              {user?.id && (
+                <View style={styles.crewSection}>
                   {crews.map(crew => {
                     const members = crewMembers.get(crew.id) || [];
                     const playedCount = members.filter(m => m.played_today).length;
+                    const isExpanded = expandedCrewId === crew.id;
                     return (
-                      <View key={crew.id} style={styles.crewIntroRow}>
-                        <Text style={styles.crewIntroName}>{crew.name}</Text>
-                        <Text style={styles.crewIntroStatus}>{playedCount}/{members.length} played</Text>
+                      <View key={crew.id}>
+                        <Pressable
+                          style={styles.crewCardInline}
+                          onPress={() => setExpandedCrewId(isExpanded ? null : crew.id)}
+                        >
+                          <Text style={styles.crewCardName}>{crew.name}</Text>
+                          <Text style={styles.crewCardStatus}>{playedCount}/{members.length} played</Text>
+                        </Pressable>
+                        {isExpanded && (
+                          <View style={styles.crewExpanded}>
+                            <View style={styles.crewCodeRow}>
+                              <Text style={styles.crewCodeLabel}>code: </Text>
+                              <Text style={styles.crewCodeValue}>{crew.code}</Text>
+                              <Pressable
+                                style={styles.crewShareButton}
+                                onPress={async () => {
+                                  const msg = `join my crew "${crew.name}" on aaybee! code: ${crew.code}`;
+                                  if (Platform.OS === 'web' && navigator?.clipboard) {
+                                    await navigator.clipboard.writeText(msg);
+                                  } else {
+                                    await Share.share({ message: msg });
+                                  }
+                                }}
+                              >
+                                <Text style={styles.crewShareText}>share</Text>
+                              </Pressable>
+                            </View>
+                            {members.map(m => (
+                              <View key={m.id} style={styles.crewMemberRow}>
+                                <Text style={styles.crewMemberName}>{m.display_name}</Text>
+                                <Text style={[styles.crewMemberStatus, m.played_today && styles.crewMemberPlayed]}>
+                                  {m.played_today ? 'played' : '\u2014'}
+                                </Text>
+                              </View>
+                            ))}
+                            <Pressable
+                              style={styles.crewLeaveButton}
+                              onPress={async () => {
+                                if (!user?.id) return;
+                                await crewService.leaveCrew(user.id, crew.id);
+                                setCrews(prev => prev.filter(c => c.id !== crew.id));
+                                setExpandedCrewId(null);
+                              }}
+                            >
+                              <Text style={styles.crewLeaveText}>leave crew</Text>
+                            </Pressable>
+                          </View>
+                        )}
                       </View>
                     );
                   })}
+
+                  {/* Create / Join buttons */}
+                  {!crewCreateMode && !crewJoinMode && (
+                    <View style={styles.crewActions}>
+                      <Pressable style={styles.crewActionButton} onPress={() => setCrewCreateMode(true)}>
+                        <Text style={styles.crewActionText}>+ create crew</Text>
+                      </Pressable>
+                      <Pressable style={styles.crewActionButton} onPress={() => setCrewJoinMode(true)}>
+                        <Text style={styles.crewActionText}>join crew</Text>
+                      </Pressable>
+                    </View>
+                  )}
+
+                  {crewCreateMode && (
+                    <View style={styles.crewInlineForm}>
+                      <TextInput
+                        style={styles.crewFormInput}
+                        placeholder="crew name"
+                        placeholderTextColor={colors.textMuted}
+                        value={crewName}
+                        onChangeText={setCrewName}
+                        maxLength={30}
+                        autoFocus
+                      />
+                      <View style={styles.crewFormButtons}>
+                        <Pressable
+                          style={[styles.crewFormButton, !crewName.trim() && { opacity: 0.4 }]}
+                          onPress={async () => {
+                            if (!user?.id || !crewName.trim()) return;
+                            setCrewLoading(true);
+                            const { crew, error } = await crewService.createCrew(user.id, crewName.trim());
+                            if (crew) {
+                              setCrews(prev => [...prev, crew]);
+                              setCrewName('');
+                              setCrewCreateMode(false);
+                            }
+                            if (error) setCrewError(error);
+                            setCrewLoading(false);
+                          }}
+                          disabled={!crewName.trim() || crewLoading}
+                        >
+                          <Text style={styles.crewFormButtonText}>create</Text>
+                        </Pressable>
+                        <Pressable onPress={() => { setCrewCreateMode(false); setCrewName(''); }}>
+                          <Text style={styles.crewFormCancel}>cancel</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
+
+                  {crewJoinMode && (
+                    <View style={styles.crewInlineForm}>
+                      <TextInput
+                        style={styles.crewFormInput}
+                        placeholder="enter code"
+                        placeholderTextColor={colors.textMuted}
+                        value={crewJoinCode}
+                        onChangeText={t => setCrewJoinCode(t.toUpperCase())}
+                        maxLength={6}
+                        autoCapitalize="characters"
+                        autoFocus
+                      />
+                      <View style={styles.crewFormButtons}>
+                        <Pressable
+                          style={[styles.crewFormButton, crewJoinCode.length < 6 && { opacity: 0.4 }]}
+                          onPress={async () => {
+                            if (!user?.id || crewJoinCode.length < 6) return;
+                            setCrewLoading(true);
+                            const { crew, error } = await crewService.joinCrew(user.id, crewJoinCode);
+                            if (crew) {
+                              setCrews(prev => [...prev, crew]);
+                              setCrewJoinCode('');
+                              setCrewJoinMode(false);
+                            }
+                            if (error) setCrewError(error);
+                            setCrewLoading(false);
+                          }}
+                          disabled={crewJoinCode.length < 6 || crewLoading}
+                        >
+                          <Text style={styles.crewFormButtonText}>join</Text>
+                        </Pressable>
+                        <Pressable onPress={() => { setCrewJoinMode(false); setCrewJoinCode(''); }}>
+                          <Text style={styles.crewFormCancel}>cancel</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
+
+                  {crewError && <Text style={styles.crewErrorInline}>{crewError}</Text>}
                 </View>
               )}
 
@@ -833,12 +970,6 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
             </View>
           )}
 
-          {/* Create/Join Crew (shown if no crews) */}
-          {crews.length === 0 && user?.id && (
-            <Pressable style={styles.crewPromptButton} onPress={() => setShowCrewSetup(true)}>
-              <Text style={styles.crewPromptText}>play daily with friends — create a crew</Text>
-            </Pressable>
-          )}
         </Animated.View>
       </ScrollView>
     );
@@ -925,83 +1056,6 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     );
   };
 
-  // ---- RENDER: CREW SETUP MODAL ----
-
-  const renderCrewSetupModal = () => {
-    if (!showCrewSetup) return null;
-    return (
-      <View style={styles.crewSetupOverlay}>
-        <View style={styles.crewSetupCard}>
-          <Text style={styles.crewSetupTitle}>crews</Text>
-          <Text style={styles.crewSetupSubtitle}>play daily together and see how your taste compares</Text>
-
-          <TextInput
-            style={styles.crewInput}
-            placeholder="crew name"
-            placeholderTextColor={colors.textMuted}
-            value={crewName}
-            onChangeText={setCrewName}
-            maxLength={30}
-          />
-          <Pressable
-            style={[styles.crewButton, !crewName.trim() && { opacity: 0.4 }]}
-            onPress={async () => {
-              if (!user?.id || !crewName.trim()) return;
-              setCrewLoading(true);
-              const { crew, error } = await crewService.createCrew(user.id, crewName.trim());
-              if (crew) {
-                setCrews(prev => [...prev, crew]);
-                setShowCrewSetup(false);
-                setCrewName('');
-              }
-              if (error) setCrewError(error);
-              setCrewLoading(false);
-            }}
-            disabled={!crewName.trim() || crewLoading}
-          >
-            <Text style={styles.crewButtonText}>create crew</Text>
-          </Pressable>
-
-          <Text style={styles.crewDivider}>or join one</Text>
-
-          <TextInput
-            style={styles.crewInput}
-            placeholder="enter code"
-            placeholderTextColor={colors.textMuted}
-            value={crewJoinCode}
-            onChangeText={t => setCrewJoinCode(t.toUpperCase())}
-            maxLength={6}
-            autoCapitalize="characters"
-          />
-          <Pressable
-            style={[styles.crewButton, crewJoinCode.length < 6 && { opacity: 0.4 }]}
-            onPress={async () => {
-              if (!user?.id || crewJoinCode.length < 6) return;
-              setCrewLoading(true);
-              const { crew, error } = await crewService.joinCrew(user.id, crewJoinCode);
-              if (crew) {
-                setCrews(prev => [...prev, crew]);
-                setShowCrewSetup(false);
-                setCrewJoinCode('');
-              }
-              if (error) setCrewError(error);
-              setCrewLoading(false);
-            }}
-            disabled={crewJoinCode.length < 6 || crewLoading}
-          >
-            <Text style={styles.crewButtonText}>join crew</Text>
-          </Pressable>
-
-          {crewError && <Text style={styles.crewErrorText}>{crewError}</Text>}
-
-          <Pressable onPress={() => setShowCrewSetup(false)} style={styles.crewCloseButton}>
-            <Text style={styles.crewCloseText}>close</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  };
-
   // ---- MAIN RENDER ----
 
   const tabs = useMemo(() => [
@@ -1021,7 +1075,6 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     return (
       <View style={styles.container}>
         {renderResults()}
-        {renderCrewSetupModal()}
       </View>
     );
   }
@@ -1033,7 +1086,6 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
       )}
       {activeTab === 'today' && renderIntro()}
       {activeTab === 'collection' && !activeCategoryId && renderCollection()}
-      {renderCrewSetupModal()}
     </View>
   );
 }
@@ -1587,29 +1639,57 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     gap: spacing.sm,
   },
-  crewIntroSection: {
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-    gap: spacing.xs,
+  crewSection: { marginTop: spacing.lg, marginBottom: spacing.md },
+  crewCardInline: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: colors.surface, borderRadius: borderRadius.lg,
+    padding: spacing.md, marginBottom: spacing.xs,
+    borderWidth: 1, borderColor: colors.border,
   },
-  crewIntroRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.sm,
+  crewCardName: { ...typography.bodyMedium, color: colors.textPrimary, fontWeight: '600' },
+  crewCardStatus: { ...typography.caption, color: colors.textMuted },
+  crewExpanded: {
+    backgroundColor: colors.surface, borderRadius: borderRadius.md,
+    padding: spacing.md, marginBottom: spacing.sm,
+    borderWidth: 1, borderColor: colors.border, borderTopWidth: 0,
+    borderTopLeftRadius: 0, borderTopRightRadius: 0,
+    marginTop: -spacing.xs,
   },
-  crewIntroName: {
-    ...typography.caption,
-    color: colors.textPrimary,
-    fontWeight: '600',
+  crewCodeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
+  crewCodeLabel: { ...typography.caption, color: colors.textMuted },
+  crewCodeValue: { ...typography.bodyMedium, color: colors.accent, letterSpacing: 2, marginRight: spacing.sm },
+  crewShareButton: {
+    paddingVertical: 2, paddingHorizontal: spacing.sm,
+    backgroundColor: colors.accentSubtle, borderRadius: borderRadius.sm,
   },
-  crewIntroStatus: {
-    ...typography.caption,
-    color: colors.textMuted,
+  crewShareText: { ...typography.caption, color: colors.accent, fontWeight: '600' },
+  crewMemberRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
+  crewMemberName: { ...typography.caption, color: colors.textPrimary },
+  crewMemberStatus: { ...typography.caption, color: colors.textMuted },
+  crewMemberPlayed: { color: colors.success },
+  crewLeaveButton: { marginTop: spacing.sm },
+  crewLeaveText: { ...typography.caption, color: colors.textMuted },
+  crewActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  crewActionButton: {
+    flex: 1, paddingVertical: spacing.sm, alignItems: 'center',
+    backgroundColor: colors.surface, borderRadius: borderRadius.md,
+    borderWidth: 1, borderColor: colors.border,
   },
+  crewActionText: { ...typography.caption, color: colors.textSecondary },
+  crewInlineForm: { marginTop: spacing.sm },
+  crewFormInput: {
+    ...typography.body, color: colors.textPrimary, backgroundColor: colors.surface,
+    borderRadius: borderRadius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  crewFormButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  crewFormButton: {
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.lg,
+    backgroundColor: colors.accent, borderRadius: borderRadius.md,
+  },
+  crewFormButtonText: { ...typography.caption, color: colors.background, fontWeight: '700' },
+  crewFormCancel: { ...typography.caption, color: colors.textMuted },
+  crewErrorInline: { ...typography.caption, color: colors.error, marginTop: spacing.xs },
   crewSectionTitle: {
     ...typography.caption,
     color: colors.textSecondary,
@@ -1652,94 +1732,6 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textMuted,
     fontStyle: 'italic' as const,
-  },
-  crewPromptButton: {
-    width: '100%',
-    marginTop: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-  },
-  crewPromptText: {
-    ...typography.bodyMedium,
-    color: colors.textSecondary,
-  },
-
-  // Crew Setup Modal
-  crewSetupOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  crewSetupCard: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.xl,
-    width: '100%',
-    maxWidth: 360,
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  crewSetupTitle: {
-    ...typography.h2,
-    color: colors.textPrimary,
-    textAlign: 'center',
-  },
-  crewSetupSubtitle: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-  },
-  crewInput: {
-    width: '100%',
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    color: colors.textPrimary,
-    ...typography.body,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  crewButton: {
-    width: '100%',
-    backgroundColor: colors.accent,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-  },
-  crewButtonText: {
-    ...typography.bodyMedium,
-    color: colors.background,
-    fontWeight: '700',
-  },
-  crewDivider: {
-    ...typography.caption,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginVertical: spacing.xs,
-  },
-  crewErrorText: {
-    ...typography.caption,
-    color: '#F87171',
-    textAlign: 'center',
-  },
-  crewCloseButton: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  crewCloseText: {
-    ...typography.bodyMedium,
-    color: colors.textSecondary,
   },
 
   // World stats
