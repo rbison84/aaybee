@@ -46,10 +46,10 @@ if (Platform.OS === 'web') {
 
 type ChallengeStep =
   | 'home'       // Create or join
-  | 'select'     // Pick 10 movies from your list
+  | 'select'     // Pick 9 movies from your list
   | 'share'      // Show link to share
   | 'name'       // Challenger enters their name
-  | 'rank'       // Rank the 10 movies via pairwise comparison
+  | 'rank'       // Rank the 9 movies via pairwise comparison
   | 'results';   // Match results
 
 interface ChallengeScreenProps {
@@ -196,7 +196,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
     }
     setLoading(true);
     const movies = await challengeService.getTopMoviesForChallenge(user.id, 30);
-    if (movies.length < 10) {
+    if (movies.length < 9) {
       // Not enough ranked movies — show curated packs
       setShowPacks(false);
       setLoading(false);
@@ -204,8 +204,8 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
       return;
     }
     setAvailableMovies(movies);
-    const top10 = movies.slice(0, 10).map(m => m.id);
-    setSelectedIds(new Set(top10));
+    const top9 = movies.slice(0, 9).map(m => m.id);
+    setSelectedIds(new Set(top9));
     setLoading(false);
     setStep('select');
   }, [user?.id]);
@@ -215,7 +215,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
-      } else if (next.size < 10) {
+      } else if (next.size < 9) {
         next.add(id);
       }
       return next;
@@ -375,7 +375,8 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   const handleShareResults = useCallback(async () => {
     if (!challenge || !results) return;
     const url = shareService.getChallengeShareUrl(challenge.code);
-    const message = `${challenge.creator_name} & ${challenge.challenger_name}: ${results.matchPercent}% movie taste match!\n\n${url}`;
+    const tier = getMatchTier(results.matchPercent);
+    const message = `${challenge.creator_name} & ${challenge.challenger_name}: ${results.matchPercent}% — ${tier.name}\n"${tier.subtitle}"\n\n${url}`;
 
     try {
       if (Platform.OS === 'web' && navigator?.share) {
@@ -442,9 +443,15 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   const handleQuickChallenge = useCallback(async (friend: FriendWithProfile) => {
     if (!user?.id) return;
     setLoading(true);
-    const movies = await challengeService.getTopMoviesForChallenge(user.id, 10);
-    if (movies.length >= 10) {
-      const selectedMovies = movies.slice(0, 10);
+    setError(null);
+
+    // Check if both users have 9+ common ranked movies
+    const friendId = friend.friend_id;
+    const commonMovies = await challengeService.getCommonMovies(user.id, friendId, 9);
+
+    if (commonMovies && commonMovies.length >= 9) {
+      // Auto-personalized: use common movies directly
+      const selectedMovies = commonMovies.slice(0, 9);
       const creatorRanking = selectedMovies.map(m => m.id);
       const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
       const { challenge: c, error: err } = await challengeService.createChallenge(
@@ -458,9 +465,10 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
         setError(err || 'Failed');
       }
     } else {
-      // Not enough movies — show packs
+      // Not enough common movies — show collection picker
       setShowPacks(true);
     }
+
     setLoading(false);
   }, [user, haptics]);
 
@@ -521,7 +529,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
 
   /**
    * Generate pairwise comparisons for n movies.
-   * For 10 movies: ~20 comparisons (2x movie count).
+   * For 9 movies: ~18 comparisons (2x movie count).
    * Uses round-robin-style pairing ensuring each movie appears ~4 times.
    */
   function generateSwissPairs(movies: ChallengeMovie[]): [ChallengeMovie, ChallengeMovie][] {
@@ -688,23 +696,8 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
               style={styles.shareLinkButton}
               onPress={async () => {
                 if (!user?.id) return;
-                setLoading(true);
-                const movies = await challengeService.getTopMoviesForChallenge(user.id, 10);
-                if (movies.length >= 10) {
-                  // Has enough movies — create with top 10
-                  const selectedMovies = movies.slice(0, 10);
-                  const creatorRanking = selectedMovies.map(m => m.id);
-                  const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
-                  const { challenge: c } = await challengeService.createChallenge(user.id, displayName, selectedMovies, creatorRanking);
-                  if (c) {
-                    setChallenge(c);
-                    setStep('share');
-                  }
-                } else {
-                  // Not enough — show packs
-                  setShowPacks(true);
-                }
-                setLoading(false);
+                // Sharing to unknown person — always show collection picker
+                setShowPacks(true);
               }}
             >
               <Text style={styles.shareLinkText}>share challenge link</Text>
@@ -848,12 +841,12 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
     </ScrollView>
   );
 
-  // SELECT: pick 10 movies
+  // SELECT: pick 9 movies
   const renderSelect = () => (
     <Animated.View entering={FadeIn} style={styles.fullContent}>
       <Text style={styles.sectionTitle}>pick your movies</Text>
       <Text style={styles.sectionSubtitle}>
-        {selectedIds.size}/10 selected — your friend will rank these same movies
+        {selectedIds.size}/9 selected — your friend will rank these same movies
       </Text>
 
       <ScrollView style={styles.movieGrid} contentContainerStyle={styles.movieGridContent}>
@@ -955,7 +948,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
         {challenge?.creator_name} challenged you
       </Text>
       <Text style={styles.heroSubtitle}>
-        rank {challenge?.movies.length || 10} movies and see if your taste matches
+        rank {challenge?.movies.length || 9} movies and see if your taste matches
       </Text>
 
       <TextInput
@@ -1101,8 +1094,15 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
           onPress={handleShareResults}
         >
           <Text style={styles.actionButtonTextPrimary}>
-            {copied ? 'copied!' : 'share result'}
+            {copied ? 'copied!' : 'send to another friend'}
           </Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.actionButton, { marginTop: spacing.xs, backgroundColor: 'transparent' }]}
+          onPress={() => { setStep('home'); setChallenge(null); setResults(null); }}
+        >
+          <Text style={styles.actionButtonText}>back</Text>
         </Pressable>
 
       </Animated.View>

@@ -16,7 +16,7 @@ import { useHaptics } from '../hooks/useHaptics';
 import { SettingsScreen } from './SettingsScreen';
 import { TasteProfileScreen } from './TasteProfileScreen';
 
-const MIN_COMPARISONS_FOR_TASTE_PROFILE = 100;
+const MIN_COMPARISONS_FOR_TASTE_PROFILE = 0;
 
 // Settings/gear icon
 function SettingsIcon() {

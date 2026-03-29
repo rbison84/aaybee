@@ -141,7 +141,69 @@ function computeResults(
 
 export const challengeService = {
   /**
-   * Create a friend challenge with 10 movies from the creator's rankings.
+   * Check if two users have 9+ common ranked movies.
+   * Returns the common movies if so, null if not enough.
+   */
+  getCommonMovies: async (
+    userIdA: string,
+    userIdB: string,
+    minCount: number = 9,
+  ): Promise<ChallengeMovie[] | null> => {
+    try {
+      const [{ data: moviesA }, { data: moviesB }] = await Promise.all([
+        supabase.from('user_movies').select('movie_id, beta').eq('user_id', userIdA).eq('status', 'known').order('beta', { ascending: false }),
+        supabase.from('user_movies').select('movie_id, beta').eq('user_id', userIdB).eq('status', 'known').order('beta', { ascending: false }),
+      ]);
+
+      if (!moviesA || !moviesB) return null;
+
+      const bSet = new Set(moviesB.map(m => m.movie_id));
+      const commonIds = moviesA.filter(m => bSet.has(m.movie_id)).map(m => m.movie_id);
+
+      if (commonIds.length < minCount) return null;
+
+      // Pick 9 from across the ranking spectrum (top 3, mid 3, varied 3)
+      const selected: string[] = [];
+      const third = Math.floor(commonIds.length / 3);
+
+      // Top 3
+      for (let i = 0; i < Math.min(3, commonIds.length); i++) selected.push(commonIds[i]);
+      // Mid 3
+      for (let i = third; i < Math.min(third + 3, commonIds.length); i++) {
+        if (!selected.includes(commonIds[i])) selected.push(commonIds[i]);
+      }
+      // Bottom 3
+      for (let i = commonIds.length - 3; i < commonIds.length; i++) {
+        if (i >= 0 && !selected.includes(commonIds[i])) selected.push(commonIds[i]);
+      }
+
+      // Trim to 9
+      const finalIds = selected.slice(0, 9);
+
+      // Fetch movie details
+      const { data: movieDetails } = await supabase
+        .from('movies')
+        .select('id, title, year, poster_url')
+        .in('id', finalIds);
+
+      if (!movieDetails) return null;
+
+      return finalIds.map(id => {
+        const m = movieDetails.find(d => d.id === id);
+        return {
+          id,
+          title: m?.title || 'Unknown',
+          year: m?.year || 0,
+          posterUrl: m?.poster_url || '',
+        };
+      }).filter(m => m.title !== 'Unknown');
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Create a friend challenge with movies from the creator's rankings.
    */
   createChallenge: async (
     creatorId: string | null,

@@ -41,6 +41,7 @@ import {
 } from '../utils/dailySwiss';
 import { shareService } from '../services/shareService';
 import { crewService, Crew, CrewMember, CrewDailyResult } from '../services/crewService';
+import { getMatchTier } from '../services/challengeService';
 import { useAuth } from '../contexts/AuthContext';
 
 interface DailyScreenProps {
@@ -359,9 +360,10 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
       const result = crewResults.get(firstCrew.id);
       const myResult = result?.memberResults.find(m => m.userId === user?.id);
       if (myResult) {
+        const tier = getMatchTier(myResult.alignmentPercent);
         shareText = shareText.replace(
           shareUrl || 'https://aaybee.netlify.app/daily',
-          `my crew "${firstCrew.name}": ${myResult.alignmentPercent}% aligned\n${shareUrl || 'https://aaybee.netlify.app/daily'}`
+          `my circle "${firstCrew.name}": ${myResult.alignmentPercent}% — ${tier.name}\n${shareUrl || 'https://aaybee.netlify.app/daily'}`
         );
       }
     }
@@ -488,7 +490,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
           }}
         >
           <Text style={styles.actionCardLabel}>create</Text>
-          <Text style={styles.actionCardHint}>new crew</Text>
+          <Text style={styles.actionCardHint}>new circle</Text>
         </Pressable>
         <Pressable
           style={styles.actionCard}
@@ -497,7 +499,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
           }}
         >
           <Text style={styles.actionCardLabel}>join</Text>
-          <Text style={styles.actionCardHint}>a crew</Text>
+          <Text style={styles.actionCardHint}>a circle</Text>
         </Pressable>
         <Pressable
           style={[styles.actionCard, styles.actionCardPrimary]}
@@ -513,7 +515,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
       {/* Create crew inline form */}
       {crewCreateMode && (
         <Animated.View entering={FadeIn.duration(200)} style={styles.crewInlineForm}>
-          <TextInput style={styles.crewFormInput} placeholder="crew name" placeholderTextColor={colors.textMuted}
+          <TextInput style={styles.crewFormInput} placeholder="circle name" placeholderTextColor={colors.textMuted}
             value={crewName} onChangeText={setCrewName} maxLength={30} autoFocus />
           <View style={styles.crewFormButtons}>
             <Pressable style={[styles.crewFormButton, !crewName.trim() && { opacity: 0.4 }]}
@@ -564,7 +566,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
       {crews.length > 0 && (
         <Animated.View entering={FadeInDown.delay(100)}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionLabel}>your crews</Text>
+            <Text style={styles.sectionLabel}>your circles</Text>
           </View>
 
           {crews.map(crew => {
@@ -625,7 +627,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
           <Text style={styles.crewDetailName}>{selectedCrew.name.toUpperCase()}</Text>
           <Pressable
             onPress={async () => {
-              const msg = `join my crew "${selectedCrew.name}" on aaybee! code: ${selectedCrew.code}`;
+              const msg = `join my circle "${selectedCrew.name}" on aaybee! code: ${selectedCrew.code}`;
               if (Platform.OS === 'web' && navigator?.clipboard) {
                 await navigator.clipboard.writeText(msg);
               } else {
@@ -663,7 +665,10 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
                     <Text style={styles.memberRankName}>
                       {member.userId === user?.id ? 'You' : member.displayName}
                     </Text>
-                    <Text style={styles.memberRankPercent}>{member.alignmentPercent}%</Text>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.memberRankPercent}>{member.alignmentPercent}%</Text>
+                      <Text style={styles.memberRankTier}>{getMatchTier(member.alignmentPercent).name}</Text>
+                    </View>
                   </View>
                 ))
             ) : (
@@ -673,7 +678,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
                 ) : members.filter(m => m.played_today).length < 2 ? (
                   <Text style={styles.emptyCrewText}>waiting for more members to play...</Text>
                 ) : (
-                  <Text style={styles.emptyCrewText}>play today's daily to see crew results</Text>
+                  <Text style={styles.emptyCrewText}>play today's daily to see circle results</Text>
                 )}
               </View>
             )}
@@ -708,7 +713,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
                 setSelectedCrew(null);
               }}
             >
-              <Text style={styles.leaveText}>leave crew</Text>
+              <Text style={styles.leaveText}>leave circle</Text>
             </Pressable>
           </ScrollView>
         ) : (
@@ -947,17 +952,17 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
 
           <View style={styles.resultsButtons}>
             <Pressable style={styles.copyButton} onPress={handleShareResult}>
-              <Text style={styles.copyButtonText}>Share My Result</Text>
+              <Text style={styles.copyButtonText}>send to a friend</Text>
             </Pressable>
             <Pressable style={styles.backToTodayButton} onPress={handleBackToIntro}>
-              <Text style={styles.backToTodayText}>Back to Crews</Text>
+              <Text style={styles.backToTodayText}>back</Text>
             </Pressable>
           </View>
 
           {/* Crew Results */}
           {crews.length > 0 && (
             <View style={styles.crewResultsSection}>
-              <Text style={styles.crewSectionTitle}>your crews</Text>
+              <Text style={styles.crewSectionTitle}>your circles</Text>
               {crews.map(crew => {
                 const result = crewResults.get(crew.id);
                 const members = crewMembers.get(crew.id) || [];
@@ -970,7 +975,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
                       <View style={styles.crewResultDetail}>
                         {result.hottestTaker && (
                           <Text style={styles.crewHotTake}>
-                            {result.hottestTaker.displayName} ranked #{result.hottestTaker.userRank} what the crew ranked #{result.hottestTaker.consensusRank}
+                            {result.hottestTaker.displayName} ranked #{result.hottestTaker.userRank} what the circle ranked #{result.hottestTaker.consensusRank}
                           </Text>
                         )}
                         {result.mostMainstream && (
@@ -980,7 +985,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
                         )}
                         {result.memberResults.find(m => m.userId === user?.id) && (
                           <Text style={styles.crewYourAlignment}>
-                            you: {result.memberResults.find(m => m.userId === user?.id)?.alignmentPercent}% aligned with crew
+                            you: {result.memberResults.find(m => m.userId === user?.id)?.alignmentPercent}% aligned with circle
                           </Text>
                         )}
                       </View>
@@ -1702,6 +1707,11 @@ const styles = StyleSheet.create({
   memberRankPercent: {
     ...typography.caption,
     color: colors.textMuted,
+  },
+  memberRankTier: {
+    ...typography.caption,
+    color: colors.accent,
+    fontSize: 10,
   },
   emptyCrewState: {
     paddingVertical: spacing.xl,

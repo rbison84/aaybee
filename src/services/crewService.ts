@@ -64,7 +64,7 @@ export const crewService = {
         .select('crew_id')
         .eq('user_id', userId);
       if (existing && existing.length >= MAX_CREWS_PER_USER) {
-        return { crew: null, error: `You can be in at most ${MAX_CREWS_PER_USER} crews` };
+        return { crew: null, error: `You can be in at most ${MAX_CREWS_PER_USER} circles` };
       }
 
       let code = generateCode();
@@ -86,14 +86,14 @@ export const crewService = {
         .select()
         .single();
 
-      if (error || !crew) return { crew: null, error: error?.message || 'Failed to create crew' };
+      if (error || !crew) return { crew: null, error: error?.message || 'Failed to create circle' };
 
       // Auto-join creator
       await supabase.from('crew_members').insert({ crew_id: crew.id, user_id: userId });
 
       return { crew };
     } catch (err) {
-      return { crew: null, error: 'Failed to create crew' };
+      return { crew: null, error: 'Failed to create circle' };
     }
   },
 
@@ -105,7 +105,7 @@ export const crewService = {
         .eq('code', code.toUpperCase())
         .maybeSingle();
 
-      if (!crew) return { crew: null, error: 'Crew not found' };
+      if (!crew) return { crew: null, error: 'Circle not found' };
 
       // Check member limit
       const { data: members } = await supabase
@@ -113,7 +113,7 @@ export const crewService = {
         .select('id')
         .eq('crew_id', crew.id);
       if (members && members.length >= MAX_MEMBERS) {
-        return { crew: null, error: 'Crew is full (max 20 members)' };
+        return { crew: null, error: 'Circle is full (max 20 members)' };
       }
 
       // Check user crew limit
@@ -122,7 +122,7 @@ export const crewService = {
         .select('crew_id')
         .eq('user_id', userId);
       if (userCrews && userCrews.length >= MAX_CREWS_PER_USER) {
-        return { crew: null, error: `You can be in at most ${MAX_CREWS_PER_USER} crews` };
+        return { crew: null, error: `You can be in at most ${MAX_CREWS_PER_USER} circles` };
       }
 
       const { error } = await supabase
@@ -132,7 +132,7 @@ export const crewService = {
       if (error) return { crew: null, error: error.message };
       return { crew };
     } catch (err) {
-      return { crew: null, error: 'Failed to join crew' };
+      return { crew: null, error: 'Failed to join circle' };
     }
   },
 
@@ -146,7 +146,7 @@ export const crewService = {
       }
       return {};
     } catch (err) {
-      return { error: 'Failed to leave crew' };
+      return { error: 'Failed to leave circle' };
     }
   },
 
@@ -337,4 +337,5 @@ export const crewService = {
   },
 };
 
+export const circleService = crewService;
 export default crewService;
