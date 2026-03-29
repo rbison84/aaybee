@@ -59,7 +59,7 @@ function ogHtml({
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${title}" />
   <meta name="twitter:description" content="${description}" />
-  <meta name="theme-color" content="#A78BFA" />
+  <meta name="theme-color" content="#FF4D4D" />
   <!-- Redirect humans who somehow land here -->
   <meta http-equiv="refresh" content="0;url=${url}" />
 </head>

@@ -621,7 +621,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
                 value={`https://aaybee.netlify.app/connect/${user.id}`}
                 size={140}
                 bgColor="transparent"
-                fgColor="#F5F3FF"
+                fgColor="#F5F5F5"
                 level="M"
               />
             )}
@@ -924,7 +924,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
             value={`https://aaybee.netlify.app/challenge/${challenge?.code}`}
             size={160}
             bgColor="transparent"
-            fgColor="#F5F3FF"
+            fgColor="#F5F5F5"
             level="M"
           />
         </View>

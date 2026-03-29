@@ -4,8 +4,8 @@
   "description": "Movie ranking app - compare movies to build your personal rankings",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#13111C",
-  "theme_color": "#A78BFA",
+  "background_color": "#0A0A0A",
+  "theme_color": "#FF4D4D",
   "orientation": "portrait",
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },

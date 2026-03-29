@@ -58,15 +58,15 @@ function vsImage(data: {
         flexDirection: "column" as const,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#13111C",
-        color: "#F5F3FF",
+        backgroundColor: "#0A0A0A",
+        color: "#F5F5F5",
         fontFamily: "Inter",
       },
       children: [
         {
           type: "div" as const,
           props: {
-            style: { fontSize: 32, color: "#A78BFA", marginBottom: 16 },
+            style: { fontSize: 32, color: "#FF4D4D", marginBottom: 16 },
             children: "AAYBEE VS",
           },
         },
@@ -80,7 +80,7 @@ function vsImage(data: {
         {
           type: "div" as const,
           props: {
-            style: { fontSize: 36, color: "#B8B0C9" },
+            style: { fontSize: 36, color: "#999999" },
             children: `${data.challengerName} & ${data.challengedName}`,
           },
         },
@@ -89,10 +89,10 @@ function vsImage(data: {
           props: {
             style: {
               fontSize: 24,
-              color: "#A78BFA",
+              color: "#FF4D4D",
               marginTop: 32,
               padding: "8px 24px",
-              border: "2px solid #A78BFA",
+              border: "2px solid #FF4D4D",
               borderRadius: 12,
             },
             children: `${pct}% taste match`,
@@ -124,15 +124,15 @@ function challengeImage(data: {
           flexDirection: "column" as const,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "#13111C",
-          color: "#F5F3FF",
+          backgroundColor: "#0A0A0A",
+          color: "#F5F5F5",
           fontFamily: "Inter",
         },
         children: [
           {
             type: "div" as const,
             props: {
-              style: { fontSize: 28, color: "#A78BFA", marginBottom: 16 },
+              style: { fontSize: 28, color: "#FF4D4D", marginBottom: 16 },
               children: "AAYBEE CHALLENGE",
             },
           },
@@ -146,7 +146,7 @@ function challengeImage(data: {
           {
             type: "div" as const,
             props: {
-              style: { fontSize: 32, color: "#B8B0C9", marginBottom: 32 },
+              style: { fontSize: 32, color: "#999999", marginBottom: 32 },
               children: `${data.creatorName} & ${data.challengerName}`,
             },
           },
@@ -173,15 +173,15 @@ function challengeImage(data: {
         flexDirection: "column" as const,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#13111C",
-        color: "#F5F3FF",
+        backgroundColor: "#0A0A0A",
+        color: "#F5F5F5",
         fontFamily: "Inter",
       },
       children: [
         {
           type: "div" as const,
           props: {
-            style: { fontSize: 28, color: "#A78BFA", marginBottom: 24 },
+            style: { fontSize: 28, color: "#FF4D4D", marginBottom: 24 },
             children: "AAYBEE CHALLENGE",
           },
         },
@@ -195,7 +195,7 @@ function challengeImage(data: {
         {
           type: "div" as const,
           props: {
-            style: { fontSize: 28, color: "#B8B0C9", marginBottom: 32 },
+            style: { fontSize: 28, color: "#999999", marginBottom: 32 },
             children: `Rank ${data.movieTitles.length} movies and compare your taste`,
           },
         },
@@ -227,15 +227,15 @@ function dailyImage(data: {
         flexDirection: "column" as const,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#13111C",
-        color: "#F5F3FF",
+        backgroundColor: "#0A0A0A",
+        color: "#F5F5F5",
         fontFamily: "Inter",
       },
       children: [
         {
           type: "div" as const,
           props: {
-            style: { fontSize: 28, color: "#A78BFA", marginBottom: 16 },
+            style: { fontSize: 28, color: "#FF4D4D", marginBottom: 16 },
             children: `AAYBEE DAILY #${data.dailyNumber}`,
           },
         },
@@ -249,14 +249,14 @@ function dailyImage(data: {
         {
           type: "div" as const,
           props: {
-            style: { fontSize: 32, color: "#B8B0C9", marginBottom: 24 },
+            style: { fontSize: 32, color: "#999999", marginBottom: 24 },
             children: `🎬 ${data.seenCount}/9`,
           },
         },
         {
           type: "div" as const,
           props: {
-            style: { fontSize: 28, color: "#86EFAC" },
+            style: { fontSize: 28, color: "#4ADE80" },
             children: `#1: ${data.topMovie}`,
           },
         },
@@ -276,8 +276,8 @@ function fallbackImage() {
         flexDirection: "column" as const,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#13111C",
-        color: "#F5F3FF",
+        backgroundColor: "#0A0A0A",
+        color: "#F5F5F5",
         fontFamily: "Inter",
       },
       children: [
@@ -291,7 +291,7 @@ function fallbackImage() {
         {
           type: "div" as const,
           props: {
-            style: { fontSize: 28, color: "#B8B0C9" },
+            style: { fontSize: 28, color: "#999999" },
             children: "your personal movie ranking",
           },
         },

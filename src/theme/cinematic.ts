@@ -54,52 +54,52 @@ export function webSafeTextShadow(color: string, offset: { width: number; height
 
 export const cinematic = {
   colors: {
-    // Backgrounds - Deep purple-black tones
-    background: '#13111C',        // Primary - deep purple-black
-    card: '#1E1A2E',              // Elevated muted purple
-    surface: '#262135',           // Secondary surfaces
-    overlay: 'rgba(19, 17, 28, 0.85)', // For modals (with blur)
+    // Backgrounds - True dark, neutral
+    background: '#0A0A0A',        // Near-black
+    card: '#141414',              // Elevated dark gray
+    surface: '#1A1A1A',           // Secondary surfaces
+    overlay: 'rgba(10, 10, 10, 0.85)', // For modals
 
-    // Accent (lavender family)
+    // Accent (hot coral)
     // Only for: Primary CTA, selected states, #1 badge, win indicators
-    accent: '#A78BFA',            // Soft lavender
-    accentHover: '#9678E8',       // Hover state
-    accentSubtle: 'rgba(167, 139, 250, 0.15)', // Background tint
-    accentGlow: 'rgba(167, 139, 250, 0.3)',    // Special moments
+    accent: '#FF4D4D',            // Hot coral
+    accentHover: '#FF3333',       // Hover state
+    accentSubtle: 'rgba(255, 77, 77, 0.12)', // Background tint
+    accentGlow: 'rgba(255, 77, 77, 0.25)',   // Special moments
 
-    // Neutrals - warm purple tones
-    textPrimary: '#F5F3FF',       // Warm white with lavender tint
-    textSecondary: '#B8B0C9',     // Muted lavender
-    textMuted: '#7C6F9B',         // Faded lavender
-    border: '#2D2640',            // Dusty lavender border
-    divider: '#231E35',           // Subtle divider
+    // Neutrals - clean grays
+    textPrimary: '#F5F5F5',       // Near-white
+    textSecondary: '#999999',     // Medium gray
+    textMuted: '#666666',         // Dark gray
+    border: '#222222',            // Subtle border
+    divider: '#1A1A1A',           // Subtle divider
 
     // Semantic
-    success: '#86EFAC',           // Soft mint green
-    successSubtle: 'rgba(134, 239, 172, 0.15)',
-    error: '#FCA5A5',             // Soft coral red
-    errorSubtle: 'rgba(252, 165, 165, 0.15)',
-    warning: '#FCD34D',           // Soft amber
-    warningSubtle: 'rgba(252, 211, 77, 0.15)',
+    success: '#4ADE80',           // Bold green
+    successSubtle: 'rgba(74, 222, 128, 0.12)',
+    error: '#FF6B6B',             // Bright coral (accent family)
+    errorSubtle: 'rgba(255, 107, 107, 0.12)',
+    warning: '#FCD34D',           // Amber (unchanged)
+    warningSubtle: 'rgba(252, 211, 77, 0.12)',
 
     // Ranking badges
     gold: '#E5A84B',              // Warm gold
-    silver: '#A8A3B3',            // Lavender silver
+    silver: '#A0A0A0',            // Neutral silver
     bronze: '#B8956E',            // Warm bronze
 
     // Special accents (use sparingly)
-    purple: '#A78BFA',            // Matches accent
-    purpleSubtle: 'rgba(167, 139, 250, 0.1)', // Purple tint background
+    purple: '#FF4D4D',            // Maps to accent
+    purpleSubtle: 'rgba(255, 77, 77, 0.08)',
 
     // Tab bar
-    tabBarBackground: '#13111C',
-    tabBarBorder: '#231E35',
-    tabBarActive: '#A78BFA',
-    tabBarInactive: '#7C6F9B',
+    tabBarBackground: '#0A0A0A',
+    tabBarBorder: '#1A1A1A',
+    tabBarActive: '#FF4D4D',
+    tabBarInactive: '#666666',
 
     // Glassmorphism (use sparingly - modals/overlays only)
-    glass: 'rgba(30, 26, 46, 0.85)',
-    glassBorder: 'rgba(167, 139, 250, 0.15)',
+    glass: 'rgba(20, 20, 20, 0.85)',
+    glassBorder: 'rgba(255, 77, 77, 0.12)',
 
     // Legacy color aliases (for compatibility)
     black: '#000000',
