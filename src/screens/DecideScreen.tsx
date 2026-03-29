@@ -21,12 +21,13 @@ import { useLockedFeature } from '../contexts/LockedFeatureContext';
 import { useDevSettings } from '../contexts/DevSettingsContext';
 import { useHaptics } from '../hooks/useHaptics';
 import { decideService, DecideWeights, PoolCandidate } from '../services/decideService';
+import { CURATED_PACKS, CuratedPack } from '../data/curatedPacks';
 
 import { watchlistService } from '../services/watchlistService';
 import { recommendationService, getEffectiveTier } from '../services/recommendationService';
 import { groupDecideService, DecideRoom, DecideRoomMember, GroupPreferences, MatchVote, CouplesResult } from '../services/groupDecideService';
 import { supabase } from '../services/supabase';
-import { getFullMovieDetails, getMovieTrailer, getWatchProviders, formatRuntime, getProviderLogoUrl } from '../services/tmdb';
+import { getFullMovieDetails, getMovieTrailer, getWatchProviders, formatRuntime, getProviderLogoUrl, getMoviesByIds, tmdbToAppMovie } from '../services/tmdb';
 import { CinematicBackground } from '../components/cinematic';
 import { OnboardingProgressBar } from '../components/onboarding/OnboardingProgressBar';
 import { LockedFeatureCard } from '../components/LockedFeatureCard';
@@ -394,6 +395,13 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [couplesAgreed, setCouplesAgreed] = useState<boolean | null>(null);
 
+  // Curated pack fallback state
+  const [needsPackSelection, setNeedsPackSelection] = useState(false);
+  const [selectedPack, setSelectedPack] = useState<CuratedPack | null>(null);
+
+  // Guest member ID — used when a guest joins a group room (no user.id)
+  const [guestMemberId, setGuestMemberId] = useState<string | null>(null);
+
   // Subscriptions refs
   const roomSubscription = useRef<any>(null);
   const membersSubscription = useRef<any>(null);
@@ -440,7 +448,7 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
     // Subscribe to members
     membersSubscription.current = groupDecideService.subscribeToMembers(room.id, (updatedMembers) => {
       setMembers(updatedMembers);
-      const myMember = updatedMembers.find(m => m.user_id === user?.id);
+      const myMember = updatedMembers.find(m => m.user_id === user?.id || (guestMemberId && m.id === guestMemberId));
       if (myMember) {
         setVetoesRemaining(myMember.vetoes_remaining);
       }
@@ -1082,6 +1090,10 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
     setRoom(joinedRoom);
     setRoomCode(joinedRoom.code);
     setVetoesRemaining(member?.vetoes_remaining || 1);
+    // Store member ID for guest voting (when user?.id is not available)
+    if (!user?.id && member?.id) {
+      setGuestMemberId(member.id);
+    }
     setStep('group-waiting');
   };
 
@@ -1101,13 +1113,14 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
 
   // Submit group preferences
   const submitGroupPreferences = async (finalPrefs: GroupPreferences) => {
-    if (!room?.id || !user?.id) return;
+    const effectiveUserId = user?.id || guestMemberId;
+    if (!room?.id || !effectiveUserId) return;
 
     console.log('[GroupDecide] Submitting preferences:', finalPrefs);
 
     const { success, error } = await groupDecideService.submitPreferences(
       room.id,
-      user.id,
+      effectiveUserId,
       finalPrefs
     );
 
@@ -1234,6 +1247,13 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
       moviePool = [...moviePool, ...otherEra];
     }
 
+    // Cold-start fallback: if pool is still too thin, ask host to pick a curated pack
+    if (moviePool.length < 8) {
+      setNeedsPackSelection(true);
+      setIsLoading(false);
+      return;
+    }
+
     // Start tournament — couples mode sets host as first picker
     if (room?.id) {
       const isCouplesStart = members.length === 2;
@@ -1242,6 +1262,51 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
         moviePool,
         isCouplesStart ? { couplesPickerId: room.host_id } : undefined
       );
+    }
+    setIsLoading(false);
+  };
+
+  // Handle curated pack selection (cold-start fallback)
+  const handlePackSelect = async (pack: CuratedPack) => {
+    setSelectedPack(pack);
+    setNeedsPackSelection(false);
+    setIsLoading(true);
+
+    try {
+      // Extract TMDB numeric IDs from 'tmdb-{id}' format
+      const tmdbIds = pack.movieIds.map(id => parseInt(id.replace('tmdb-', ''), 10));
+      const tmdbMovies = await getMoviesByIds(tmdbIds);
+
+      const packPool: PoolCandidate[] = tmdbMovies.map(m => {
+        const app = tmdbToAppMovie(m);
+        return {
+          id: app.id,
+          title: app.title,
+          year: app.year,
+          genres: app.genres,
+          posterUrl: app.posterUrl,
+          posterColor: app.posterColor,
+          source: 'recommendation' as const,
+          score: 0,
+        };
+      });
+
+      // Need at least 8 for a bracket; packs have 10 so take up to poolSize
+      const poolSize = members.length === 2 ? 8 : Math.min(packPool.length, 16);
+      const moviePool = packPool.slice(0, poolSize);
+
+      if (room?.id) {
+        const isCouplesStart = members.length === 2;
+        await groupDecideService.startTournament(
+          room.id,
+          moviePool,
+          isCouplesStart ? { couplesPickerId: room.host_id } : undefined
+        );
+      }
+    } catch (err) {
+      console.error('[DecideScreen] Failed to load curated pack:', err);
+      setErrorMessage('Failed to load movie pack. Try again.');
+      setNeedsPackSelection(true);
     }
     setIsLoading(false);
   };
@@ -1332,7 +1397,8 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
 
   // Handle group tournament vote
   const handleGroupTournamentVote = async (choice: 'A' | 'B') => {
-    if (!room?.id || !user?.id || hasVoted) return;
+    const effectiveUserId = user?.id || guestMemberId;
+    if (!room?.id || !effectiveUserId || hasVoted) return;
 
     setSelected(choice);
     haptics.medium();
@@ -1341,7 +1407,7 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
       room.id,
       room.current_round,
       room.current_match,
-      user.id,
+      effectiveUserId,
       choice
     );
 
@@ -1378,12 +1444,13 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
 
   // Handle veto - when in veto mode, tap a movie to veto it
   const handleVeto = async (movieId: string) => {
-    if (!room?.id || !user?.id || vetoesRemaining <= 0 || !vetoMode) return;
+    const effectiveUserId = user?.id || guestMemberId;
+    if (!room?.id || !effectiveUserId || vetoesRemaining <= 0 || !vetoMode) return;
 
     const displayName = user?.user_metadata?.display_name || 'Someone';
     const { replacement, error } = await groupDecideService.vetoMovie(
       room.id,
-      user.id,
+      effectiveUserId,
       displayName,
       movieId
     );
@@ -1424,14 +1491,21 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
     return matchVotes.length >= members.length && members.length > 0;
   }, [matchVotes.length, members.length]);
 
-  // Guest state
-  if (isGuest) {
+  // Guest state — guests can join group rooms but not use personal mode
+  const isInGroupFlow = step.startsWith('group-');
+  if (isGuest && !isInGroupFlow) {
     return (
       <CinematicBackground>
         <View style={styles.container}>
           <View style={styles.guestContainer}>
             <Text style={styles.guestTitle}>sign in required</Text>
-            <Text style={styles.guestText}>create an account to use Decide</Text>
+            <Text style={styles.guestText}>create an account to use Personal Decide</Text>
+            <Pressable
+              style={styles.guestJoinButton}
+              onPress={() => setStep('group-create')}
+            >
+              <Text style={styles.guestJoinButtonText}>Join a Group instead</Text>
+            </Pressable>
           </View>
         </View>
       </CinematicBackground>
@@ -1703,8 +1777,33 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
     );
   }
 
-  // RENDER: Group Building Pool
+  // RENDER: Group Building Pool (with curated pack fallback)
   if (step === 'group-building') {
+    if (needsPackSelection) {
+      return (
+        <CinematicBackground>
+          <View style={styles.container}>
+            <ScrollView contentContainerStyle={styles.packScrollContent}>
+              <View style={styles.packSection}>
+                <Text style={styles.packPrompt}>pick a category for your group</Text>
+                {CURATED_PACKS.map(pack => (
+                  <Pressable
+                    key={pack.id}
+                    style={styles.packCard}
+                    onPress={() => handlePackSelect(pack)}
+                    disabled={isLoading}
+                  >
+                    <Text style={styles.packTitle}>{pack.title}</Text>
+                    <Text style={styles.packSubtitle}>{pack.subtitle}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </CinematicBackground>
+      );
+    }
+
     return (
       <CinematicBackground>
         <View style={styles.container}>
@@ -3172,6 +3271,55 @@ const styles = StyleSheet.create({
   tieText: {
     color: colors.accent,
     fontWeight: '600',
+  },
+
+  // Guest join button
+  guestJoinButton: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  guestJoinButtonText: {
+    ...typography.bodyMedium,
+    color: colors.accent,
+  },
+
+  // Curated pack selection
+  packScrollContent: {
+    paddingTop: spacing.xxxl,
+    paddingBottom: spacing.xxxl,
+  },
+  packSection: {
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  packPrompt: {
+    ...typography.captionMedium,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    fontSize: 11,
+    marginBottom: spacing.sm,
+  },
+  packCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  packTitle: {
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
+  },
+  packSubtitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: 2,
   },
 });
 

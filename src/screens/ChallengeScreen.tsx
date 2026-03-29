@@ -29,6 +29,8 @@ import { OnboardingProgressBar } from '../components/onboarding/OnboardingProgre
 import { computeTasteAxes, generateComparisonSummary } from '../utils/tasteAxes';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
 import { Movie } from '../types';
+import { CURATED_PACKS, CuratedPack } from '../data/curatedPacks';
+import { supabase } from '../services/supabase';
 
 // Only import QR on web
 let QRCodeSVG: any = null;
@@ -109,6 +111,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [showPacks, setShowPacks] = useState(false);
   const [friendTopMovies, setFriendTopMovies] = useState<Map<string, { title: string }[]>>(new Map());
 
   // ============================================
@@ -186,11 +189,21 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   // ============================================
 
   const loadMoviesForSelection = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      // No user — show curated packs
+      setShowPacks(true);
+      return;
+    }
     setLoading(true);
     const movies = await challengeService.getTopMoviesForChallenge(user.id, 30);
+    if (movies.length < 10) {
+      // Not enough ranked movies — show curated packs
+      setShowPacks(false);
+      setLoading(false);
+      setShowPacks(true);
+      return;
+    }
     setAvailableMovies(movies);
-    // Auto-select top 10
     const top10 = movies.slice(0, 10).map(m => m.id);
     setSelectedIds(new Set(top10));
     setLoading(false);
@@ -430,26 +443,57 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
     if (!user?.id) return;
     setLoading(true);
     const movies = await challengeService.getTopMoviesForChallenge(user.id, 10);
-    if (movies.length < 3) {
-      setError('Need at least 3 ranked movies');
-      setLoading(false);
-      return;
-    }
-    const selectedMovies = movies.slice(0, 10);
-    const creatorRanking = selectedMovies.map(m => m.id);
-    const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
-    const { challenge: c, error: err } = await challengeService.createChallenge(
-      user.id, displayName, selectedMovies, creatorRanking,
-    );
-    if (c) {
-      setChallenge(c);
-      setStep('share');
-      haptics.success();
+    if (movies.length >= 10) {
+      const selectedMovies = movies.slice(0, 10);
+      const creatorRanking = selectedMovies.map(m => m.id);
+      const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
+      const { challenge: c, error: err } = await challengeService.createChallenge(
+        user.id, displayName, selectedMovies, creatorRanking,
+      );
+      if (c) {
+        setChallenge(c);
+        setStep('share');
+        haptics.success();
+      } else {
+        setError(err || 'Failed');
+      }
     } else {
-      setError(err || 'Failed');
+      // Not enough movies — show packs
+      setShowPacks(true);
     }
     setLoading(false);
   }, [user, haptics]);
+
+  const handleSelectPack = useCallback(async (pack: CuratedPack) => {
+    if (!user?.id) return;
+    setLoading(true);
+
+    // Fetch movie details from Supabase for the pack's movie IDs
+    const { data: movieData } = await supabase
+      .from('movies')
+      .select('id, title, year, poster_url')
+      .in('id', pack.movieIds);
+
+    if (movieData && movieData.length >= 3) {
+      const packMovies: ChallengeMovie[] = movieData.map(m => ({
+        id: m.id,
+        title: m.title,
+        year: m.year,
+        posterUrl: m.poster_url || '',
+      }));
+
+      // Don't create the challenge yet — let the user rank these movies first
+      // For a curated pack the creator doesn't have a pre-existing ranking.
+      // So we need the creator to rank them too. Set up the challenge with these movies
+      // but go to the select step so they can see what they're challenging with.
+      setAvailableMovies(packMovies);
+      setSelectedIds(new Set(packMovies.map(m => m.id)));
+      setShowPacks(false);
+      setStep('select');
+    }
+
+    setLoading(false);
+  }, [user?.id]);
 
   // ============================================
   // FRIEND ACCORDION
@@ -532,6 +576,26 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   const renderHome = () => (
     <ScrollView style={styles.homeScroll} contentContainerStyle={styles.homeScrollContent}>
       <Text style={styles.vsTitle}>VS</Text>
+
+      {/* Curated Pack Selection */}
+      {showPacks && (
+        <Animated.View entering={FadeIn.duration(200)} style={styles.packsSection}>
+          <Text style={styles.sectionLabel}>pick a category to challenge with</Text>
+          {CURATED_PACKS.map(pack => (
+            <Pressable
+              key={pack.id}
+              style={styles.packCard}
+              onPress={() => handleSelectPack(pack)}
+            >
+              <Text style={styles.packTitle}>{pack.title}</Text>
+              <Text style={styles.packSubtitle}>{pack.subtitle}</Text>
+            </Pressable>
+          ))}
+          <Pressable onPress={() => setShowPacks(false)}>
+            <Text style={styles.packCancel}>cancel</Text>
+          </Pressable>
+        </Animated.View>
+      )}
 
       {/* YOUR PEOPLE - friends leaderboard */}
       <Animated.View entering={FadeInDown.delay(100)} style={styles.sectionBlock}>
@@ -626,7 +690,8 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
                 if (!user?.id) return;
                 setLoading(true);
                 const movies = await challengeService.getTopMoviesForChallenge(user.id, 10);
-                if (movies.length >= 3) {
+                if (movies.length >= 10) {
+                  // Has enough movies — create with top 10
                   const selectedMovies = movies.slice(0, 10);
                   const creatorRanking = selectedMovies.map(m => m.id);
                   const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
@@ -635,6 +700,9 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
                     setChallenge(c);
                     setStep('share');
                   }
+                } else {
+                  // Not enough — show packs
+                  setShowPacks(true);
                 }
                 setLoading(false);
               }}
@@ -1535,4 +1603,32 @@ const styles = StyleSheet.create({
   },
   challengeRowName: { ...typography.body, color: colors.textPrimary },
   challengeRowStatus: { ...typography.caption, color: colors.textMuted },
+
+  // Curated packs
+  packsSection: {
+    marginBottom: spacing.lg,
+  },
+  packCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  packTitle: {
+    ...typography.bodyMedium,
+    color: colors.textPrimary,
+  },
+  packSubtitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  packCancel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center' as const,
+    paddingVertical: spacing.sm,
+  },
 });
