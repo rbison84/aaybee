@@ -24,8 +24,11 @@ import { challengeService, getMatchTier, ChallengeMovie, FriendChallenge, Challe
 import { shareService } from '../services/shareService';
 import { friendService, FriendWithProfile, FriendRequest, UserSearchResult } from '../services/friendService';
 import { TasteRadar } from '../components/TasteRadar';
+import { CinematicCard } from '../components/cinematic/CinematicCard';
+import { OnboardingProgressBar } from '../components/onboarding/OnboardingProgressBar';
 import { computeTasteAxes, generateComparisonSummary } from '../utils/tasteAxes';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
+import { Movie } from '../types';
 
 // Only import QR on web
 let QRCodeSVG: any = null;
@@ -79,6 +82,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   const [rankingPairs, setRankingPairs] = useState<[ChallengeMovie, ChallengeMovie][]>([]);
   const [currentPairIndex, setCurrentPairIndex] = useState(0);
   const [scores, setScores] = useState<Map<string, number>>(new Map());
+  const [rankSelected, setRankSelected] = useState<'a' | 'b' | null>(null);
 
   // Results
   const [results, setResults] = useState<ChallengeResults | null>(null);
@@ -568,6 +572,54 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
         </View>
       )}
 
+      {/* Create / Join */}
+      <View style={styles.createSection}>
+        {user?.id && (
+          <Pressable
+            style={[styles.actionButton, styles.actionButtonPrimary]}
+            onPress={loadMoviesForSelection}
+            disabled={loading}
+          >
+            <Text style={styles.actionButtonTextPrimary}>
+              {loading ? '...' : 'create challenge'}
+            </Text>
+          </Pressable>
+        )}
+
+        <View style={styles.codeInputRow}>
+          <TextInput
+            style={styles.codeInput}
+            placeholder="enter code"
+            placeholderTextColor={colors.textMuted}
+            onChangeText={(text) => {
+              const code = text.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+              if (code.length === 6) {
+                (async () => {
+                  setLoading(true);
+                  const c = await challengeService.getChallengeByCode(code);
+                  if (c) {
+                    setChallenge(c);
+                    if (c.status === 'complete' && c.results) {
+                      setResults(c.results as ChallengeResults);
+                      setStep('results');
+                    } else {
+                      setStep('name');
+                    }
+                  } else {
+                    setError('Challenge not found or expired');
+                  }
+                  setLoading(false);
+                })();
+              }
+            }}
+            maxLength={6}
+            autoCapitalize="characters"
+          />
+        </View>
+
+        {error && <Text style={styles.errorText}>{error}</Text>}
+      </View>
+
       {/* Unified Leaderboard: friends ranked by avg challenge match % */}
       {friends.length > 0 && (
         <View style={styles.sectionBlock}>
@@ -628,29 +680,6 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
         </View>
       )}
 
-      {/* Pending requests */}
-      {friendRequests.length > 0 && (
-        <View style={styles.sectionBlock}>
-          <Pressable onPress={() => setShowRequests(!showRequests)} style={styles.requestsHeader}>
-            <Text style={styles.sectionLabel}>{friendRequests.length} pending request{friendRequests.length !== 1 ? 's' : ''}</Text>
-            <Text style={styles.chevron}>{showRequests ? '\u25BE' : '\u203A'}</Text>
-          </Pressable>
-          {showRequests && friendRequests.map(req => (
-            <View key={req.id} style={styles.requestRow}>
-              <Text style={styles.requestName}>{req.from_user.display_name}</Text>
-              <View style={styles.requestActions}>
-                <Pressable style={styles.acceptButton} onPress={() => handleAcceptRequest(req.id)}>
-                  <Text style={styles.acceptText}>accept</Text>
-                </Pressable>
-                <Pressable onPress={() => handleRejectRequest(req.id)}>
-                  <Text style={styles.rejectText}>decline</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-
       {/* Active challenges */}
       {activeChallenges.filter(c => c.status !== 'complete').length > 0 && (
         <View style={styles.sectionBlock}>
@@ -680,53 +709,28 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
         </View>
       )}
 
-      {/* Create / Join */}
-      <View style={styles.createSection}>
-        {user?.id && (
-          <Pressable
-            style={[styles.actionButton, styles.actionButtonPrimary]}
-            onPress={loadMoviesForSelection}
-            disabled={loading}
-          >
-            <Text style={styles.actionButtonTextPrimary}>
-              {loading ? '...' : 'create challenge'}
-            </Text>
+      {/* Pending requests */}
+      {friendRequests.length > 0 && (
+        <View style={styles.sectionBlock}>
+          <Pressable onPress={() => setShowRequests(!showRequests)} style={styles.requestsHeader}>
+            <Text style={styles.sectionLabel}>{friendRequests.length} pending request{friendRequests.length !== 1 ? 's' : ''}</Text>
+            <Text style={styles.chevron}>{showRequests ? '\u25BE' : '\u203A'}</Text>
           </Pressable>
-        )}
-
-        <View style={styles.codeInputRow}>
-          <TextInput
-            style={styles.codeInput}
-            placeholder="enter code"
-            placeholderTextColor={colors.textMuted}
-            onChangeText={(text) => {
-              const code = text.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-              if (code.length === 6) {
-                (async () => {
-                  setLoading(true);
-                  const c = await challengeService.getChallengeByCode(code);
-                  if (c) {
-                    setChallenge(c);
-                    if (c.status === 'complete' && c.results) {
-                      setResults(c.results as ChallengeResults);
-                      setStep('results');
-                    } else {
-                      setStep('name');
-                    }
-                  } else {
-                    setError('Challenge not found or expired');
-                  }
-                  setLoading(false);
-                })();
-              }
-            }}
-            maxLength={6}
-            autoCapitalize="characters"
-          />
+          {showRequests && friendRequests.map(req => (
+            <View key={req.id} style={styles.requestRow}>
+              <Text style={styles.requestName}>{req.from_user.display_name}</Text>
+              <View style={styles.requestActions}>
+                <Pressable style={styles.acceptButton} onPress={() => handleAcceptRequest(req.id)}>
+                  <Text style={styles.acceptText}>accept</Text>
+                </Pressable>
+                <Pressable onPress={() => handleRejectRequest(req.id)}>
+                  <Text style={styles.rejectText}>decline</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
         </View>
-
-        {error && <Text style={styles.errorText}>{error}</Text>}
-      </View>
+      )}
     </ScrollView>
   );
 
@@ -871,65 +875,66 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
     </Animated.View>
   );
 
+  // Convert ChallengeMovie to Movie for CinematicCard
+  const toMovie = useCallback((cm: ChallengeMovie): Movie => ({
+    ...cm,
+    genres: [],
+    posterColor: colors.surface,
+    beta: 0,
+    totalWins: 0,
+    totalLosses: 0,
+    totalComparisons: 0,
+    timesShown: 0,
+    lastShownAt: 0,
+    status: 'uncompared',
+  }), []);
+
+  // Handle rank card selection with winner/loser animation delay
+  const handleRankSelect = useCallback((choice: 'a' | 'b', winnerId: string) => {
+    if (rankSelected) return;
+    setRankSelected(choice);
+    setTimeout(() => {
+      handlePick(winnerId);
+      setRankSelected(null);
+    }, 300);
+  }, [rankSelected, handlePick]);
+
   // RANK: pairwise comparisons
   const renderRank = () => {
     if (currentPairIndex >= rankingPairs.length) return null;
     const [movieA, movieB] = rankingPairs[currentPairIndex];
-    const progress = (currentPairIndex + 1) / rankingPairs.length;
+    const progress = rankingPairs.length > 0
+      ? currentPairIndex / rankingPairs.length
+      : 0;
 
     return (
-      <Animated.View entering={FadeIn} style={styles.fullContent}>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+      <ScrollView contentContainerStyle={styles.rankContainer}>
+        <View style={styles.comparisonContent}>
+          <Text style={styles.rankPrompt}>Which do you prefer?</Text>
+          <View style={styles.cardsRow}>
+            <CinematicCard
+              movie={toMovie(movieA)}
+              onSelect={() => handleRankSelect('a', movieA.id)}
+              disabled={rankSelected !== null}
+              isWinner={rankSelected === 'a'}
+              isLoser={rankSelected === 'b'}
+            />
+            <CinematicCard
+              movie={toMovie(movieB)}
+              onSelect={() => handleRankSelect('b', movieB.id)}
+              disabled={rankSelected !== null}
+              isWinner={rankSelected === 'b'}
+              isLoser={rankSelected === 'a'}
+            />
+          </View>
         </View>
-        <Text style={styles.progressText}>
-          {currentPairIndex + 1} / {rankingPairs.length}
-        </Text>
-
-        <Text style={styles.rankPrompt}>which do you prefer?</Text>
-
-        <View style={styles.pairContainer}>
-          <Pressable
-            style={styles.pairCard}
-            onPress={() => handlePick(movieA.id)}
-          >
-            {movieA.posterUrl ? (
-              <Image
-                source={{ uri: movieA.posterUrl }}
-                style={styles.pairPoster}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={[styles.pairPoster, styles.moviePosterPlaceholder]}>
-                <Text style={styles.moviePosterText}>{movieA.title[0]}</Text>
-              </View>
-            )}
-            <Text style={styles.pairTitle} numberOfLines={2}>{movieA.title}</Text>
-            <Text style={styles.pairYear}>{movieA.year}</Text>
-          </Pressable>
-
-          <Text style={styles.vsText}>vs</Text>
-
-          <Pressable
-            style={styles.pairCard}
-            onPress={() => handlePick(movieB.id)}
-          >
-            {movieB.posterUrl ? (
-              <Image
-                source={{ uri: movieB.posterUrl }}
-                style={styles.pairPoster}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={[styles.pairPoster, styles.moviePosterPlaceholder]}>
-                <Text style={styles.moviePosterText}>{movieB.title[0]}</Text>
-              </View>
-            )}
-            <Text style={styles.pairTitle} numberOfLines={2}>{movieB.title}</Text>
-            <Text style={styles.pairYear}>{movieB.year}</Text>
-          </Pressable>
-        </View>
-      </Animated.View>
+        <OnboardingProgressBar
+          progress={progress}
+          current={currentPairIndex}
+          total={rankingPairs.length}
+          label=""
+        />
+      </ScrollView>
     );
   };
 
@@ -1073,6 +1078,7 @@ const styles = StyleSheet.create({
 
   // Buttons
   actionButton: {
+    backgroundColor: colors.accent,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
     borderRadius: borderRadius.lg,
@@ -1222,63 +1228,26 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
 
-  // Pairwise ranking
-  progressBar: {
-    height: 3,
-    backgroundColor: colors.surface,
-    borderRadius: 2,
-    marginBottom: spacing.sm,
-    overflow: 'hidden',
+  // Pairwise ranking (matches DailyScreen comparison layout)
+  rankContainer: {
+    flexGrow: 1,
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.accent,
-    borderRadius: 2,
-  },
-  progressText: {
-    ...typography.caption,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginBottom: spacing.md,
+  comparisonContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
   },
   rankPrompt: {
-    ...typography.h3,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.lg,
-  },
-  pairContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.sm,
-  },
-  pairCard: {
-    flex: 1,
-    alignItems: 'center',
-    maxWidth: 200,
-  },
-  pairPoster: {
-    width: '100%',
-    aspectRatio: 2 / 3,
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.surface,
-  },
-  pairTitle: {
     ...typography.bodyMedium,
     color: colors.textPrimary,
     textAlign: 'center',
-    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
   },
-  pairYear: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
-  vsText: {
-    ...typography.h3,
-    color: colors.textMuted,
+  cardsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.md,
   },
 
   // Results
@@ -1401,7 +1370,7 @@ const styles = StyleSheet.create({
   searchTrigger: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: spacing.md, paddingHorizontal: spacing.md,
-    backgroundColor: colors.surface, borderRadius: borderRadius.lg,
+    backgroundColor: colors.card, borderRadius: borderRadius.lg,
     borderWidth: 1, borderColor: colors.border,
   },
   searchTriggerText: { ...typography.caption, color: colors.textMuted },
@@ -1414,7 +1383,7 @@ const styles = StyleSheet.create({
   searchResultStatus: { ...typography.caption, color: colors.textMuted },
   addButton: {
     paddingVertical: 4, paddingHorizontal: spacing.md,
-    backgroundColor: colors.accentSubtle, borderRadius: borderRadius.sm,
+    backgroundColor: colors.accentSubtle, borderRadius: borderRadius.md,
   },
   addButtonText: { ...typography.caption, color: colors.accent, fontWeight: '600' },
 
@@ -1422,13 +1391,15 @@ const styles = StyleSheet.create({
   sectionBlock: { marginTop: spacing.lg },
   sectionLabel: {
     ...typography.captionMedium, color: colors.textMuted,
-    textTransform: 'uppercase' as any, letterSpacing: 1, marginBottom: spacing.sm,
+    textTransform: 'uppercase' as any, letterSpacing: 1.5, marginBottom: spacing.sm,
+    fontSize: 11,
   },
 
   // Friend rows
   friendRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider,
+    backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md,
+    borderWidth: 1, borderColor: colors.border, marginBottom: spacing.xs,
   },
   friendInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   friendName: { ...typography.bodyMedium, color: colors.textPrimary },
@@ -1445,7 +1416,7 @@ const styles = StyleSheet.create({
   rankSpacer: { width: 24 },
   friendExpanded: {
     paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
-    backgroundColor: colors.surface, borderRadius: borderRadius.md,
+    backgroundColor: colors.card, borderRadius: borderRadius.md,
     marginBottom: spacing.xs,
   },
   friendMovies: { ...typography.caption, color: colors.textSecondary, marginBottom: spacing.xs },
@@ -1472,7 +1443,8 @@ const styles = StyleSheet.create({
   // Challenge rows
   challengeRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider,
+    backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.md,
+    borderWidth: 1, borderColor: colors.border, marginBottom: spacing.xs,
   },
   challengeRowName: { ...typography.body, color: colors.textPrimary },
   challengeRowStatus: { ...typography.caption, color: colors.textMuted },

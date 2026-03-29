@@ -2857,10 +2857,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   memberRow: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
     marginBottom: spacing.sm,
   },
   memberName: {
