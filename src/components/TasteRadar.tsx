@@ -101,7 +101,7 @@ export function TasteRadar({ axes, compareAxes, size = 240 }: TasteRadarProps) {
         {/* Data polygon */}
         <Polygon
           points={dataPolygon}
-          fill="rgba(255, 77, 77, 0.15)"
+          fill="rgba(255, 107, 43, 0.15)"
           stroke={colors.accent}
           strokeWidth={2}
         />

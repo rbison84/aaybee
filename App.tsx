@@ -56,7 +56,7 @@ import { colors, spacing, borderRadius, typography } from './src/theme/cinematic
 // Navigation types — dual-mode with contextual bottom tabs
 type AppMode = 'solo' | 'social';
 type SoloTab = 'compare' | 'rankings' | 'discover';
-type SocialTab = 'vs' | 'crews' | 'decide';
+type SocialTab = 'vs' | 'party' | 'decide';
 type TabType = SoloTab | SocialTab;
 
 function LoadingScreen() {
@@ -150,7 +150,7 @@ function TabBar({ mode, activeTab, onTabPress, lockedTabs, onLockedTabPress }: T
 
   const tabs: { key: TabType; label: string }[] = mode === 'solo'
     ? [{ key: 'compare', label: 'compare' }, { key: 'rankings', label: 'rankings' }, { key: 'discover', label: 'discover' }]
-    : [{ key: 'vs', label: 'vs' }, { key: 'crews', label: 'crews' }, { key: 'decide', label: 'decide' }];
+    : [{ key: 'vs', label: 'vs' }, { key: 'party', label: 'party' }, { key: 'decide', label: 'decide' }];
 
   return (
     <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
@@ -212,7 +212,7 @@ function DesktopSidebar({
 
   const socialTabs: { key: SocialTab; label: string }[] = [
     { key: 'vs', label: 'vs' },
-    { key: 'crews', label: 'crews' },
+    { key: 'party', label: 'party' },
     { key: 'decide', label: 'decide' },
   ];
 
@@ -491,14 +491,14 @@ function MainApp() {
       return {
         compare: true, rankings: true, discover: true,
         vs: deepLink?.type !== 'challenge',
-        crews: deepLink?.type !== 'daily',
+        party: deepLink?.type !== 'daily',
         decide: true,
       };
     }
     return {
       compare: false,
       vs: false,
-      crews: false,
+      party: false,
       rankings: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.rankings ?? 0),
       discover: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.discover ?? 0),
       decide: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.decide ?? 0),
@@ -628,7 +628,7 @@ function MainApp() {
 
     if (deepLink.type === 'daily') {
       handleModeChange('social');
-      setSocialTab('crews');
+      setSocialTab('party');
     } else if (deepLink.type === 'vs') {
       // Legacy VS links — open VS overlay (keep for backwards compat)
       closeAllOverlays();
@@ -640,7 +640,7 @@ function MainApp() {
       setChallengeInitialCode(deepLink.code);
     } else if (deepLink.type === 'share') {
       handleModeChange('social');
-      setSocialTab('crews');
+      setSocialTab('party');
     }
   }, [deepLink, isLoading, closeAllOverlays, handleModeChange]);
 
@@ -733,7 +733,7 @@ function MainApp() {
             />
           </Suspense>
         );
-      case 'crews':
+      case 'party':
         return (
           <DailyScreen />
         );

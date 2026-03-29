@@ -60,12 +60,12 @@ export const cinematic = {
     surface: '#1A1A1A',           // Secondary surfaces
     overlay: 'rgba(10, 10, 10, 0.85)', // For modals
 
-    // Accent (hot coral)
+    // Accent (electric orange)
     // Only for: Primary CTA, selected states, #1 badge, win indicators
-    accent: '#FF4D4D',            // Hot coral
-    accentHover: '#FF3333',       // Hover state
-    accentSubtle: 'rgba(255, 77, 77, 0.12)', // Background tint
-    accentGlow: 'rgba(255, 77, 77, 0.25)',   // Special moments
+    accent: '#FF6B2B',            // Electric orange
+    accentHover: '#FF5500',       // Hover state
+    accentSubtle: 'rgba(255, 107, 43, 0.12)', // Background tint
+    accentGlow: 'rgba(255, 107, 43, 0.25)',   // Special moments
 
     // Neutrals - clean grays
     textPrimary: '#F5F5F5',       // Near-white
@@ -77,8 +77,8 @@ export const cinematic = {
     // Semantic
     success: '#4ADE80',           // Bold green
     successSubtle: 'rgba(74, 222, 128, 0.12)',
-    error: '#FF6B6B',             // Bright coral (accent family)
-    errorSubtle: 'rgba(255, 107, 107, 0.12)',
+    error: '#EF4444',             // Red (distinct from accent)
+    errorSubtle: 'rgba(239, 68, 68, 0.12)',
     warning: '#FCD34D',           // Amber (unchanged)
     warningSubtle: 'rgba(252, 211, 77, 0.12)',
 
@@ -88,18 +88,18 @@ export const cinematic = {
     bronze: '#B8956E',            // Warm bronze
 
     // Special accents (use sparingly)
-    purple: '#FF4D4D',            // Maps to accent
-    purpleSubtle: 'rgba(255, 77, 77, 0.08)',
+    purple: '#FF6B2B',            // Maps to accent
+    purpleSubtle: 'rgba(255, 107, 43, 0.08)',
 
     // Tab bar
     tabBarBackground: '#0A0A0A',
     tabBarBorder: '#1A1A1A',
-    tabBarActive: '#FF4D4D',
+    tabBarActive: '#FF6B2B',
     tabBarInactive: '#666666',
 
     // Glassmorphism (use sparingly - modals/overlays only)
     glass: 'rgba(20, 20, 20, 0.85)',
-    glassBorder: 'rgba(255, 77, 77, 0.12)',
+    glassBorder: 'rgba(255, 107, 43, 0.12)',
 
     // Legacy color aliases (for compatibility)
     black: '#000000',

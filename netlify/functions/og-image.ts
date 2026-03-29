@@ -66,7 +66,7 @@ function vsImage(data: {
         {
           type: "div" as const,
           props: {
-            style: { fontSize: 32, color: "#FF4D4D", marginBottom: 16 },
+            style: { fontSize: 32, color: "#FF6B2B", marginBottom: 16 },
             children: "AAYBEE VS",
           },
         },
@@ -89,10 +89,10 @@ function vsImage(data: {
           props: {
             style: {
               fontSize: 24,
-              color: "#FF4D4D",
+              color: "#FF6B2B",
               marginTop: 32,
               padding: "8px 24px",
-              border: "2px solid #FF4D4D",
+              border: "2px solid #FF6B2B",
               borderRadius: 12,
             },
             children: `${pct}% taste match`,
@@ -132,7 +132,7 @@ function challengeImage(data: {
           {
             type: "div" as const,
             props: {
-              style: { fontSize: 28, color: "#FF4D4D", marginBottom: 16 },
+              style: { fontSize: 28, color: "#FF6B2B", marginBottom: 16 },
               children: "AAYBEE CHALLENGE",
             },
           },
@@ -181,7 +181,7 @@ function challengeImage(data: {
         {
           type: "div" as const,
           props: {
-            style: { fontSize: 28, color: "#FF4D4D", marginBottom: 24 },
+            style: { fontSize: 28, color: "#FF6B2B", marginBottom: 24 },
             children: "AAYBEE CHALLENGE",
           },
         },
@@ -235,7 +235,7 @@ function dailyImage(data: {
         {
           type: "div" as const,
           props: {
-            style: { fontSize: 28, color: "#FF4D4D", marginBottom: 16 },
+            style: { fontSize: 28, color: "#FF6B2B", marginBottom: 16 },
             children: `AAYBEE DAILY #${data.dailyNumber}`,
           },
         },

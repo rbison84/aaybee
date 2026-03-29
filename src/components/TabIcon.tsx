@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Circle, Rect, G, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { colors } from '../theme/cinematic';
 
-type TabIconName = 'compare' | 'rankings' | 'daily' | 'discover' | 'decide' | 'challenge' | 'vs' | 'crews';
+type TabIconName = 'compare' | 'rankings' | 'daily' | 'discover' | 'decide' | 'challenge' | 'vs' | 'crews' | 'party';
 
 interface TabIconProps {
   name: TabIconName;
@@ -139,76 +139,36 @@ export function TabIcon({ name, active, size = 24 }: TabIconProps) {
         </Svg>
       );
 
+    case 'party':
     case 'crews':
-      // Calendar with star - same as daily icon
+      // People/group icon
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-          {/* Calendar body */}
-          <Rect
-            x="3"
-            y="5"
-            width="18"
-            height="16"
-            rx="2"
-            stroke={color}
-            strokeWidth={strokeWidth}
-            fill="none"
-          />
-          {/* Calendar top bar */}
-          <Path
-            d="M3 9h18"
-            stroke={color}
-            strokeWidth={strokeWidth}
-          />
-          {/* Calendar hooks */}
-          <Path
-            d="M8 3v4M16 3v4"
-            stroke={color}
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-          />
-          {/* Star in center */}
-          <Path
-            d="M12 12l1.12 2.27 2.5.36-1.81 1.77.43 2.5L12 17.77l-2.24 1.18.43-2.5-1.81-1.77 2.5-.36L12 12z"
-            stroke={color}
-            strokeWidth={1.5}
-            strokeLinejoin="round"
-            fill={active ? color : 'none'}
-          />
+          {/* Center person */}
+          <Circle cx="12" cy="8" r="3" stroke={color} strokeWidth={strokeWidth} fill="none" />
+          <Path d="M6 21v-1a6 6 0 0112 0v1" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" fill="none" />
+          {/* Left person (smaller) */}
+          <Circle cx="5" cy="9" r="2" stroke={color} strokeWidth={1.5} fill="none" />
+          <Path d="M1 21v-1a4 4 0 014-4" stroke={color} strokeWidth={1.5} strokeLinecap="round" fill="none" />
+          {/* Right person (smaller) */}
+          <Circle cx="19" cy="9" r="2" stroke={color} strokeWidth={1.5} fill="none" />
+          <Path d="M23 21v-1a4 4 0 00-4-4" stroke={color} strokeWidth={1.5} strokeLinecap="round" fill="none" />
         </Svg>
       );
 
     case 'decide':
-      // Clapperboard icon for "decide what to watch"
+      // Question mark icon
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-          {/* Clapperboard base */}
-          <Rect
-            x="3"
-            y="8"
-            width="18"
-            height="12"
-            rx="2"
-            stroke={color}
-            strokeWidth={strokeWidth}
-            fill="none"
-          />
-          {/* Clapper top with stripes */}
+          <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth={strokeWidth} fill="none" />
           <Path
-            d="M4 8L8 4h8l4 4"
+            d="M9.5 9.5a2.5 2.5 0 015 0c0 1.5-2.5 2-2.5 3.5"
             stroke={color}
             strokeWidth={strokeWidth}
             strokeLinecap="round"
-            strokeLinejoin="round"
             fill="none"
           />
-          {/* Diagonal stripes on clapper */}
-          <Path
-            d="M7 4l2 4M12 4l2 4"
-            stroke={color}
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-          />
+          <Circle cx="12" cy="16.5" r="0.75" fill={color} />
         </Svg>
       );
 

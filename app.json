@@ -32,7 +32,7 @@
       "shortName": "Aaybee",
       "description": "Movie ranking app - compare movies to build your personal rankings",
       "backgroundColor": "#0A0A0A",
-      "themeColor": "#FF4D4D"
+      "themeColor": "#FF6B2B"
     },
     "plugins": [
       "expo-asset",
