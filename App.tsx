@@ -55,7 +55,7 @@ import { colors, spacing, borderRadius, typography } from './src/theme/cinematic
 // Navigation types — dual-mode with contextual bottom tabs
 type AppMode = 'solo' | 'social';
 type SoloTab = 'compare' | 'rankings' | 'discover';
-type SocialTab = 'daily' | 'challenge' | 'decide';
+type SocialTab = 'vs' | 'crews' | 'decide';
 type TabType = SoloTab | SocialTab;
 
 function LoadingScreen() {
@@ -73,7 +73,7 @@ const TAB_UNLOCK_THRESHOLDS: Partial<Record<TabType, number>> = {
   rankings: 10,
   discover: 40,
   decide: 0,
-  challenge: 0, // always unlocked
+  vs: 0, // always unlocked
 };
 
 // Mode toggle component — sits between header and screen content
@@ -149,7 +149,7 @@ function TabBar({ mode, activeTab, onTabPress, lockedTabs, onLockedTabPress }: T
 
   const tabs: { key: TabType; label: string }[] = mode === 'solo'
     ? [{ key: 'compare', label: 'compare' }, { key: 'rankings', label: 'rankings' }, { key: 'discover', label: 'discover' }]
-    : [{ key: 'daily', label: 'daily' }, { key: 'challenge', label: 'challenge' }, { key: 'decide', label: 'decide' }];
+    : [{ key: 'vs', label: 'vs' }, { key: 'crews', label: 'crews' }, { key: 'decide', label: 'decide' }];
 
   return (
     <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
@@ -210,8 +210,8 @@ function DesktopSidebar({
   ];
 
   const socialTabs: { key: SocialTab; label: string }[] = [
-    { key: 'daily', label: 'daily' },
-    { key: 'challenge', label: 'challenge' },
+    { key: 'vs', label: 'vs' },
+    { key: 'crews', label: 'crews' },
     { key: 'decide', label: 'decide' },
   ];
 
@@ -431,7 +431,7 @@ function MainApp() {
   const [showProfile, setShowProfile] = useState(false);
   const [mode, setMode] = useState<AppMode>('solo');
   const [soloTab, setSoloTab] = useState<SoloTab>('compare');
-  const [socialTab, setSocialTab] = useState<SocialTab>('daily');
+  const [socialTab, setSocialTab] = useState<SocialTab>('vs');
   const activeTab: TabType = mode === 'solo' ? soloTab : socialTab;
   const [rankingsInitialTab, setRankingsInitialTab] = useState<'yours' | 'friends' | 'global'>('yours');
   const [rankingsInitialFilter, setRankingsInitialFilter] = useState<'classic' | 'top25' | 'all'>('classic');
@@ -483,15 +483,15 @@ function MainApp() {
       // Guest mode: solo tabs locked, social tabs unlocked if deep-linked
       return {
         compare: true, rankings: true, discover: true,
-        daily: deepLink?.type !== 'daily',
-        challenge: deepLink?.type !== 'challenge',
+        vs: deepLink?.type !== 'challenge',
+        crews: deepLink?.type !== 'daily',
         decide: true,
       };
     }
     return {
       compare: false,
-      daily: false,
-      challenge: false,
+      vs: false,
+      crews: false,
       rankings: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.rankings ?? 0),
       discover: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.discover ?? 0),
       decide: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.decide ?? 0),
@@ -618,7 +618,7 @@ function MainApp() {
 
     if (deepLink.type === 'daily') {
       handleModeChange('social');
-      setSocialTab('daily');
+      setSocialTab('crews');
     } else if (deepLink.type === 'vs') {
       // Legacy VS links — open VS overlay (keep for backwards compat)
       closeAllOverlays();
@@ -626,11 +626,11 @@ function MainApp() {
       setShowVs(true);
     } else if (deepLink.type === 'challenge') {
       handleModeChange('social');
-      setSocialTab('challenge');
+      setSocialTab('vs');
       setChallengeInitialCode(deepLink.code);
     } else if (deepLink.type === 'share') {
       handleModeChange('social');
-      setSocialTab('daily');
+      setSocialTab('crews');
     }
   }, [deepLink, isLoading, closeAllOverlays, handleModeChange]);
 
@@ -646,7 +646,7 @@ function MainApp() {
     return notificationService.addNotificationResponseListener((data) => {
       if (data.type === 'vs' && data.code) {
         handleModeChange('social');
-        setSocialTab('challenge');
+        setSocialTab('vs');
         setChallengeInitialCode(data.code as string);
       }
     });
@@ -735,11 +735,11 @@ function MainApp() {
             />
           </Suspense>
         );
-      case 'daily':
+      case 'crews':
         return (
           <DailyScreen />
         );
-      case 'challenge':
+      case 'vs':
         return (
           <ChallengeScreen
             initialCode={challengeInitialCode}

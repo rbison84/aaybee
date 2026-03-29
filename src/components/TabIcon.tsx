@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Circle, Rect, G, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { colors } from '../theme/cinematic';
 
-type TabIconName = 'compare' | 'rankings' | 'daily' | 'discover' | 'decide' | 'challenge';
+type TabIconName = 'compare' | 'rankings' | 'daily' | 'discover' | 'decide' | 'challenge' | 'vs' | 'crews';
 
 interface TabIconProps {
   name: TabIconName;
@@ -125,6 +125,7 @@ export function TabIcon({ name, active, size = 24 }: TabIconProps) {
       );
 
     case 'challenge':
+    case 'vs':
       // Lightning bolt icon
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -132,6 +133,45 @@ export function TabIcon({ name, active, size = 24 }: TabIconProps) {
             d="M13 10V3L4 14h7v7l9-11h-7z"
             stroke={color}
             strokeWidth={strokeWidth}
+            strokeLinejoin="round"
+            fill={active ? color : 'none'}
+          />
+        </Svg>
+      );
+
+    case 'crews':
+      // Calendar with star - same as daily icon
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          {/* Calendar body */}
+          <Rect
+            x="3"
+            y="5"
+            width="18"
+            height="16"
+            rx="2"
+            stroke={color}
+            strokeWidth={strokeWidth}
+            fill="none"
+          />
+          {/* Calendar top bar */}
+          <Path
+            d="M3 9h18"
+            stroke={color}
+            strokeWidth={strokeWidth}
+          />
+          {/* Calendar hooks */}
+          <Path
+            d="M8 3v4M16 3v4"
+            stroke={color}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+          />
+          {/* Star in center */}
+          <Path
+            d="M12 12l1.12 2.27 2.5.36-1.81 1.77.43 2.5L12 17.77l-2.24 1.18.43-2.5-1.81-1.77 2.5-.36L12 12z"
+            stroke={color}
+            strokeWidth={1.5}
             strokeLinejoin="round"
             fill={active ? color : 'none'}
           />

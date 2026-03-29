@@ -108,6 +108,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showQr, setShowQr] = useState(false);
   const [friendTopMovies, setFriendTopMovies] = useState<Map<string, { title: string }[]>>(new Map());
 
   // ============================================
@@ -530,33 +531,41 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   // HOME: social hub with friends + challenges
   const renderHome = () => (
     <ScrollView style={styles.homeScroll} contentContainerStyle={styles.homeScrollContent}>
-      {/* Create Challenge - primary CTA */}
-      {user?.id && (
-        <Animated.View entering={FadeInDown.delay(50)}>
-          <Pressable
-            style={[styles.actionButton, styles.actionButtonPrimary, { marginTop: spacing.lg }]}
-            onPress={loadMoviesForSelection}
-            disabled={loading}
-          >
-            <Text style={styles.actionButtonTextPrimary}>
-              {loading ? '...' : 'create challenge'}
-            </Text>
-          </Pressable>
-        </Animated.View>
-      )}
+      <Text style={styles.vsTitle}>VS</Text>
 
       {/* YOUR PEOPLE - friends leaderboard */}
       <Animated.View entering={FadeInDown.delay(100)} style={styles.sectionBlock}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionLabel}>your people</Text>
           {user?.id && (
-            <Pressable onPress={() => setShowSearch(!showSearch)} style={styles.subtleAction}>
-              <Text style={styles.subtleActionText}>{showSearch ? 'done' : '\uD83D\uDD0D+'}</Text>
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable onPress={() => setShowQr(!showQr)} style={styles.subtleAction}>
+                <Text style={styles.subtleActionText}>QR</Text>
+              </Pressable>
+              <Pressable onPress={() => setShowSearch(!showSearch)} style={styles.subtleAction}>
+                <Text style={styles.subtleActionText}>+ add</Text>
+              </Pressable>
+            </View>
           )}
         </View>
 
-        {/* Inline search (shown when magnifier tapped) */}
+        {/* QR expansion */}
+        {showQr && (
+          <Animated.View entering={FadeIn.duration(200)} style={styles.qrSection}>
+            {Platform.OS === 'web' && QRCodeSVG && user?.id && (
+              <QRCodeSVG
+                value={`https://aaybee.netlify.app/connect/${user.id}`}
+                size={140}
+                bgColor="transparent"
+                fgColor="#F5F3FF"
+                level="M"
+              />
+            )}
+            <Text style={styles.qrHint}>friends can scan to add you</Text>
+          </Animated.View>
+        )}
+
+        {/* Inline search + share link (shown when + add tapped) */}
         {showSearch && (
           <Animated.View entering={FadeIn.duration(200)}>
             <TextInput
@@ -610,6 +619,28 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
               autoFocus
               autoCapitalize="none"
             />
+            {/* Share challenge link button */}
+            <Pressable
+              style={styles.shareLinkButton}
+              onPress={async () => {
+                if (!user?.id) return;
+                setLoading(true);
+                const movies = await challengeService.getTopMoviesForChallenge(user.id, 10);
+                if (movies.length >= 3) {
+                  const selectedMovies = movies.slice(0, 10);
+                  const creatorRanking = selectedMovies.map(m => m.id);
+                  const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
+                  const { challenge: c } = await challengeService.createChallenge(user.id, displayName, selectedMovies, creatorRanking);
+                  if (c) {
+                    setChallenge(c);
+                    setStep('share');
+                  }
+                }
+                setLoading(false);
+              }}
+            >
+              <Text style={styles.shareLinkText}>share challenge link</Text>
+            </Pressable>
             {/* Search results */}
             {searchResults.map(result => (
               <View key={result.id} style={styles.searchResultRow}>
@@ -1016,7 +1047,6 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
 
   return (
     <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-      {renderHeader()}
 
       {loading && step === 'home' ? (
         <View style={styles.centeredContent}>
@@ -1393,6 +1423,37 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textMuted,
     fontSize: 13,
+  },
+  vsTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    textAlign: 'center',
+    letterSpacing: 4,
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  qrSection: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  qrHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
+  shareLinkButton: {
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  shareLinkText: {
+    ...typography.caption,
+    color: colors.accent,
   },
   emptyPrompt: {
     ...typography.caption,
