@@ -48,6 +48,8 @@ import { parseDeepLink, clearDeepLink, DeepLinkIntent } from './src/utils/deepLi
 import { notificationService } from './src/services/notificationService';
 import { vsService } from './src/services/vsService';
 import { friendService } from './src/services/friendService';
+import { challengeService } from './src/services/challengeService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius, typography } from './src/theme/cinematic';
 
 // Navigation types — dual-mode with contextual bottom tabs
@@ -75,12 +77,17 @@ const TAB_UNLOCK_THRESHOLDS: Partial<Record<TabType, number>> = {
 };
 
 // Mode toggle component — sits between header and screen content
-interface ModeToggleProps {
-  mode: AppMode;
-  onModeChange: (mode: AppMode) => void;
-}
+function ModeToggle({ mode, onModeChange, socialBadge }: { mode: AppMode; onModeChange: (m: AppMode) => void; socialBadge?: boolean }) {
+  const indicatorX = useSharedValue(mode === 'solo' ? 0 : 0.5);
 
-function ModeToggle({ mode, onModeChange }: ModeToggleProps) {
+  useEffect(() => {
+    indicatorX.value = withTiming(mode === 'solo' ? 0 : 0.5, { duration: 250 });
+  }, [mode]);
+
+  const indicatorStyle = useAnimatedStyle(() => ({
+    left: `${indicatorX.value * 100}%` as any,
+  }));
+
   return (
     <View style={styles.modeToggle}>
       <Pressable
@@ -104,12 +111,10 @@ function ModeToggle({ mode, onModeChange }: ModeToggleProps) {
         ]}>
           PLAY WITH FRIENDS
         </Text>
+        {socialBadge && <View style={styles.modeBadgeDot} />}
       </Pressable>
       {/* Active indicator */}
-      <View style={[
-        styles.modeToggleIndicator,
-        mode === 'social' ? { left: '50%' } : { left: 0 },
-      ] as any} />
+      <Animated.View style={[styles.modeToggleIndicator, indicatorStyle]} />
     </View>
   );
 }
@@ -440,6 +445,32 @@ function MainApp() {
   const [rankingReveal, setRankingReveal] = useState<'classic' | 'top25' | 'all' | null>(null);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
 
+  // Load persisted mode on mount + smart default landing
+  useEffect(() => {
+    (async () => {
+      const saved = await AsyncStorage.getItem('aaybee_mode');
+      if (saved === 'solo' || saved === 'social') {
+        setMode(saved);
+      }
+      // If user has pending social activity, override to social
+      if (user?.id) {
+        const [friendChallenges] = await Promise.all([
+          challengeService.getMyActiveChallenges(user.id),
+        ]);
+        const hasPending = friendChallenges.some(c =>
+          (c.status === 'active' && c.challenger_id === user.id)
+        );
+        if (hasPending) setMode('social');
+      }
+    })();
+  }, [user?.id]);
+
+  // Save mode on change
+  const handleModeChange = useCallback((newMode: AppMode) => {
+    setMode(newMode);
+    AsyncStorage.setItem('aaybee_mode', newMode).catch(() => {});
+  }, []);
+
   // Deep link: parse URL on mount
   const [deepLink] = useState<DeepLinkIntent>(() => parseDeepLink());
 
@@ -507,10 +538,10 @@ function MainApp() {
     } else {
       setRankingsInitialFilter('all');
     }
-    setMode('solo');
+    handleModeChange('solo');
     setSoloTab('rankings');
     setRankingReveal(null);
-  }, [rankingReveal]);
+  }, [rankingReveal, handleModeChange]);
 
   const handleRevealDismiss = useCallback(() => {
     setRankingReveal(null);
@@ -558,13 +589,13 @@ function MainApp() {
     // Restore previous tab in the correct mode
     const soloTabsList: TabType[] = ['compare', 'rankings', 'discover'];
     if (soloTabsList.includes(tabBeforeProfile)) {
-      setMode('solo');
+      handleModeChange('solo');
       setSoloTab(tabBeforeProfile as SoloTab);
     } else {
-      setMode('social');
+      handleModeChange('social');
       setSocialTab(tabBeforeProfile as SocialTab);
     }
-  }, [tabBeforeProfile]);
+  }, [tabBeforeProfile, handleModeChange]);
 
   // Track if onboarding just completed (went from false to true)
   const prevOnboardingComplete = useRef(hasCompletedOnboarding);
@@ -572,11 +603,11 @@ function MainApp() {
     // Only reset when onboarding JUST completed (false -> true)
     if (hasCompletedOnboarding && !prevOnboardingComplete.current) {
       setShowProfile(false);
-      setMode('solo');
+      handleModeChange('solo');
       setSoloTab('compare');
     }
     prevOnboardingComplete.current = hasCompletedOnboarding;
-  }, [hasCompletedOnboarding]);
+  }, [hasCompletedOnboarding, handleModeChange]);
 
   // Deep link: consume after app is ready (no onboarding required)
   const deepLinkConsumed = useRef(false);
@@ -586,7 +617,7 @@ function MainApp() {
     clearDeepLink();
 
     if (deepLink.type === 'daily') {
-      setMode('social');
+      handleModeChange('social');
       setSocialTab('daily');
     } else if (deepLink.type === 'vs') {
       // Legacy VS links — open VS overlay (keep for backwards compat)
@@ -594,14 +625,14 @@ function MainApp() {
       setVsInitialCode(deepLink.code);
       setShowVs(true);
     } else if (deepLink.type === 'challenge') {
-      setMode('social');
+      handleModeChange('social');
       setSocialTab('challenge');
       setChallengeInitialCode(deepLink.code);
     } else if (deepLink.type === 'share') {
-      setMode('social');
+      handleModeChange('social');
       setSocialTab('daily');
     }
-  }, [deepLink, isLoading, closeAllOverlays]);
+  }, [deepLink, isLoading, closeAllOverlays, handleModeChange]);
 
   // Register for push notifications when user is authenticated
   useEffect(() => {
@@ -610,16 +641,16 @@ function MainApp() {
     }
   }, [user?.id]);
 
-  // Handle notification taps — open VS challenge
+  // Handle notification taps — route to challenge tab
   useEffect(() => {
     return notificationService.addNotificationResponseListener((data) => {
       if (data.type === 'vs' && data.code) {
-        closeAllOverlays();
-        setVsInitialCode(data.code as string);
-        setShowVs(true);
+        handleModeChange('social');
+        setSocialTab('challenge');
+        setChallengeInitialCode(data.code as string);
       }
     });
-  }, [closeAllOverlays]);
+  }, [handleModeChange]);
 
   // Check for pending notifications (VS challenges + friend requests)
   const [pendingChallengeCount, setPendingChallengeCount] = useState(0);
@@ -627,16 +658,21 @@ function MainApp() {
     if (!user?.id) return;
     let mounted = true;
     const checkPending = async () => {
-      const [challenges, friendRequests] = await Promise.all([
+      const [challenges, friendRequests, friendChallenges] = await Promise.all([
         vsService.getMyChallenges(user.id),
         friendService.getPendingRequests(user.id),
+        challengeService.getMyActiveChallenges(user.id),
       ]);
       const pendingVs = challenges.filter(c =>
         (c.status === 'selecting' && c.challenged_id === user.id) ||
         (c.status === 'challenged_comparing' && c.challenged_id === user.id) ||
         (c.status === 'challenger_comparing' && c.challenger_id === user.id)
       );
-      if (mounted) setPendingChallengeCount(pendingVs.length + friendRequests.length);
+      const pendingFriendChallenges = friendChallenges.filter(c =>
+        (c.status === 'pending' && c.creator_id === user.id) || // waiting for friend
+        (c.status === 'active' && c.challenger_id === user.id) // friend sent you one
+      );
+      if (mounted) setPendingChallengeCount(pendingVs.length + friendRequests.length + pendingFriendChallenges.length);
     };
     checkPending();
     const interval = setInterval(checkPending, 30000);
@@ -678,9 +714,9 @@ function MainApp() {
       case 'compare':
         return (
           <ComparisonScreen
-            onOpenRanking={() => { setMode('solo'); setSoloTab('rankings'); }}
-            onOpenDiscover={() => { setMode('solo'); setSoloTab('discover'); }}
-            onOpenDecide={() => { setMode('social'); setSocialTab('decide'); }}
+            onOpenRanking={() => { handleModeChange('solo'); setSoloTab('rankings'); }}
+            onOpenDiscover={() => { handleModeChange('solo'); setSoloTab('discover'); }}
+            onOpenDecide={() => { handleModeChange('social'); setSocialTab('decide'); }}
             onOpenAuth={() => setShowAuth(true)}
             onOpenProfile={handleOpenProfile}
             onOpenTop10Search={navigateToTop10Search}
@@ -692,7 +728,7 @@ function MainApp() {
         return (
           <Suspense fallback={<LoadingScreen />}>
             <UnifiedRankingsScreen
-              onContinueComparing={() => { setMode('solo'); setSoloTab('compare'); }}
+              onContinueComparing={() => { handleModeChange('solo'); setSoloTab('compare'); }}
               onOpenAaybee100={() => { closeAllOverlays(); setShowAaybee100(true); }}
               initialTab={rankingsInitialTab}
               initialFilter={rankingsInitialFilter}
@@ -706,7 +742,6 @@ function MainApp() {
       case 'challenge':
         return (
           <ChallengeScreen
-            onClose={() => {}} // no-op since it's a tab now, not an overlay
             initialCode={challengeInitialCode}
           />
         );
@@ -714,20 +749,20 @@ function MainApp() {
         return (
           <Suspense fallback={<LoadingScreen />}>
             <DiscoverScreen
-              onNavigateToCompare={() => { setMode('solo'); setSoloTab('compare'); }}
+              onNavigateToCompare={() => { handleModeChange('solo'); setSoloTab('compare'); }}
             />
           </Suspense>
         );
       case 'decide':
         return (
-          <DecideScreen onNavigateToCompare={() => { setMode('solo'); setSoloTab('compare'); }} />
+          <DecideScreen onNavigateToCompare={() => { handleModeChange('solo'); setSoloTab('compare'); }} />
         );
       default:
         return (
           <ComparisonScreen
-            onOpenRanking={() => { setMode('solo'); setSoloTab('rankings'); }}
-            onOpenDiscover={() => { setMode('solo'); setSoloTab('discover'); }}
-            onOpenDecide={() => { setMode('social'); setSocialTab('decide'); }}
+            onOpenRanking={() => { handleModeChange('solo'); setSoloTab('rankings'); }}
+            onOpenDiscover={() => { handleModeChange('solo'); setSoloTab('discover'); }}
+            onOpenDecide={() => { handleModeChange('social'); setSocialTab('decide'); }}
             onOpenAuth={() => setShowAuth(true)}
             onOpenProfile={handleOpenProfile}
             onOpenTop10Search={navigateToTop10Search}
@@ -807,7 +842,7 @@ function MainApp() {
             <DesktopSidebar
               activeTab={activeTab}
               mode={mode}
-              onModeChange={setMode}
+              onModeChange={handleModeChange}
               onTabPress={handleTabPress}
               lockedTabs={lockedTabs}
               onLockedTabPress={handleLockedTabPress}
@@ -844,7 +879,7 @@ function MainApp() {
 
           {/* Mode toggle (mobile/tablet only) */}
           {!isGuestMode && (
-            <ModeToggle mode={mode} onModeChange={setMode} />
+            <ModeToggle mode={mode} onModeChange={handleModeChange} socialBadge={pendingChallengeCount > 0} />
           )}
 
           {screenContent}
@@ -1016,6 +1051,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     width: '50%',
   } as any,
+  modeBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.lg,
+  },
   // Tab Bar - 3 contextual tabs
   tabBar: {
     flexDirection: 'row',

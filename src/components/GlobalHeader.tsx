@@ -20,28 +20,6 @@ function SearchIcon({ size = 20, color = colors.textMuted }: { size?: number; co
   );
 }
 
-function GridIcon({ size = 20, color = colors.textMuted }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
-      <Path
-        d="M1 1h3v3H1zM6 1h3v3H6zM11 1h3v3h-3zM16 1h3v3h-3zM1 6h3v3H1zM6 6h3v3H6zM11 6h3v3h-3zM16 6h3v3h-3zM1 11h3v3H1zM6 11h3v3H6zM11 11h3v3h-3zM16 11h3v3h-3zM1 16h3v3H1zM6 16h3v3H6zM11 16h3v3h-3zM16 16h3v3h-3z"
-        fill={color}
-      />
-    </Svg>
-  );
-}
-
-function ChallengeIcon({ size = 20, color = colors.textMuted }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M13 10V3L4 14h7v7l9-11h-7z"
-        fill={color}
-      />
-    </Svg>
-  );
-}
-
 function PersonIcon({ size = 18, color = colors.textMuted }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

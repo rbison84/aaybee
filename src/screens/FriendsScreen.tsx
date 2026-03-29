@@ -26,6 +26,8 @@ import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
 import { CinematicBackground, CinematicButton } from '../components/cinematic';
 import { UnderlineTabs } from '../components/UnderlineTabs';
 import { Genre } from '../types';
+import { TasteRadar } from '../components/TasteRadar';
+import { computeTasteAxes, generateComparisonSummary, TasteAxes } from '../utils/tasteAxes';
 
 type TabType = 'find' | 'vs' | 'invite';
 
@@ -62,6 +64,7 @@ interface FriendProfileModalProps {
 
 function FriendProfileModal({ visible, onClose, friend, currentUserId, onChallenge }: FriendProfileModalProps) {
   const { openMovieDetail } = useMovieDetail();
+  const { getRankedMovies } = useAppStore();
   const [rankings, setRankings] = useState<FriendRanking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -90,6 +93,29 @@ function FriendProfileModal({ visible, onClose, friend, currentUserId, onChallen
       topDirectors: [...directorCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]),
     };
   }, [rankings]);
+
+  // Compute taste axes for radar comparison
+  const { friendAxes, myAxes } = useMemo(() => {
+    if (rankings.length < 5) return { friendAxes: null, myAxes: null };
+
+    const friendMovies = rankings.slice(0, 30).map(r => ({
+      year: r.year,
+      genres: (r.genres || []) as string[],
+      userBeta: r.beta,
+    }));
+    const fAxes = computeTasteAxes(friendMovies);
+
+    const myRanked = getRankedMovies().slice(0, 30);
+    if (myRanked.length < 5) return { friendAxes: fAxes, myAxes: null };
+    const myMovies = myRanked.map(m => ({
+      year: m.year,
+      genres: m.genres as string[],
+      userBeta: m.beta,
+    }));
+    const mAxes = computeTasteAxes(myMovies);
+
+    return { friendAxes: fAxes, myAxes: mAxes };
+  }, [rankings, getRankedMovies]);
 
   const handleMoviePress = useCallback((movie: FriendRanking) => {
     openMovieDetail({
@@ -191,7 +217,17 @@ function FriendProfileModal({ visible, onClose, friend, currentUserId, onChallen
               </Animated.View>
             )}
 
-            {/* TODO: Add taste comparison radar when friend movie data includes genres */}
+            {/* Taste comparison radar */}
+            {friendAxes && myAxes && (
+              <Animated.View entering={FadeInDown.delay(125)} style={profileStyles.section}>
+                <View style={{ alignItems: 'center', marginVertical: spacing.md }}>
+                  <TasteRadar axes={myAxes} compareAxes={friendAxes} size={200} />
+                  <Text style={{ ...typography.caption, color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' }}>
+                    {generateComparisonSummary(myAxes, friendAxes)}
+                  </Text>
+                </View>
+              </Animated.View>
+            )}
 
             {/* TOP DIRECTORS */}
             {topDirectors.length > 0 && (

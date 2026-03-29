@@ -74,6 +74,12 @@ export const crewService = {
         code = generateCode();
       }
 
+      // Verify code is unique
+      const { data: finalCheck } = await supabase.from('crews').select('id').eq('code', code).maybeSingle();
+      if (finalCheck) {
+        return { crew: null, error: 'Could not generate unique code. Please try again.' };
+      }
+
       const { data: crew, error } = await supabase
         .from('crews')
         .insert({ code, name: name.trim(), creator_id: userId })

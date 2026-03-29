@@ -166,6 +166,12 @@ export const challengeService = {
         code = generateCode();
       }
 
+      // Verify code is unique
+      const { data: finalCheck } = await supabase.from('friend_challenges').select('id').eq('code', code).maybeSingle();
+      if (finalCheck) {
+        return { challenge: null, error: 'Could not generate unique code. Please try again.' };
+      }
+
       const { data: challenge, error } = await supabase
         .from('friend_challenges')
         .insert({

@@ -341,7 +341,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
       grid,
     );
 
-    const shareText = generateShareText(
+    let shareText = generateShareText(
       dailyNumber,
       activeCategory.title,
       grid,
@@ -352,6 +352,19 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
       hotTake,
       shareUrl,
     );
+
+    // Add crew context if in crews
+    if (crews.length > 0) {
+      const firstCrew = crews[0];
+      const result = crewResults.get(firstCrew.id);
+      const myResult = result?.memberResults.find(m => m.userId === user?.id);
+      if (myResult) {
+        shareText = shareText.replace(
+          shareUrl || 'https://aaybee.netlify.app/daily',
+          `my crew "${firstCrew.name}": ${myResult.alignmentPercent}% aligned\n${shareUrl || 'https://aaybee.netlify.app/daily'}`
+        );
+      }
+    }
 
     try {
       if (Platform.OS === 'web' && navigator?.share) {
@@ -368,7 +381,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
         console.error('Share failed:', err);
       }
     }
-  }, [activeCategory, fullRanking, swissState, dailyNumber, movies, haptics]);
+  }, [activeCategory, fullRanking, swissState, dailyNumber, movies, haptics, crews, crewResults, user?.id]);
 
   // Handle share collection
   const handleShareCollection = useCallback(async () => {

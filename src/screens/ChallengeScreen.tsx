@@ -45,7 +45,6 @@ type ChallengeStep =
   | 'results';   // Match results
 
 interface ChallengeScreenProps {
-  onClose: () => void;
   initialCode?: string;
 }
 
@@ -53,7 +52,7 @@ interface ChallengeScreenProps {
 // COMPONENT
 // ============================================
 
-export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) {
+export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { isDesktop, isWeb } = useAppDimensions();
@@ -404,11 +403,7 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
 
   const renderHeader = () => (
     <View style={[styles.header, { paddingTop: Math.max(insets.top, spacing.md) }]}>
-      <Pressable onPress={onClose} style={styles.closeButton}>
-        <Text style={styles.closeText}>✕</Text>
-      </Pressable>
       <Text style={styles.headerTitle}>challenge</Text>
-      <View style={styles.closeButton} />
     </View>
   );
 
@@ -796,12 +791,6 @@ export function ChallengeScreen({ onClose, initialCode }: ChallengeScreenProps) 
           </Text>
         </Pressable>
 
-        <Pressable
-          style={[styles.actionButton, { marginTop: spacing.sm, backgroundColor: colors.surface }]}
-          onPress={onClose}
-        >
-          <Text style={styles.actionButtonText}>done</Text>
-        </Pressable>
       </Animated.View>
     );
   };

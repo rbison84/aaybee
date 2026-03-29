@@ -9,6 +9,7 @@ export type DeepLinkIntent =
   | { type: 'daily' }
   | { type: 'challenge'; code: string }
   | { type: 'share'; code: string }
+  | { type: 'crew'; code: string }
   | null;
 
 // ============================================
@@ -41,6 +42,12 @@ export function parseDeepLink(): DeepLinkIntent {
     const shareMatch = path.match(/^\/share\/([a-z0-9]{4,8})$/i);
     if (shareMatch) {
       return { type: 'share', code: shareMatch[1].toUpperCase() };
+    }
+
+    // /crew/CODE
+    const crewMatch = path.match(/^\/crew\/([a-z0-9]{4,8})$/i);
+    if (crewMatch) {
+      return { type: 'crew', code: crewMatch[1].toUpperCase() };
     }
 
     // /daily
