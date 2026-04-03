@@ -78,45 +78,34 @@ const TAB_UNLOCK_THRESHOLDS: Partial<Record<TabType, number>> = {
   vs: 0, // always unlocked
 };
 
-// Mode toggle component — sits between header and screen content
-function ModeToggle({ mode, onModeChange, socialBadge }: { mode: AppMode; onModeChange: (m: AppMode) => void; socialBadge?: boolean }) {
-  const indicatorX = useSharedValue(mode === 'social' ? 0 : 0.5);
+// Mode toggle pill — compact, sits above bottom tabs
+function ModeTogglePill({ mode, onModeChange, socialBadge }: { mode: AppMode; onModeChange: (m: AppMode) => void; socialBadge?: boolean }) {
+  const indicatorX = useSharedValue(mode === 'social' ? 0 : 1);
 
   useEffect(() => {
-    indicatorX.value = withTiming(mode === 'social' ? 0 : 0.5, { duration: 250 });
+    indicatorX.value = withTiming(mode === 'social' ? 0 : 1, { duration: 200 });
   }, [mode]);
 
   const indicatorStyle = useAnimatedStyle(() => ({
-    left: `${indicatorX.value * 100}%` as any,
+    left: `${indicatorX.value * 50}%` as any,
   }));
 
   return (
-    <View style={styles.modeToggle}>
-      <Pressable
-        style={styles.modeToggleItem}
-        onPress={() => onModeChange('social')}
-      >
-        <Text style={[
-          styles.modeToggleText,
-          mode === 'social' && styles.modeToggleTextActive,
-        ]}>
-          ▶ PLAY
-        </Text>
-        {socialBadge && <View style={styles.modeBadgeDot} />}
-      </Pressable>
-      <Pressable
-        style={styles.modeToggleItem}
-        onPress={() => onModeChange('solo')}
-      >
-        <Text style={[
-          styles.modeToggleText,
-          mode === 'solo' && styles.modeToggleTextActive,
-        ]}>
-          ✦ FOR YOU
-        </Text>
-      </Pressable>
-      {/* Active indicator */}
-      <Animated.View style={[styles.modeToggleIndicator, indicatorStyle]} />
+    <View style={styles.modePill}>
+      <View style={styles.modePillInner}>
+        <Animated.View style={[styles.modePillIndicator, indicatorStyle]} />
+        <Pressable style={styles.modePillItem} onPress={() => onModeChange('social')}>
+          <Text style={[styles.modePillText, mode === 'social' && styles.modePillTextActive]}>
+            ▶ PLAY
+          </Text>
+          {socialBadge && mode !== 'social' && <View style={styles.modePillBadge} />}
+        </Pressable>
+        <Pressable style={styles.modePillItem} onPress={() => onModeChange('solo')}>
+          <Text style={[styles.modePillText, mode === 'solo' && styles.modePillTextActive]}>
+            ✦ FOR YOU
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -870,14 +859,12 @@ function MainApp() {
             />
           )}
 
-          {/* Mode toggle (mobile/tablet only) */}
-          {!isGuestMode && (
-            <ModeToggle mode={mode} onModeChange={handleModeChange} socialBadge={pendingChallengeCount > 0} />
-          )}
-
           {screenContent}
 
-          {/* Bottom Tab Bar (mobile/tablet only) */}
+          {/* Bottom navigation: pill toggle + tabs */}
+          {!isGuestMode && (
+            <ModeTogglePill mode={mode} onModeChange={handleModeChange} socialBadge={pendingChallengeCount > 0} />
+          )}
           <TabBar
             mode={mode}
             activeTab={activeTab}
@@ -1028,44 +1015,56 @@ const styles = StyleSheet.create({
   loadingSpinner: {
     marginTop: spacing.sm,
   },
-  // Mode toggle
-  modeToggle: {
-    flexDirection: 'row',
+  // Mode toggle pill — compact, above tab bar
+  modePill: {
+    alignItems: 'center',
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
     backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.tabBarBorder,
   },
-  modeToggleItem: {
+  modePillInner: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    position: 'relative',
+    width: '60%',
+    maxWidth: 240,
+  } as any,
+  modePillItem: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
+    zIndex: 1,
   },
-  modeToggleText: {
+  modePillText: {
     ...typography.captionMedium,
     color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    fontSize: 11,
+    fontSize: 10,
   } as any,
-  modeToggleTextActive: {
+  modePillTextActive: {
     color: colors.textPrimary,
   },
-  modeToggleIndicator: {
+  modePillIndicator: {
     position: 'absolute',
+    top: 0,
     bottom: 0,
-    height: 2,
-    backgroundColor: colors.accent,
     width: '50%',
+    backgroundColor: colors.surface,
+    borderRadius: 20,
   } as any,
-  modeBadgeDot: {
-    width: 6,
-    height: 6,
+  modePillBadge: {
+    width: 5,
+    height: 5,
     borderRadius: 3,
     backgroundColor: colors.accent,
     position: 'absolute',
-    top: spacing.sm,
-    right: spacing.lg,
-  },
+    top: 4,
+    right: '15%',
+  } as any,
   // Tab Bar - 3 contextual tabs
   tabBar: {
     flexDirection: 'row',
