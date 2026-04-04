@@ -43,6 +43,8 @@ import { shareService } from '../services/shareService';
 import { crewService, Crew, CrewMember, CrewDailyResult } from '../services/crewService';
 import { getMatchTier } from '../services/challengeService';
 import { useAuth } from '../contexts/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../services/supabase';
 
 // Only import QR on web
 let QRCodeSVG: any = null;
@@ -102,6 +104,23 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
   const { movies, recordComparison, undoLastComparison } = useAppStore();
   const haptics = useHaptics();
   const { user } = useAuth();
+  const [guestId, setGuestId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) {
+      // Generate or retrieve a guest ID for ephemeral circle membership
+      AsyncStorage.getItem('aaybee_guest_id').then(stored => {
+        if (stored) {
+          setGuestId(stored);
+        } else {
+          const id = 'guest-' + Math.random().toString(36).slice(2, 10);
+          AsyncStorage.setItem('aaybee_guest_id', id);
+          setGuestId(id);
+        }
+      });
+    }
+  }, [user?.id]);
+
   const [crews, setCrews] = useState<Crew[]>([]);
   const [crewResults, setCrewResults] = useState<Map<string, CrewDailyResult>>(new Map());
   const [crewMembers, setCrewMembers] = useState<Map<string, CrewMember[]>>(new Map());
@@ -138,13 +157,22 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
 
   // Load crews and members on mount
   useEffect(() => {
-    if (!user?.id) return;
     (async () => {
-      const myCrews = await crewService.getMyCrews(user.id);
-      setCrews(myCrews);
-      for (const crew of myCrews) {
-        const members = await crewService.getCrewMembers(crew.id, dailyNumber);
-        setCrewMembers(prev => new Map(prev).set(crew.id, members));
+      if (user?.id) {
+        const myCrews = await crewService.getMyCrews(user.id);
+        setCrews(myCrews);
+        for (const crew of myCrews) {
+          const members = await crewService.getCrewMembers(crew.id, dailyNumber);
+          setCrewMembers(prev => new Map(prev).set(crew.id, members));
+        }
+      } else {
+        // Guest: load locally stored circles
+        const localCircles = JSON.parse(await AsyncStorage.getItem('aaybee_guest_circles') || '[]');
+        if (localCircles.length > 0) {
+          const codes = localCircles.map((c: any) => c.code);
+          const { data: crewData } = await supabase.from('crews').select('*').in('code', codes);
+          if (crewData) setCrews(crewData);
+        }
       }
     })();
   }, [user?.id, dailyNumber]);
@@ -267,21 +295,25 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     setCollections(updatedCollections);
 
     // Submit to crews
-    if (user?.id && crews.length > 0 && ranking) {
+    const effectiveUserId = user?.id || guestId;
+    if (effectiveUserId && crews.length > 0 && ranking) {
       for (const crew of crews) {
-        crewService.submitDailyPick(crew.id, user.id, dailyNumber, ranking);
-        // Load results
-        crewService.getCrewDailyResults(crew.id, dailyNumber).then(result => {
-          if (result) {
-            setCrewResults(prev => new Map(prev).set(crew.id, result));
-          }
-        });
-        crewService.getCrewMembers(crew.id, dailyNumber).then(members => {
-          setCrewMembers(prev => new Map(prev).set(crew.id, members));
-        });
+        if (user?.id) {
+          // Authenticated: submit to server
+          crewService.submitDailyPick(crew.id, user.id, dailyNumber, ranking);
+          crewService.getCrewDailyResults(crew.id, dailyNumber).then(result => {
+            if (result) {
+              setCrewResults(prev => new Map(prev).set(crew.id, result));
+            }
+          });
+          crewService.getCrewMembers(crew.id, dailyNumber).then(members => {
+            setCrewMembers(prev => new Map(prev).set(crew.id, members));
+          });
+        }
+        // Guest picks stored locally — will be submitted on signup
       }
     }
-  }, [activeCategoryId, activeCategory, dailyNumber, user?.id, crews]);
+  }, [activeCategoryId, activeCategory, dailyNumber, user?.id, guestId, crews]);
 
   // Handle comparison selection
   const handleSelect = useCallback((winnerId: string, loserId: string) => {
@@ -494,7 +526,11 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
         <Pressable
           style={styles.actionCard}
           onPress={() => {
-            if (user?.id) setCrewCreateMode(true);
+            if (!user?.id) {
+              setCrewError('sign in to create a circle');
+              return;
+            }
+            setCrewCreateMode(true);
           }}
         >
           <Text style={styles.actionCardLabel}>create</Text>
@@ -503,7 +539,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
         <Pressable
           style={styles.actionCard}
           onPress={() => {
-            if (user?.id) setCrewJoinMode(true);
+            setCrewJoinMode(true);
           }}
         >
           <Text style={styles.actionCardLabel}>join</Text>
@@ -552,8 +588,24 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
           <View style={styles.crewFormButtons}>
             <Pressable style={[styles.crewFormButton, crewJoinCode.length < 6 && { opacity: 0.4 }]}
               onPress={async () => {
-                if (!user?.id || crewJoinCode.length < 6) return;
+                if (crewJoinCode.length < 6) return;
                 setCrewLoading(true);
+                if (!user?.id) {
+                  // Guest: store circle membership locally
+                  const localCircles = JSON.parse(await AsyncStorage.getItem('aaybee_guest_circles') || '[]');
+                  localCircles.push({ code: crewJoinCode.toUpperCase(), joinedAt: Date.now() });
+                  await AsyncStorage.setItem('aaybee_guest_circles', JSON.stringify(localCircles));
+                  const { data: crewData } = await supabase.from('crews').select('*').eq('code', crewJoinCode.toUpperCase()).maybeSingle();
+                  if (crewData) {
+                    setCrews(prev => [...prev, crewData]);
+                    setCrewJoinCode('');
+                    setCrewJoinMode(false);
+                  } else {
+                    setCrewError('Circle not found');
+                  }
+                  setCrewLoading(false);
+                  return;
+                }
                 const { crew, error } = await crewService.joinCrew(user.id, crewJoinCode);
                 if (crew) { setCrews(prev => [...prev, crew]); setCrewJoinCode(''); setCrewJoinMode(false); }
                 if (error) setCrewError(error);

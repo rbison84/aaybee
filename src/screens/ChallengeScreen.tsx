@@ -227,7 +227,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   }, [haptics]);
 
   const createChallenge = useCallback(async () => {
-    if (!user?.id || selectedIds.size < 3) return;
+    if (selectedIds.size < 3) return;
     setLoading(true);
     setError(null);
 
@@ -235,11 +235,13 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
     // Creator ranking is the order they appear in (by beta score, already sorted)
     const creatorRanking = selectedMovies.map(m => m.id);
 
-    // Get display name
-    const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
+    // Get display name — guests use challengerName or 'Guest'
+    const displayName = user?.id
+      ? (user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan')
+      : (challengerName || 'Guest');
 
     const { challenge: c, error: err } = await challengeService.createChallenge(
-      user.id,
+      user?.id || null,
       displayName,
       selectedMovies,
       creatorRanking,
@@ -255,34 +257,39 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
     setStep('share');
     setLoading(false);
     haptics.success();
-  }, [user, selectedIds, availableMovies, haptics]);
+  }, [user, selectedIds, availableMovies, haptics, challengerName]);
 
   // ============================================
   // PRIMARY CTA: "challenge a friend"
   // ============================================
 
   const handleCreateChallenge = useCallback(async () => {
-    if (!user?.id) return;
     setLoading(true);
     setError(null);
-    const movies = await challengeService.getTopMoviesForChallenge(user.id, 9);
-    if (movies.length >= 9) {
-      const selectedMovies = movies.slice(0, 9);
-      const creatorRanking = selectedMovies.map(m => m.id);
-      const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
-      const { challenge: c, error: err } = await challengeService.createChallenge(
-        user.id, displayName, selectedMovies, creatorRanking,
-      );
-      if (c) {
-        setChallenge(c);
-        setStep('share');
-        haptics.success();
-      } else {
-        setError(err || 'Failed');
+
+    if (user?.id) {
+      // Logged-in: try to use their ranked movies
+      const movies = await challengeService.getTopMoviesForChallenge(user.id, 9);
+      if (movies.length >= 9) {
+        const selectedMovies = movies.slice(0, 9);
+        const creatorRanking = selectedMovies.map(m => m.id);
+        const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
+        const { challenge: c, error: err } = await challengeService.createChallenge(
+          user.id, displayName, selectedMovies, creatorRanking,
+        );
+        if (c) {
+          setChallenge(c);
+          setStep('share');
+          haptics.success();
+        } else {
+          setError(err || 'Failed');
+        }
+        setLoading(false);
+        return;
       }
-    } else {
-      setShowPacks(true);
     }
+    // Not enough movies or guest → show pack picker
+    setShowPacks(true);
     setLoading(false);
   }, [user, haptics]);
 
@@ -583,10 +590,8 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   }, [user, haptics]);
 
   const handleSelectPack = useCallback(async (pack: CuratedPack) => {
-    if (!user?.id) return;
     setLoading(true);
 
-    // Fetch movie details from Supabase for the pack's movie IDs
     const { data: movieData } = await supabase
       .from('movies')
       .select('id, title, year, poster_url')
@@ -607,7 +612,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
     }
 
     setLoading(false);
-  }, [user?.id]);
+  }, []);
 
   // ============================================
   // FRIEND ACCORDION
