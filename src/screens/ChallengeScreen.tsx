@@ -123,6 +123,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
   const shareCardRef = useRef<ViewShot>(null);
 
   // VS challenge state (pool-based flow)
+  const [activeVsChallenges, setActiveVsChallenges] = useState<VsChallenge[]>([]);
   const [vsChallenge, setVsChallenge] = useState<VsChallenge | null>(null);
   const [vsSelectedIds, setVsSelectedIds] = useState<Set<string>>(new Set());
   const [vsPairIndex, setVsPairIndex] = useState(0);
@@ -204,10 +205,12 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
   useEffect(() => {
     if (!user?.id) {
       setActiveChallenges([]);
+      setActiveVsChallenges([]);
       setLeaderboard([]);
       return;
     }
     challengeService.getMyActiveChallenges(user.id).then(setActiveChallenges);
+    vsService.getMyChallenges(user.id).then(setActiveVsChallenges);
     challengeService.getChallengeLeaderboard(user.id).then(setLeaderboard);
   }, [user?.id]);
 
@@ -792,7 +795,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
   // HOME: unified VS flow
   const renderHome = () => {
     const isGuestUser = !user?.id;
-    const hasContent = friends.length > 0 || activeChallenges.length > 0;
+    const hasContent = friends.length > 0 || activeChallenges.length > 0 || activeVsChallenges.length > 0;
 
     // Guest or signed-in user with no challenges/friends: focused empty state
     if (!hasContent && !showSearch && !showPacks) {
@@ -1101,6 +1104,65 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
               </Pressable>
             );
           })}
+        </Animated.View>
+      )}
+
+      {/* ACTIVE VS - in-progress VS challenges */}
+      {activeVsChallenges.filter(vc => vc.status !== 'complete').length > 0 && (
+        <Animated.View entering={FadeInDown.delay(250)} style={styles.sectionBlock}>
+          {activeChallenges.filter(c => c.status !== 'complete').length === 0 && (
+            <Text style={styles.sectionLabel}>active</Text>
+          )}
+          {activeVsChallenges.filter(vc => vc.status !== 'complete').map(vc => {
+            const isChallenger = vc.challenger_id === user?.id;
+            const opponentName = isChallenger ? (vc.challenged_name || 'waiting...') : 'someone';
+            const statusText =
+              vc.status === 'pending' ? 'waiting...'
+              : vc.status === 'selecting' ? (isChallenger ? 'they\'re picking movies' : 'select movies')
+              : vc.status === 'challenged_comparing' ? (isChallenger ? 'they\'re comparing' : 'your turn!')
+              : vc.status === 'challenger_comparing' ? (isChallenger ? 'your turn!' : 'waiting for them')
+              : 'in progress';
+            return (
+              <Pressable key={vc.id} style={styles.challengeRow} onPress={() => {
+                setVsChallenge(vc);
+                if (vc.status === 'pending' && isChallenger) {
+                  setStep('share');
+                } else if (vc.status === 'selecting' && !isChallenger) {
+                  setVsSelectedIds(new Set());
+                  setStep('vs-selecting');
+                } else if (vc.status === 'challenged_comparing' && !isChallenger) {
+                  setVsPairIndex(0);
+                  setStep('vs-comparing');
+                } else if (vc.status === 'challenger_comparing' && isChallenger) {
+                  setVsPairIndex(0);
+                  setStep('vs-comparing');
+                }
+              }}>
+                <Text style={styles.challengeRowName}>vs {opponentName}</Text>
+                <Text style={styles.challengeRowStatus}>{statusText}</Text>
+              </Pressable>
+            );
+          })}
+        </Animated.View>
+      )}
+
+      {/* COMPLETED VS challenges */}
+      {activeVsChallenges.filter(vc => vc.status === 'complete').length > 0 && (
+        <Animated.View entering={FadeInDown.delay(300)} style={styles.sectionBlock}>
+          <Text style={styles.sectionLabel}>vs results</Text>
+          {activeVsChallenges.filter(vc => vc.status === 'complete').slice(0, 5).map(vc => (
+            <Pressable key={vc.id} style={styles.challengeRow} onPress={() => {
+              setVsChallenge(vc);
+              setStep('vs-result');
+            }}>
+              <Text style={styles.challengeRowName}>
+                vs {vc.challenged_name || 'someone'}
+              </Text>
+              <Text style={styles.challengeRowStatus}>
+                {vc.score}/{vc.pairs?.length || '?'}
+              </Text>
+            </Pressable>
+          ))}
         </Animated.View>
       )}
 
@@ -1555,11 +1617,15 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
     vsPickingRef.current = true;
     haptics.light();
 
+    // Determine role: challenger created the challenge, challenged joined it
+    const role: 'challenged' | 'challenger' =
+      user?.id === vsChallenge.challenger_id ? 'challenger' : 'challenged';
+
     const { isComplete, error: err } = await vsService.submitPick(
       vsChallenge.id,
       vsPairIndex,
       pick,
-      'challenged',
+      role,
     );
 
     if (err) {
