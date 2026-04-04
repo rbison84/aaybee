@@ -44,7 +44,7 @@ import { DevSettingsProvider, useDevSettings } from './src/contexts/DevSettingsC
 import { MovieSearchModal } from './src/components/MovieSearchModal';
 import { RankingRevealOverlay } from './src/components/comparison/RankingRevealOverlay';
 import { useAuth } from './src/contexts/AuthContext';
-import { parseDeepLink, clearDeepLink, DeepLinkIntent } from './src/utils/deepLink';
+import { parseDeepLink, clearDeepLink, captureRefParam, listenForNativeRef, DeepLinkIntent } from './src/utils/deepLink';
 import { notificationService } from './src/services/notificationService';
 import { vsService } from './src/services/vsService';
 import { friendService } from './src/services/friendService';
@@ -466,7 +466,13 @@ function MainApp() {
   }, [hasCompletedOnboarding]);
 
   // Deep link: parse URL on mount
-  const [deepLink] = useState<DeepLinkIntent>(() => parseDeepLink());
+  const [deepLink] = useState<DeepLinkIntent>(() => {
+    captureRefParam(); // fire-and-forget: store ref param for signup attribution
+    return parseDeepLink();
+  });
+
+  // Listen for native deep links while app is running (captures ref from warm opens)
+  useEffect(() => listenForNativeRef(), []);
 
   // Guest mode: landed via deep link without an account
   const isGuestMode = !hasCompletedOnboarding && !!deepLink && isAuthGuest;

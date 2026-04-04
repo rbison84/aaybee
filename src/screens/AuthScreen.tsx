@@ -16,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
 import { CinematicBackground } from '../components/cinematic';
+import { getStoredRefParam, clearStoredRefParam } from '../utils/deepLink';
 
 type AuthStep = 'options' | 'email' | 'name' | 'password' | 'signin';
 
@@ -47,15 +48,17 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
     setLoading(true);
     setError(null);
     try {
-      const result = await signUp(email, password);
+      const ref = await getStoredRefParam();
+      const result = await signUp(email, password, ref || undefined);
       if (!result.success) {
         throw new Error(result.error?.message || 'Sign up failed');
       }
       // Update user metadata and profile with name
       if (result.user) {
         await supabase.auth.updateUser({ data: { display_name: name } });
-        await supabase.from('user_profiles').update({ display_name: name }).eq('id', result.user.id);
+        await supabase.from('user_profiles').update({ display_name: name, email }).eq('id', result.user.id);
       }
+      clearStoredRefParam();
       handleSuccess();
     } catch (err: any) {
       setError(err.message || 'Sign up failed');

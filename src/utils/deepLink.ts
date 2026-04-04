@@ -1,4 +1,6 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
 
 // ============================================
 // DEEP LINK TYPES
@@ -71,5 +73,84 @@ export function clearDeepLink(): void {
     window.history.replaceState({}, '', '/');
   } catch {
     // Ignore — not critical
+  }
+}
+
+// ============================================
+// REFERRAL TRACKING
+// ============================================
+
+const REF_STORAGE_KEY = 'aaybee_ref';
+
+/**
+ * Parse the `ref` query param from the current URL (web or native deep link).
+ * If found, stores it in AsyncStorage for use at signup time.
+ */
+export async function captureRefParam(): Promise<void> {
+  try {
+    let ref: string | null = null;
+
+    if (Platform.OS === 'web') {
+      const params = new URLSearchParams(window.location.search);
+      ref = params.get('ref');
+    } else {
+      // Native: read from the deep link URL that opened the app
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) {
+        const parsed = Linking.parse(initialUrl);
+        ref = (parsed.queryParams?.ref as string) || null;
+      }
+    }
+
+    if (ref) {
+      await AsyncStorage.setItem(REF_STORAGE_KEY, ref);
+    }
+  } catch {
+    // Ignore
+  }
+}
+
+/**
+ * Retrieve stored referral user ID (set when user arrived via a ref link).
+ */
+export async function getStoredRefParam(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(REF_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Listen for deep link events while the app is running (warm opens).
+ * Captures ref param from incoming URLs on native.
+ * Returns cleanup function.
+ */
+export function listenForNativeRef(): () => void {
+  if (Platform.OS === 'web') return () => {};
+
+  const subscription = Linking.addEventListener('url', (event) => {
+    try {
+      const parsed = Linking.parse(event.url);
+      const ref = (parsed.queryParams?.ref as string) || null;
+      if (ref) {
+        AsyncStorage.setItem(REF_STORAGE_KEY, ref).catch(() => {});
+      }
+    } catch {
+      // Ignore
+    }
+  });
+
+  return () => subscription.remove();
+}
+
+/**
+ * Clear stored ref after signup to prevent double-attribution.
+ */
+export async function clearStoredRefParam(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(REF_STORAGE_KEY);
+  } catch {
+    // Ignore
   }
 }

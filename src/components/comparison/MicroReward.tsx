@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useHaptics } from '../../hooks/useHaptics';
 import { CatMascot } from '../onboarding/CatMascot';
@@ -127,6 +127,16 @@ export function MicroReward({ type, data, onComplete, onNavigate }: MicroRewardP
     onComplete();
   };
 
+  const handleShareTaste = async () => {
+    if (type !== 'taste_preview' || !data?.archetypeName) return;
+    haptics.medium();
+    try {
+      await Share.share({
+        message: `my movie taste archetype is ${data.archetypeName}! find yours on aaybee: https://aaybee.netlify.app`,
+      });
+    } catch {}
+  };
+
   return (
     <Animated.View
       style={styles.overlay}
@@ -152,6 +162,14 @@ export function MicroReward({ type, data, onComplete, onNavigate }: MicroRewardP
                 label={config.navigateLabel}
                 variant="primary"
                 onPress={handleNavigate}
+                fullWidth
+              />
+            )}
+            {type === 'taste_preview' && data?.archetypeName && (
+              <CinematicButton
+                label="share your taste"
+                variant="secondary"
+                onPress={handleShareTaste}
                 fullWidth
               />
             )}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import ViewShot from 'react-native-view-shot';
 import {
   StyleSheet,
   Text,
@@ -21,8 +22,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAppDimensions } from '../contexts/DimensionsContext';
 import { useHaptics } from '../hooks/useHaptics';
 import { challengeService, getMatchTier, ChallengeMovie, FriendChallenge, ChallengeResults } from '../services/challengeService';
-import { shareService } from '../services/shareService';
+import { shareService, storeLastDisagreement } from '../services/shareService';
 import { friendService, FriendWithProfile, FriendRequest, UserSearchResult } from '../services/friendService';
+import { ContactInvite } from '../components/ContactInvite';
+import { ShareableChallengeResult } from '../components/ShareableImages';
 import { TasteRadar } from '../components/TasteRadar';
 import { CinematicCard } from '../components/cinematic/CinematicCard';
 import { OnboardingProgressBar } from '../components/onboarding/OnboardingProgressBar';
@@ -32,13 +35,7 @@ import { Movie } from '../types';
 import { CURATED_PACKS, CuratedPack } from '../data/curatedPacks';
 import { supabase } from '../services/supabase';
 
-// Only import QR on web
-let QRCodeSVG: any = null;
-if (Platform.OS === 'web') {
-  try {
-    QRCodeSVG = require('qrcode.react').QRCodeSVG;
-  } catch {}
-}
+import { QRCode } from '../components/QRCode';
 
 // ============================================
 // TYPES
@@ -112,8 +109,11 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
   const [showPacks, setShowPacks] = useState(false);
   const [friendTopMovies, setFriendTopMovies] = useState<Map<string, { title: string }[]>>(new Map());
+
+  const shareCardRef = useRef<ViewShot>(null);
 
   // Inline code input for home screen
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -460,7 +460,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
 
   const handleShareLink = useCallback(async () => {
     if (!challenge) return;
-    const url = shareService.getChallengeShareUrl(challenge.code);
+    const url = shareService.getChallengeShareUrl(challenge.code, user?.id);
 
     // Social proof from last game
     let proofText = 'I ranked 9 movies on aaybee — can you match my taste?';
@@ -492,11 +492,36 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
 
   const handleShareResults = useCallback(async () => {
     if (!challenge || !results) return;
-    const url = shareService.getChallengeShareUrl(challenge.code);
+    const url = shareService.getChallengeShareUrl(challenge.code, user?.id);
     const tier = getMatchTier(results.matchPercent);
-    const message = `${challenge.creator_name} & ${challenge.challenger_name}: ${results.matchPercent}% — ${tier.name}\n"${tier.subtitle}"\n\n${url}`;
+    let message: string;
+
+    if (results.biggestDisagreement) {
+      const d = results.biggestDisagreement;
+      const isCreator = user?.id === challenge.creator_id;
+      const myRank = isCreator ? d.creatorRank : d.challengerRank;
+      const theirRank = isCreator ? d.challengerRank : d.creatorRank;
+      const otherName = isCreator ? challenge.challenger_name : challenge.creator_name;
+      message = `i ranked ${d.movie.title} #${myRank}. ${otherName} put it at #${theirRank}. whose taste is better?\n\n${url}`;
+      storeLastDisagreement(`i ranked ${d.movie.title} #${myRank}. my friend put it at #${theirRank}. whose taste is better?`);
+    } else {
+      message = `${challenge.creator_name} & ${challenge.challenger_name}: ${results.matchPercent}% — ${tier.name}\n"${tier.subtitle}"\n\n${url}`;
+    }
 
     try {
+      // Try to share as image on native
+      if (Platform.OS !== 'web' && shareCardRef.current) {
+        try {
+          const uri = await (shareCardRef.current as any).capture();
+          if (uri) {
+            await Share.share(Platform.OS === 'ios' ? { url: uri, message } : { message });
+            haptics.success();
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+            return;
+          }
+        } catch {}
+      }
       if (Platform.OS === 'web' && navigator?.share) {
         await navigator.share({ text: message });
       } else if (Platform.OS === 'web' && navigator?.clipboard) {
@@ -512,7 +537,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
         console.error('Share failed:', err);
       }
     }
-  }, [challenge, results, haptics]);
+  }, [challenge, results, haptics, user?.id]);
 
   // ============================================
   // FRIEND SEARCH + ACTIONS
@@ -693,7 +718,62 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
   );
 
   // HOME: unified VS flow
-  const renderHome = () => (
+  const renderHome = () => {
+    const isGuestUser = !user?.id;
+    const hasContent = friends.length > 0 || activeChallenges.length > 0;
+
+    // Guest or signed-in user with no challenges/friends: focused empty state
+    if (!hasContent && !showSearch && !showPacks) {
+      return (
+        <View style={[styles.homeScroll, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl }]}>
+          <Text style={styles.vsTitle}>VS</Text>
+          <Text style={[styles.emptyPrompt, { textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.xl, fontSize: 15, lineHeight: 22 }]}>
+            {isGuestUser
+              ? 'compare your movie taste with a friend.\npick a category, share a link, see who agrees.'
+              : 'find out who has better taste.\nchallenge a friend — it takes 30 seconds.'}
+          </Text>
+
+          <Pressable
+            style={[styles.primaryCta, { width: '100%', maxWidth: 320 }, loading && styles.actionButtonDisabled]}
+            onPress={handleCreateChallenge}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color={colors.background} />
+            ) : (
+              <Text style={styles.primaryCtaText}>
+                {isGuestUser ? 'pick a category' : 'challenge a friend'}
+              </Text>
+            )}
+          </Pressable>
+
+          <TextInput
+            style={[styles.codeInputInline, { maxWidth: 320, width: '100%' }]}
+            placeholder="have a code? enter it here"
+            placeholderTextColor={colors.textMuted}
+            value={joinCodeInput}
+            onChangeText={handleJoinCodeInput}
+            maxLength={6}
+            autoCapitalize="characters"
+          />
+
+          {isGuestUser && onOpenAuth && (
+            <Pressable
+              style={{ marginTop: spacing.lg, padding: spacing.sm }}
+              onPress={onOpenAuth}
+            >
+              <Text style={{ color: colors.textMuted, fontSize: 14 }}>already have an account? sign in</Text>
+            </Pressable>
+          )}
+
+          {error && (
+            <Text style={[styles.errorText, { marginTop: spacing.md }]}>{error}</Text>
+          )}
+        </View>
+      );
+    }
+
+    return (
     <ScrollView style={styles.homeScroll} contentContainerStyle={styles.homeScrollContent}>
       <Text style={styles.vsTitle}>VS</Text>
 
@@ -748,6 +828,11 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
             <Text style={styles.sectionLabel}>your people</Text>
             {user?.id && (
               <View style={styles.headerActions}>
+                {Platform.OS !== 'web' && (
+                  <Pressable onPress={() => setShowContacts(!showContacts)} style={styles.subtleAction}>
+                    <Text style={styles.subtleActionText}>contacts</Text>
+                  </Pressable>
+                )}
                 <Pressable onPress={() => setShowQr(!showQr)} style={styles.subtleAction}>
                   <Text style={styles.subtleActionText}>QR</Text>
                 </Pressable>
@@ -761,16 +846,22 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
           {/* QR expansion */}
           {showQr && (
             <Animated.View entering={FadeIn.duration(200)} style={styles.qrSection}>
-              {Platform.OS === 'web' && QRCodeSVG && user?.id && (
-                <QRCodeSVG
+              {user?.id && (
+                <QRCode
                   value={`https://aaybee.netlify.app/connect/${user.id}`}
                   size={140}
-                  bgColor="transparent"
-                  fgColor="#F5F5F5"
-                  level="M"
+                  backgroundColor="transparent"
+                  color="#F5F5F5"
                 />
               )}
               <Text style={styles.qrHint}>friends can scan to add you</Text>
+            </Animated.View>
+          )}
+
+          {/* Contact book invite (shown on native when contacts tapped) */}
+          {showContacts && (
+            <Animated.View entering={FadeIn.duration(200)} style={{ maxHeight: 320 }}>
+              <ContactInvite onClose={() => setShowContacts(false)} />
             </Animated.View>
           )}
 
@@ -887,9 +978,16 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
 
       {/* +add prompt when no friends and search not open */}
       {friends.length === 0 && !showSearch && user?.id && (
-        <Pressable onPress={() => setShowSearch(true)} style={styles.sectionBlock}>
-          <Text style={styles.emptyPrompt}>add friends to challenge them +</Text>
-        </Pressable>
+        <View style={styles.sectionBlock}>
+          <Pressable onPress={() => setShowSearch(true)}>
+            <Text style={styles.emptyPrompt}>add friends to challenge them +</Text>
+          </Pressable>
+          {Platform.OS !== 'web' && (
+            <Pressable onPress={() => setShowContacts(true)} style={{ marginTop: spacing.sm }}>
+              <Text style={[styles.emptyPrompt, { color: colors.accent }]}>find from contacts</Text>
+            </Pressable>
+          )}
+        </View>
       )}
 
       {/* Pending requests badge (when search is closed) */}
@@ -936,7 +1034,8 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
 
       {error && <Text style={styles.errorText}>{error}</Text>}
     </ScrollView>
-  );
+    );
+  };
 
   // SELECT: pick 9 movies
   const renderSelect = () => (
@@ -1003,17 +1102,14 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
     <Animated.View entering={FadeIn} style={styles.centeredContent}>
       <Text style={styles.heroTitle}>send this to a friend</Text>
 
-      {Platform.OS === 'web' && QRCodeSVG && (
-        <View style={styles.qrContainer}>
-          <QRCodeSVG
-            value={`https://aaybee.netlify.app/challenge/${challenge?.code}`}
-            size={160}
-            bgColor="transparent"
-            fgColor="#F5F5F5"
-            level="M"
-          />
-        </View>
-      )}
+      <View style={styles.qrContainer}>
+        <QRCode
+          value={`https://aaybee.netlify.app/challenge/${challenge?.code}`}
+          size={160}
+          backgroundColor="transparent"
+          color="#F5F5F5"
+        />
+      </View>
 
       <View style={styles.codeDisplay}>
         <Text style={styles.codeLabel}>CODE</Text>
@@ -1160,6 +1256,26 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
             {challenge.creator_name} & {challenge.challenger_name}
           </Text>
 
+          {/* CTAs at emotional peak */}
+          <Animated.View entering={FadeInUp.delay(300)} style={{ width: '100%', maxWidth: 320, alignSelf: 'center', marginTop: spacing.lg, gap: spacing.sm }}>
+            {!isGuest && (
+              <Pressable
+                style={[styles.primaryCta, { width: '100%' }]}
+                onPress={handleCreateChallenge}
+              >
+                <Text style={styles.primaryCtaText}>challenge someone else</Text>
+              </Pressable>
+            )}
+            <Pressable
+              style={[styles.primaryCta, { width: '100%', backgroundColor: colors.surface }]}
+              onPress={handleShareResults}
+            >
+              <Text style={[styles.primaryCtaText, { color: colors.textPrimary }]}>
+                {copied ? 'copied!' : 'share result'}
+              </Text>
+            </Pressable>
+          </Animated.View>
+
           {results.agreements.length > 0 && (
             <Animated.View entering={FadeInUp.delay(400)} style={styles.resultsSection}>
               <Text style={styles.resultsSectionTitle}>agreed on</Text>
@@ -1187,25 +1303,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
           )}
         </ScrollView>
 
-        {/* Primary: challenge someone else */}
-        <Pressable
-          style={[styles.primaryCta, { width: '100%', maxWidth: 320, alignSelf: 'center' }]}
-          onPress={handleCreateChallenge}
-        >
-          <Text style={styles.primaryCtaText}>challenge someone else</Text>
-        </Pressable>
-
-        {/* Secondary: share result */}
-        <Pressable
-          style={[styles.actionButton, { marginTop: spacing.sm, backgroundColor: colors.surface }]}
-          onPress={handleShareResults}
-        >
-          <Text style={styles.actionButtonText}>
-            {copied ? 'copied!' : 'share result'}
-          </Text>
-        </Pressable>
-
-        {/* Tertiary: rematch */}
+        {/* Rematch */}
         {user?.id && (
           <Pressable
             style={[styles.actionButton, { marginTop: spacing.sm, backgroundColor: colors.card }]}
@@ -1257,6 +1355,25 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
           {step === 'rank' && renderRank()}
           {step === 'results' && renderResults()}
         </>
+      )}
+
+      {/* Offscreen share card for image capture */}
+      {step === 'results' && results && challenge && (
+        <ViewShot ref={shareCardRef} options={{ format: 'png', quality: 1 }} style={{ position: 'absolute', left: -9999 }}>
+          <ShareableChallengeResult
+            matchPercent={results.matchPercent}
+            tierName={getMatchTier(results.matchPercent).name}
+            tierSubtitle={getMatchTier(results.matchPercent).subtitle}
+            creatorName={challenge.creator_name}
+            challengerName={challenge.challenger_name || ''}
+            agreements={results.agreements.map(a => ({ rank: a.rank, title: a.movie.title }))}
+            disagreements={results.disagreements.map(d => ({
+              title: d.movie.title,
+              creatorRank: d.creatorRank,
+              challengerRank: d.challengerRank,
+            }))}
+          />
+        </ViewShot>
       )}
     </View>
   );

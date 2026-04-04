@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, Image } from 'react-native';
 import { Movie } from '../types';
 import { DailyCategory } from '../data/dailyCategories';
 import { DailyCollectionEntry } from '../services/dailyStreakService';
+import { VsPair } from '../services/vsService';
 import { colors } from '../theme/cinematic';
 import { CategoryCellEmpty } from './daily/CategoryCellEmpty';
 
@@ -424,5 +425,288 @@ const gridStyles = StyleSheet.create({
     color: colors.accent,
     textAlign: 'center',
     marginBottom: 20,
+  },
+});
+
+// ============================================
+// SHAREABLE VS RESULT CARD (1080x1080)
+// ============================================
+
+interface ShareableVsResultProps {
+  score: number;
+  scoreLabel: string;
+  challengerName: string;
+  challengedName: string;
+  pairs: VsPair[];
+}
+
+export function ShareableVsResult({ score, scoreLabel, challengerName, challengedName, pairs }: ShareableVsResultProps) {
+  return (
+    <View style={vsStyles.container}>
+      <Text style={vsStyles.title}>aaybee vs</Text>
+
+      <View style={vsStyles.scoreContainer}>
+        <Text style={vsStyles.scoreNumber}>{score}</Text>
+        <Text style={vsStyles.scoreOf}>/10</Text>
+      </View>
+      <Text style={vsStyles.scoreLabel}>{scoreLabel}</Text>
+
+      <Text style={vsStyles.names}>{challengerName} vs {challengedName}</Text>
+
+      <View style={vsStyles.pairGrid}>
+        {pairs.slice(0, 10).map((pair, i) => (
+          <View key={i} style={[vsStyles.pairRow, pair.match ? vsStyles.pairMatch : vsStyles.pairMiss]}>
+            <Text style={vsStyles.pairIndex}>{i + 1}</Text>
+            <Text style={vsStyles.pairMovie} numberOfLines={1}>{pair.movieA.title}</Text>
+            <Text style={vsStyles.pairVs}>vs</Text>
+            <Text style={vsStyles.pairMovie} numberOfLines={1}>{pair.movieB.title}</Text>
+            <Text style={[vsStyles.pairResult, pair.match ? vsStyles.pairResultMatch : vsStyles.pairResultMiss]}>
+              {pair.match ? '✓' : '✗'}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      <Text style={vsStyles.branding}>aaybee</Text>
+    </View>
+  );
+}
+
+const vsStyles = StyleSheet.create({
+  container: {
+    width: 1080,
+    height: 1080,
+    backgroundColor: '#0D0D0F',
+    padding: 60,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  title: {
+    fontSize: 40,
+    fontWeight: '700',
+    color: '#888888',
+    textAlign: 'center',
+    marginTop: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 6,
+  },
+  scoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  scoreNumber: {
+    fontSize: 180,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  scoreOf: {
+    fontSize: 60,
+    fontWeight: '600',
+    color: '#888888',
+  },
+  scoreLabel: {
+    fontSize: 36,
+    fontWeight: '600',
+    color: colors.accent,
+    textAlign: 'center',
+    marginTop: -10,
+  },
+  names: {
+    fontSize: 28,
+    color: '#AAAAAA',
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  pairGrid: {
+    width: '100%',
+    gap: 6,
+    marginTop: 20,
+  },
+  pairRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  pairMatch: {
+    backgroundColor: 'rgba(72, 187, 120, 0.1)',
+  },
+  pairMiss: {
+    backgroundColor: 'rgba(245, 101, 101, 0.08)',
+  },
+  pairIndex: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#666666',
+    width: 36,
+  },
+  pairMovie: {
+    fontSize: 22,
+    color: '#DDDDDD',
+    flex: 1,
+  },
+  pairVs: {
+    fontSize: 18,
+    color: '#555555',
+    marginHorizontal: 12,
+  },
+  pairResult: {
+    fontSize: 24,
+    fontWeight: '700',
+    width: 36,
+    textAlign: 'center',
+  },
+  pairResultMatch: {
+    color: '#48BB78',
+  },
+  pairResultMiss: {
+    color: '#F56565',
+  },
+  branding: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: colors.accent,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+});
+
+// ============================================
+// SHAREABLE CHALLENGE RESULT CARD (1080x1080)
+// ============================================
+
+interface ShareableChallengeResultProps {
+  matchPercent: number;
+  tierName: string;
+  tierSubtitle: string;
+  creatorName: string;
+  challengerName: string;
+  agreements: { rank: number; title: string }[];
+  disagreements: { title: string; creatorRank: number; challengerRank: number }[];
+}
+
+export function ShareableChallengeResult({
+  matchPercent, tierName, tierSubtitle,
+  creatorName, challengerName,
+  agreements, disagreements,
+}: ShareableChallengeResultProps) {
+  return (
+    <View style={challengeStyles.container}>
+      <Text style={challengeStyles.header}>aaybee challenge</Text>
+
+      <Text style={challengeStyles.percent}>{matchPercent}%</Text>
+      <Text style={challengeStyles.tierName}>{tierName}</Text>
+      <Text style={challengeStyles.tierSubtitle}>"{tierSubtitle}"</Text>
+      <Text style={challengeStyles.names}>{creatorName} & {challengerName}</Text>
+
+      {agreements.length > 0 && (
+        <View style={challengeStyles.section}>
+          <Text style={challengeStyles.sectionTitle}>agreed on</Text>
+          {agreements.slice(0, 4).map((a, i) => (
+            <Text key={i} style={challengeStyles.agreementRow}>#{a.rank} {a.title}</Text>
+          ))}
+        </View>
+      )}
+
+      {disagreements.length > 0 && (
+        <View style={challengeStyles.section}>
+          <Text style={challengeStyles.sectionTitle}>biggest disagreements</Text>
+          {disagreements.slice(0, 4).map((d, i) => (
+            <View key={i} style={challengeStyles.disagreementRow}>
+              <Text style={challengeStyles.disagreementMovie} numberOfLines={1}>{d.title}</Text>
+              <Text style={challengeStyles.disagreementRanks}>#{d.creatorRank} vs #{d.challengerRank}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <Text style={challengeStyles.branding}>aaybee</Text>
+    </View>
+  );
+}
+
+const challengeStyles = StyleSheet.create({
+  container: {
+    width: 1080,
+    height: 1080,
+    backgroundColor: '#0D0D0F',
+    padding: 60,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  header: {
+    fontSize: 40,
+    fontWeight: '700',
+    color: '#888888',
+    textTransform: 'uppercase',
+    letterSpacing: 6,
+    marginTop: 10,
+  },
+  percent: {
+    fontSize: 200,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: -20,
+  },
+  tierName: {
+    fontSize: 40,
+    fontWeight: '700',
+    color: colors.accent,
+    textAlign: 'center',
+    marginTop: -20,
+  },
+  tierSubtitle: {
+    fontSize: 26,
+    fontStyle: 'italic',
+    color: '#AAAAAA',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  names: {
+    fontSize: 28,
+    color: '#888888',
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  section: {
+    width: '100%',
+    marginTop: 20,
+  },
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#666666',
+    textTransform: 'uppercase',
+    letterSpacing: 3,
+    marginBottom: 10,
+  },
+  agreementRow: {
+    fontSize: 26,
+    color: '#CCCCCC',
+    paddingVertical: 4,
+  },
+  disagreementRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  disagreementMovie: {
+    fontSize: 26,
+    color: '#CCCCCC',
+    flex: 1,
+  },
+  disagreementRanks: {
+    fontSize: 24,
+    color: '#F56565',
+    fontWeight: '600',
+  },
+  branding: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: colors.accent,
+    textAlign: 'center',
+    marginBottom: 10,
   },
 });

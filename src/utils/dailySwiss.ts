@@ -403,7 +403,11 @@ export function generateShareText(
   if (hotTake) lines.push(`hot take: ${hotTake}`);
 
   lines.push('');
-  lines.push(`can you beat my ranking? play today's daily:`);
+  if (hotTake) {
+    lines.push(`my hot take: ${hotTake}. prove me wrong:`);
+  } else {
+    lines.push(`play today's daily:`);
+  }
   lines.push(shareUrl || 'https://aaybee.netlify.app/daily');
 
   return lines.join('\n');

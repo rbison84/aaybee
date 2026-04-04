@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 
 // ============================================
@@ -33,6 +34,12 @@ function generateCode(): string {
     code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
   }
   return code;
+}
+
+function appendRef(url: string, userId?: string | null): string {
+  if (!userId) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}ref=${userId}`;
 }
 
 // ============================================
@@ -74,27 +81,49 @@ export const shareService = {
         image_data: { dailyNumber, categoryTitle, seenCount, topMovie, grid },
       });
 
-      return `${BASE_URL}/share/${code}`;
+      return appendRef(`${BASE_URL}/share/${code}`, userId);
     } catch (err) {
       console.error('[ShareService] createDailyShare error:', err);
       // Fallback to plain URL
-      return `${BASE_URL}/daily`;
+      return appendRef(`${BASE_URL}/daily`, userId);
     }
   },
 
   /**
    * Get the share URL for a VS challenge (uses existing code).
    */
-  getVsShareUrl: (code: string): string => {
-    return `${BASE_URL}/vs/${code}`;
+  getVsShareUrl: (code: string, userId?: string | null): string => {
+    return appendRef(`${BASE_URL}/vs/${code}`, userId);
   },
 
   /**
    * Get the share URL for a friend challenge (uses existing code).
    */
-  getChallengeShareUrl: (code: string): string => {
-    return `${BASE_URL}/challenge/${code}`;
+  getChallengeShareUrl: (code: string, userId?: string | null): string => {
+    return appendRef(`${BASE_URL}/challenge/${code}`, userId);
   },
 };
+
+// ============================================
+// DISAGREEMENT CACHE
+// ============================================
+// Stores the user's most recent disagreement text for use in SMS invites.
+// Written by VS/Challenge share handlers, read by contactService.
+
+const DISAGREEMENT_KEY = 'aaybee_last_disagreement';
+
+export async function storeLastDisagreement(text: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(DISAGREEMENT_KEY, text);
+  } catch {}
+}
+
+export async function getLastDisagreement(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(DISAGREEMENT_KEY);
+  } catch {
+    return null;
+  }
+}
 
 export default shareService;

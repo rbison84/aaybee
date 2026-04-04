@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ViewShot from 'react-native-view-shot';
 import {
   StyleSheet,
   Text,
@@ -25,9 +26,12 @@ import Animated, {
   FadeOut,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { QRCode } from '../components/QRCode';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDimensions } from '../contexts/DimensionsContext';
 import { friendService, FriendWithProfile } from '../services/friendService';
+import { shareService, storeLastDisagreement } from '../services/shareService';
+import { ShareableVsResult } from '../components/ShareableImages';
 import { vsService, VsChallenge, VsMovie, VsPair, VsResults } from '../services/vsService';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
 
@@ -79,13 +83,22 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
   // Selecting state
   const [selectedMovieIds, setSelectedMovieIds] = useState<Set<string>>(new Set());
 
+  // Guest name
+  const [guestName, setGuestName] = useState('');
+
   // Comparing state
   const [currentPairIndex, setCurrentPairIndex] = useState(0);
+
+  // Result state
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   // Reveal state
   const [revealIndex, setRevealIndex] = useState(-1);
   const [runningScore, setRunningScore] = useState(0);
   const revealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // Share card ref
+  const shareCardRef = useRef<ViewShot>(null);
 
   // Subscription channel ref
   const subscriptionRef = useRef<any>(null);
@@ -289,7 +302,7 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
     // Join as guest — update challenge name and status without setting challenged_id
     const { challenge, error: err } = await vsService.joinChallengeAsGuest(
       joinCode.trim(),
-      'Guest'
+      guestName.trim() || 'Guest'
     );
     setLoading(false);
 
@@ -315,7 +328,7 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
   }, []);
 
   const handleConfirmSelection = useCallback(async () => {
-    if (!activeChallenge || selectedMovieIds.size !== 10) return;
+    if (!activeChallenge || selectedMovieIds.size < 4) return;
     setLoading(true);
 
     const selectedMovies = activeChallenge.pool.filter(m => selectedMovieIds.has(m.id));
@@ -405,23 +418,51 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
   const handleShare = useCallback(async () => {
     if (!activeChallenge) return;
     const score = activeChallenge.score || 0;
-    const message = `we scored ${score}/10 on aaybee vs! how similar are your movie tastes? try it: https://aaybee.netlify.app/vs/${activeChallenge.code}`;
+    const results = activeChallenge.results;
+    const url = shareService.getVsShareUrl(activeChallenge.code, user?.id);
+    let message: string;
+
+    if (results?.biggestDisagreement) {
+      const d = results.biggestDisagreement;
+      // Determine perspective: current user is challenger or challenged
+      const isChallenger = user?.id === activeChallenge.challenger_id;
+      const myPick = isChallenger ? d.challengerPick : d.challengedPick;
+      const theirPick = isChallenger ? d.challengedPick : d.challengerPick;
+      const theirName = isChallenger ? results.challengedName : results.challengerName;
+      message = `i think ${myPick} beats ${theirPick}. ${theirName} disagrees. who's right? ${url}`;
+      storeLastDisagreement(`i think ${myPick} beats ${theirPick}. my friend disagrees. who's right?`);
+    } else {
+      const total = activeChallenge.pairs?.length || 10;
+      message = `we scored ${score}/${total} on aaybee vs! how similar are your movie tastes? try it: ${url}`;
+    }
+
     try {
+      // Try to share as image on native
+      if (Platform.OS !== 'web' && shareCardRef.current) {
+        try {
+          const uri = await (shareCardRef.current as any).capture();
+          if (uri) {
+            await Share.share(Platform.OS === 'ios' ? { url: uri, message } : { message });
+            return;
+          }
+        } catch {}
+      }
       await Share.share({ message });
     } catch (e) {
       // Ignore
     }
-  }, [activeChallenge]);
+  }, [activeChallenge, user?.id]);
 
   const handleShareCode = useCallback(async () => {
     if (!activeChallenge) return;
-    const message = `i challenged you on aaybee vs! join with code: ${activeChallenge.code}\n\nhttps://aaybee.netlify.app/vs/${activeChallenge.code}`;
+    const url = shareService.getVsShareUrl(activeChallenge.code, user?.id);
+    const message = `i challenged you on aaybee vs! join with code: ${activeChallenge.code}\n\n${url}`;
     try {
       await Share.share({ message });
     } catch (e) {
       // Ignore
     }
-  }, [activeChallenge]);
+  }, [activeChallenge, user?.id]);
 
   const handleOpenChallenge = useCallback((challenge: VsChallenge) => {
     setActiveChallenge(challenge);
@@ -502,7 +543,71 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
   );
 
   // ---------- HOME ----------
-  const renderHome = () => (
+  const renderHome = () => {
+    const hasNoChallenges = !loadingChallenges && challenges.length === 0;
+
+    // Empty state: focused get-started prompt (both guest and signed-in new users)
+    if (hasNoChallenges) {
+      return (
+        <View style={styles.container}>
+          {renderHeader('aaybee vs', false)}
+          <View style={[styles.centeredContent, { paddingHorizontal: spacing.xl }]}>
+            <Text style={styles.heroTitle}>vs</Text>
+            <Text style={[styles.heroSubtitle, { marginTop: spacing.sm, marginBottom: spacing.xl }]}>
+              {isGuest
+                ? 'compare your movie taste with friends.\njoin aaybee to start challenging.'
+                : 'find out who has better taste.\nchallenge a friend — it takes 30 seconds.'}
+            </Text>
+
+            {isGuest ? (
+              <Pressable
+                style={[styles.actionButton, styles.actionButtonPrimary, { width: '100%', maxWidth: 320 }]}
+                onPress={onClose}
+              >
+                <Text style={styles.actionButtonTextPrimary}>join aaybee</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={[styles.actionButton, styles.actionButtonPrimary, { width: '100%', maxWidth: 320 }]}
+                onPress={() => { setStep('friend-select'); loadFriends(); }}
+              >
+                <Text style={styles.actionButtonTextPrimary}>challenge a friend</Text>
+              </Pressable>
+            )}
+
+            <View style={[styles.codeRow, { marginTop: spacing.xxl, maxWidth: 320, width: '100%' }]}>
+              <TextInput
+                style={styles.codeInput}
+                value={joinCode}
+                onChangeText={setJoinCode}
+                placeholder="have a code? enter it here"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="characters"
+                maxLength={6}
+              />
+              {joinCode.trim().length > 0 && (
+                <Pressable
+                  style={[styles.actionButton, styles.actionButtonSmall]}
+                  onPress={isGuest ? handleGuestJoin : handleJoinByCode}
+                  disabled={loading}
+                >
+                  <Text style={styles.actionButtonTextPrimary}>{loading ? '...' : 'join'}</Text>
+                </Pressable>
+              )}
+            </View>
+
+            {error && (
+              <Animated.View entering={FadeIn} style={[styles.errorContainer, { marginTop: spacing.md }]}>
+                <Text style={styles.errorText}>{error}</Text>
+              </Animated.View>
+            )}
+          </View>
+        </View>
+      );
+    }
+
+    // Normal home with challenges
+    return (
     <View style={styles.container}>
       {renderHeader('aaybee vs', false)}
       <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollInner}>
@@ -527,8 +632,6 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
           <Text style={styles.sectionTitle}>your challenges</Text>
           {loadingChallenges ? (
             <ActivityIndicator color={colors.textMuted} style={{ marginTop: spacing.xl }} />
-          ) : challenges.length === 0 ? (
-            <Text style={styles.emptyText}>no challenges yet — start one!</Text>
           ) : (
             challenges.map(c => (
               <Pressable
@@ -544,7 +647,7 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
                   </Text>
                   <Text style={styles.challengeStatus}>
                     {c.status === 'complete'
-                      ? `${c.score}/10`
+                      ? `${c.score}/${c.pairs?.length || 10}`
                       : c.status === 'pending'
                         ? 'waiting for response'
                         : c.status === 'selecting'
@@ -558,7 +661,7 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
                 </View>
                 {c.status === 'complete' && (
                   <View style={[styles.scoreBadge, { backgroundColor: getScoreColor(c.score || 0) }]}>
-                    <Text style={styles.scoreBadgeText}>{c.score}/10</Text>
+                    <Text style={styles.scoreBadgeText}>{c.score}/{c.pairs?.length || 10}</Text>
                   </View>
                 )}
                 {c.status !== 'complete' && (
@@ -615,7 +718,8 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
         )}
       </ScrollView>
     </View>
-  );
+    );
+  };
 
   // ---------- FRIEND SELECT ----------
   const renderFriendSelect = () => (
@@ -686,6 +790,15 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
         <Text style={styles.waitingCode}>{activeChallenge?.code}</Text>
         <Text style={styles.waitingHint}>share this code with your friend</Text>
 
+        {activeChallenge?.code && (
+          <View style={{ marginTop: spacing.lg, borderRadius: 8, overflow: 'hidden' }}>
+            <QRCode
+              value={`https://aaybee.netlify.app/vs/${activeChallenge.code}`}
+              size={140}
+            />
+          </View>
+        )}
+
         <Pressable style={[styles.actionButton, styles.actionButtonPrimary, { marginTop: spacing.xxl }]} onPress={handleShareCode}>
           <Text style={styles.actionButtonTextPrimary}>share challenge</Text>
         </Pressable>
@@ -731,17 +844,31 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
     </View>
   );
 
-  // ---------- SELECTING (10 from 16) ----------
+  // ---------- SELECTING (4-10 from 16) ----------
   const renderSelecting = () => {
     const pool = activeChallenge?.pool || [];
-    const remaining = 10 - selectedMovieIds.size;
+    const count = selectedMovieIds.size;
+    const canProceed = count >= 4 && (isGuest ? guestName.trim().length > 0 : true);
 
     return (
       <View style={styles.container}>
-        {renderHeader(`select ${remaining > 0 ? remaining : 0} more`)}
+        {renderHeader(`${count} selected`)}
         <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollInner}>
+          {/* Guest name input */}
+          {isGuest && (
+            <TextInput
+              style={[styles.codeInput, { marginBottom: spacing.md }]}
+              placeholder="your name"
+              placeholderTextColor={colors.textMuted}
+              value={guestName}
+              onChangeText={setGuestName}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+          )}
+
           <Text style={styles.sectionSubtitle}>
-            pick 10 movies you've seen from this pool
+            tap the movies you've seen (at least 4)
           </Text>
 
           <View style={styles.movieGrid}>
@@ -753,7 +880,7 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
                   style={[
                     styles.movieGridItem,
                     isSelected && styles.movieGridItemSelected,
-                    !isSelected && selectedMovieIds.size >= 10 && styles.movieGridItemDisabled,
+                    !isSelected && count >= 10 && styles.movieGridItemDisabled,
                   ]}
                   onPress={() => handleSelectMovie(movie.id)}
                 >
@@ -778,7 +905,7 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
             })}
           </View>
 
-          {selectedMovieIds.size === 10 && (
+          {canProceed && (
             <Animated.View entering={FadeInUp}>
               <Pressable
                 style={[styles.actionButton, styles.actionButtonPrimary, { marginTop: spacing.xxl }]}
@@ -786,10 +913,16 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
                 disabled={loading}
               >
                 <Text style={styles.actionButtonTextPrimary}>
-                  {loading ? 'setting up...' : 'start comparing'}
+                  {loading ? 'setting up...' : `compare ${count} movies`}
                 </Text>
               </Pressable>
             </Animated.View>
+          )}
+
+          {count > 0 && count < 4 && (
+            <Text style={[styles.sectionSubtitle, { marginTop: spacing.md, color: colors.textMuted }]}>
+              select {4 - count} more to start
+            </Text>
           )}
         </ScrollView>
       </View>
@@ -958,19 +1091,53 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
           {/* Big score */}
           <Animated.View entering={FadeIn.delay(200)} style={styles.resultScoreContainer}>
             <Text style={styles.resultScoreNumber}>{score}</Text>
-            <Text style={styles.resultScoreOf}>/10</Text>
+            <Text style={styles.resultScoreOf}>/{pairs.length}</Text>
           </Animated.View>
 
           <Animated.View entering={FadeInUp.delay(400)}>
-            <Text style={styles.resultLabel}>{getScoreLabel(score)}</Text>
+            <Text style={styles.resultLabel}>{getScoreLabel(score, pairs.length)}</Text>
           </Animated.View>
 
           {results && (
-            <Animated.View entering={FadeInUp.delay(600)} style={styles.resultDetails}>
-              <Text style={styles.resultNames}>
+            <Animated.View entering={FadeInUp.delay(500)}>
+              <Text style={[styles.resultNames, { marginTop: spacing.sm }]}>
                 {results.challengerName} vs {results.challengedName}
               </Text>
+            </Animated.View>
+          )}
 
+          {/* CTAs at emotional peak */}
+          <Animated.View entering={FadeInUp.delay(600)} style={[styles.actionRow, { marginTop: spacing.lg }]}>
+            {isGuest ? (
+              <>
+                <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: spacing.md }}>
+                  join aaybee to challenge your friends and discover your movie taste
+                </Text>
+                <Pressable
+                  style={[styles.actionButton, styles.actionButtonPrimary]}
+                  onPress={onClose}
+                >
+                  <Text style={styles.actionButtonTextPrimary}>join aaybee</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable style={[styles.actionButton, styles.actionButtonPrimary]} onPress={() => { setStep('friend-select'); setActiveChallenge(null); }}>
+                  <Text style={styles.actionButtonTextPrimary}>challenge a friend</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.actionButton, { backgroundColor: colors.surface, marginTop: spacing.sm }]}
+                  onPress={handleShare}
+                >
+                  <Text style={[styles.actionButtonTextPrimary, { color: colors.textSecondary }]}>share result</Text>
+                </Pressable>
+              </>
+            )}
+          </Animated.View>
+
+          {/* Insights */}
+          {results && (
+            <Animated.View entering={FadeInUp.delay(700)} style={styles.resultDetails}>
               {results.biggestAgreement && (
                 <View style={styles.resultInsight}>
                   <Text style={styles.resultInsightLabel}>biggest agreement</Text>
@@ -992,55 +1159,45 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
             </Animated.View>
           )}
 
-          {/* Pair breakdown */}
-          <View style={styles.breakdownSection}>
-            <Text style={styles.sectionTitle}>pair breakdown</Text>
-            {pairs.map((pair, i) => (
-              <View key={i} style={[styles.breakdownRow, pair.match ? styles.breakdownMatch : styles.breakdownMiss]}>
-                <Text style={styles.breakdownIndex}>{i + 1}</Text>
-                <Text style={styles.breakdownMovieA} numberOfLines={1}>
-                  {pair.movieA.title}
-                </Text>
-                <Text style={styles.breakdownVs}>vs</Text>
-                <Text style={styles.breakdownMovieB} numberOfLines={1}>
-                  {pair.movieB.title}
-                </Text>
-                <Text style={[styles.breakdownResult, pair.match ? styles.breakdownResultMatch : styles.breakdownResultMiss]}>
-                  {pair.match ? '✓' : '✗'}
-                </Text>
-              </View>
-            ))}
-          </View>
+          {/* Pair breakdown — toggled */}
+          <Pressable
+            style={[styles.actionButton, { backgroundColor: colors.surface, marginTop: spacing.lg }]}
+            onPress={() => setShowBreakdown(prev => !prev)}
+          >
+            <Text style={[styles.actionButtonTextPrimary, { color: colors.textSecondary }]}>
+              {showBreakdown ? 'hide breakdown' : 'see full breakdown'}
+            </Text>
+          </Pressable>
 
-          {/* Actions */}
-          <View style={[styles.actionRow, { marginTop: spacing.xxl, marginBottom: spacing.xxxl }]}>
-            {isGuest ? (
-              <>
-                <Animated.View entering={FadeInUp.delay(800)}>
-                  <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: spacing.lg }}>
-                    join aaybee to challenge your friends and discover your movie taste
+          {showBreakdown && (
+            <View style={styles.breakdownSection}>
+              <Text style={styles.sectionTitle}>pair breakdown</Text>
+              {pairs.map((pair, i) => (
+                <View key={i} style={[styles.breakdownRow, pair.match ? styles.breakdownMatch : styles.breakdownMiss]}>
+                  <Text style={styles.breakdownIndex}>{i + 1}</Text>
+                  <Text style={styles.breakdownMovieA} numberOfLines={1}>
+                    {pair.movieA.title}
                   </Text>
-                </Animated.View>
-                <Pressable
-                  style={[styles.actionButton, styles.actionButtonPrimary]}
-                  onPress={onClose}
-                >
-                  <Text style={styles.actionButtonTextPrimary}>join aaybee</Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <Pressable style={[styles.actionButton, styles.actionButtonPrimary]} onPress={handleShare}>
-                  <Text style={styles.actionButtonTextPrimary}>share result</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.actionButton, { backgroundColor: colors.surface, marginTop: spacing.md }]}
-                  onPress={() => { setStep('home'); setActiveChallenge(null); loadChallenges(); }}
-                >
-                  <Text style={[styles.actionButtonTextPrimary, { color: colors.textSecondary }]}>back to challenges</Text>
-                </Pressable>
-              </>
-            )}
+                  <Text style={styles.breakdownVs}>vs</Text>
+                  <Text style={styles.breakdownMovieB} numberOfLines={1}>
+                    {pair.movieB.title}
+                  </Text>
+                  <Text style={[styles.breakdownResult, pair.match ? styles.breakdownResultMatch : styles.breakdownResultMiss]}>
+                    {pair.match ? '✓' : '✗'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Back */}
+          <View style={[styles.actionRow, { marginTop: spacing.xl, marginBottom: spacing.xxxl }]}>
+            <Pressable
+              style={[styles.actionButton, { backgroundColor: colors.surface }]}
+              onPress={() => { setStep('home'); setActiveChallenge(null); setShowBreakdown(false); loadChallenges(); }}
+            >
+              <Text style={[styles.actionButtonTextPrimary, { color: colors.textSecondary }]}>back to challenges</Text>
+            </Pressable>
           </View>
         </ScrollView>
       </View>
@@ -1061,6 +1218,19 @@ export function VsScreen({ onClose, initialCode }: VsScreenProps) {
       {(step === 'challenged_comparing' || step === 'challenger_comparing') && renderComparing()}
       {step === 'reveal' && renderReveal()}
       {step === 'result' && renderResult()}
+
+      {/* Offscreen share card for image capture */}
+      {step === 'result' && activeChallenge?.results && (
+        <ViewShot ref={shareCardRef} options={{ format: 'png', quality: 1 }} style={{ position: 'absolute', left: -9999 }}>
+          <ShareableVsResult
+            score={activeChallenge.score || 0}
+            scoreLabel={getScoreLabel(activeChallenge.score || 0, activeChallenge.pairs?.length || 10)}
+            challengerName={activeChallenge.results.challengerName}
+            challengedName={activeChallenge.results.challengedName}
+            pairs={activeChallenge.pairs || []}
+          />
+        </ViewShot>
+      )}
     </View>
   );
 }
@@ -1076,12 +1246,13 @@ function getScoreColor(score: number): string {
   return colors.error;
 }
 
-function getScoreLabel(score: number): string {
-  if (score === 10) return 'perfect match — you are the same person';
-  if (score >= 8) return 'cinema soulmates';
-  if (score >= 6) return 'solid taste overlap';
-  if (score >= 4) return 'some common ground';
-  if (score >= 2) return 'agree to disagree';
+function getScoreLabel(score: number, total: number = 10): string {
+  const pct = total > 0 ? score / total : 0;
+  if (pct === 1) return 'perfect match — you are the same person';
+  if (pct >= 0.8) return 'cinema soulmates';
+  if (pct >= 0.6) return 'solid taste overlap';
+  if (pct >= 0.4) return 'some common ground';
+  if (pct >= 0.2) return 'agree to disagree';
   return 'polar opposites';
 }
 

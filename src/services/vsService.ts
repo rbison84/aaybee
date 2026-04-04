@@ -59,6 +59,7 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 6;
 const POOL_SIZE = 16;
 const PAIR_COUNT = 10;
+const MIN_MOVIES = 4;
 
 // ============================================
 // HELPERS
@@ -304,8 +305,11 @@ export const vsService = {
     selectedMovies: VsMovie[]
   ): Promise<{ pairs: VsPair[]; error?: string }> => {
     try {
-      if (selectedMovies.length !== PAIR_COUNT) {
-        return { pairs: [], error: `Select exactly ${PAIR_COUNT} movies` };
+      if (selectedMovies.length < MIN_MOVIES) {
+        return { pairs: [], error: `Select at least ${MIN_MOVIES} movies` };
+      }
+      if (selectedMovies.length > PAIR_COUNT) {
+        return { pairs: [], error: `Select at most ${PAIR_COUNT} movies` };
       }
 
       // Get the challenge to access challenger betas
@@ -373,7 +377,7 @@ export const vsService = {
       }
 
       const nextPair = pairIndex + 1;
-      const isLastPick = nextPair >= PAIR_COUNT;
+      const isLastPick = nextPair >= pairs.length;
 
       if (role === 'challenged' && isLastPick) {
         // Challenged is done — move to challenger's turn
@@ -656,12 +660,14 @@ export const vsService = {
       [allPairs[i], allPairs[j]] = [allPairs[j], allPairs[i]];
     }
 
-    // Greedily select 10 pairs, ensuring no movie appears more than 3 times
+    // Greedily select pairs, ensuring no movie appears more than 3 times
+    // Cap: min(10, floor(N * 1.5)) where N = number of movies
+    const maxPairs = Math.min(PAIR_COUNT, Math.floor(selectedMovies.length * 1.5));
     const pairs: VsPair[] = [];
     const movieCount = new Map<string, number>();
 
     for (const [a, b] of allPairs) {
-      if (pairs.length >= PAIR_COUNT) break;
+      if (pairs.length >= maxPairs) break;
       const countA = movieCount.get(a.id) || 0;
       const countB = movieCount.get(b.id) || 0;
       if (countA >= 3 || countB >= 3) continue;

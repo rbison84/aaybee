@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "backgroundColor": "#0A0A0A"
+      "backgroundColor": "#0A0A0A",
+      "infoPlist": {
+        "NSContactsUsageDescription": "Find friends already on Aaybee"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -36,7 +39,13 @@
     },
     "plugins": [
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Find friends already on Aaybee"
+        }
+      ]
     ]
   }
 }

@@ -47,13 +47,7 @@ import { useAuth } from '../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 
-// Only import QR on web
-let QRCodeSVG: any = null;
-if (Platform.OS === 'web') {
-  try {
-    QRCodeSVG = require('qrcode.react').QRCodeSVG;
-  } catch {}
-}
+import { QRCode } from '../components/QRCode';
 
 interface DailyScreenProps {
   onNavigateToCompare?: () => void;
@@ -390,7 +384,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
 
     // Create a share code for OG-rich link
     const shareUrl = await shareService.createDailyShare(
-      null, // no user ID needed
+      user?.id || null,
       dailyNumber,
       activeCategory.title,
       swissState.seenIds.length,
@@ -410,13 +404,27 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
       shareUrl,
     );
 
-    // Add crew context if in crews
+    // Add crew disagreement context if available
     if (crews.length > 0) {
       const firstCrew = crews[0];
       const result = crewResults.get(firstCrew.id);
       const myResult = result?.memberResults.find(m => m.userId === user?.id);
       if (myResult) {
         const tier = getMatchTier(myResult.alignmentPercent);
+        // Replace CTA with crew disagreement if the user has a hot take
+        if (myResult.hottestTake) {
+          const htMovie = movies.get(myResult.hottestTake.movieId);
+          if (htMovie) {
+            const crewCta = `my crew ranked ${htMovie.title} #${myResult.hottestTake.consensusRank}. i put it #${myResult.hottestTake.userRank}. who's right?`;
+            // Replace the generic CTA line with crew disagreement
+            if (hotTake) {
+              shareText = shareText.replace(`my hot take: ${hotTake}. prove me wrong:`, crewCta);
+            } else {
+              shareText = shareText.replace(`play today's daily:`, crewCta);
+            }
+          }
+        }
+        // Append crew alignment info
         shareText = shareText.replace(
           shareUrl || 'https://aaybee.netlify.app/daily',
           `my circle "${firstCrew.name}": ${myResult.alignmentPercent}% — ${tier.name}\n${shareUrl || 'https://aaybee.netlify.app/daily'}`
@@ -806,14 +814,13 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
             </View>
 
             {/* QR Code for circle invite */}
-            {Platform.OS === 'web' && QRCodeSVG && selectedCrew && (
+            {selectedCrew && (
               <View style={styles.circleQrSection}>
-                <QRCodeSVG
+                <QRCode
                   value={`https://aaybee.netlify.app/crew/${selectedCrew.code}`}
                   size={120}
-                  bgColor="transparent"
-                  fgColor="#F5F5F5"
-                  level="M"
+                  backgroundColor="transparent"
+                  color="#F5F5F5"
                 />
               </View>
             )}
@@ -962,6 +969,11 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
             ))}
           </View>
 
+          {/* Share — primary CTA right after grid */}
+          <Pressable style={[styles.copyButton, { marginTop: spacing.lg, marginBottom: spacing.sm }]} onPress={handleShareResult}>
+            <Text style={styles.copyButtonText}>send to a friend</Text>
+          </Pressable>
+
           {/* Stats */}
           <View style={styles.statsContainer}>
             <View style={styles.statRow}>
@@ -1067,12 +1079,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
           )}
 
           <View style={styles.resultsButtons}>
-            {/* Primary: share */}
-            <Pressable style={styles.copyButton} onPress={handleShareResult}>
-              <Text style={styles.copyButtonText}>send to a friend</Text>
-            </Pressable>
-
-            {/* Secondary: circle growth */}
+            {/* Circle growth */}
             {crews.length === 0 ? (
               <Pressable
                 style={[styles.copyButton, { backgroundColor: colors.card }]}
@@ -1089,22 +1096,37 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
               }, crews[0]);
               const memberCount = crewMembers.get(smallestCrew.id)?.length || 0;
               if (memberCount < 5) {
+                // Contextual nudge based on crew alignment
+                const result = crewResults.get(smallestCrew.id);
+                const myResult = result?.memberResults.find(m => m.userId === user?.id);
+                const nudgeText = myResult && myResult.alignmentPercent >= 70
+                  ? 'your circle vibed on this one — imagine that with more friends'
+                  : 'your circle needs more hot takes — invite someone who gets you';
+
                 return (
-                  <Pressable
-                    style={[styles.copyButton, { backgroundColor: colors.card }]}
-                    onPress={async () => {
-                      const msg = `join my circle "${smallestCrew.name}" on aaybee: https://aaybee.netlify.app/crew/${smallestCrew.code}`;
-                      if (Platform.OS === 'web' && navigator?.share) {
-                        await navigator.share({ text: msg });
-                      } else if (Platform.OS === 'web' && navigator?.clipboard) {
-                        await navigator.clipboard.writeText(msg);
-                      } else {
-                        await Share.share({ message: msg });
-                      }
-                    }}
-                  >
-                    <Text style={[styles.copyButtonText, { color: colors.textPrimary }]}>invite more</Text>
-                  </Pressable>
+                  <>
+                    {result && (
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: spacing.sm }}>
+                        {nudgeText}
+                      </Text>
+                    )}
+                    <Pressable
+                      style={[styles.copyButton, { backgroundColor: colors.card }]}
+                      onPress={async () => {
+                        const crewUrl = user?.id ? `https://aaybee.netlify.app/crew/${smallestCrew.code}?ref=${user.id}` : `https://aaybee.netlify.app/crew/${smallestCrew.code}`;
+                        const msg = `join my circle "${smallestCrew.name}" on aaybee: ${crewUrl}`;
+                        if (Platform.OS === 'web' && navigator?.share) {
+                          await navigator.share({ text: msg });
+                        } else if (Platform.OS === 'web' && navigator?.clipboard) {
+                          await navigator.clipboard.writeText(msg);
+                        } else {
+                          await Share.share({ message: msg });
+                        }
+                      }}
+                    >
+                      <Text style={[styles.copyButtonText, { color: colors.textPrimary }]}>invite more</Text>
+                    </Pressable>
+                  </>
                 );
               }
               return null;

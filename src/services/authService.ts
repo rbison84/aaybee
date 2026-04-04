@@ -17,7 +17,7 @@ export interface AuthResult {
 /**
  * Sign up with email and password
  */
-export async function signUp(email: string, password: string): Promise<AuthResult> {
+export async function signUp(email: string, password: string, referredBy?: string): Promise<AuthResult> {
   try {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -31,9 +31,13 @@ export async function signUp(email: string, password: string): Promise<AuthResul
       };
     }
 
-    // Log joined activity
+    // Log joined activity + set referral and email on profile
     if (data.user?.id) {
       activityService.logJoined(data.user.id).catch(console.error);
+
+      const profileUpdate: Record<string, string> = { email };
+      if (referredBy) profileUpdate.referred_by = referredBy;
+      supabase.from('user_profiles').update(profileUpdate).eq('id', data.user.id).then();
     }
 
     return {

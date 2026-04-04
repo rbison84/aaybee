@@ -11,7 +11,7 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  signUp: (email: string, password: string) => Promise<authService.AuthResult>;
+  signUp: (email: string, password: string, referredBy?: string) => Promise<authService.AuthResult>;
   signIn: (email: string, password: string) => Promise<authService.AuthResult>;
   signOut: () => Promise<authService.AuthResult>;
   resetPassword: (email: string) => Promise<authService.AuthResult>;
@@ -56,8 +56,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string) => {
-    const result = await authService.signUp(email, password);
+  const signUp = useCallback(async (email: string, password: string, referredBy?: string) => {
+    const result = await authService.signUp(email, password, referredBy);
     return result;
   }, []);
 
