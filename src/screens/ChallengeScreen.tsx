@@ -202,14 +202,22 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
 
   // Load leaderboard + active challenges
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setActiveChallenges([]);
+      setLeaderboard([]);
+      return;
+    }
     challengeService.getMyActiveChallenges(user.id).then(setActiveChallenges);
     challengeService.getChallengeLeaderboard(user.id).then(setLeaderboard);
   }, [user?.id]);
 
   // Load friends on mount
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setFriends([]);
+      setFriendRequests([]);
+      return;
+    }
     (async () => {
       const [friendsData, requestsData] = await Promise.all([
         friendService.getFriends(user.id),
