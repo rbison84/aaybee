@@ -194,6 +194,53 @@ export const vsService = {
   },
 
   /**
+   * Create a challenge with a pre-built pool (for curated packs).
+   */
+  createChallengeWithPool: async (
+    challengerId: string | null,
+    pool: VsMovie[]
+  ): Promise<{ challenge: VsChallenge | null; error?: string }> => {
+    try {
+      let code = generateCode();
+      for (let i = 0; i < 10; i++) {
+        const { data: existing } = await supabase
+          .from('vs_challenges')
+          .select('id')
+          .eq('code', code)
+          .maybeSingle();
+        if (!existing) break;
+        code = generateCode();
+      }
+
+      const { data: challenge, error } = await supabase
+        .from('vs_challenges')
+        .insert({
+          code,
+          challenger_id: challengerId,
+          challenged_id: null,
+          challenged_name: null,
+          status: 'pending',
+          mode: 'manual',
+          pool,
+          selected_movies: [],
+          pairs: [],
+          current_pair: 0,
+          challenger_current_pair: 0,
+          score: null,
+          results: null,
+          completed_at: null,
+        })
+        .select()
+        .single();
+
+      if (error) return { challenge: null, error: error.message };
+      return { challenge };
+    } catch {
+      return { challenge: null, error: 'Failed to create challenge' };
+    }
+  },
+
+  /**
    * Join a challenge by code
    */
   joinChallenge: async (
