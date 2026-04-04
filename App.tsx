@@ -472,25 +472,11 @@ function MainApp() {
   const isGuestMode = !hasCompletedOnboarding && !!deepLink && isAuthGuest;
 
   // Compute locked tabs
-  const lockedTabs = useMemo((): Record<TabType, boolean> => {
-    if (isGuestMode) {
-      // Guest mode: solo tabs locked, social tabs unlocked if deep-linked
-      return {
-        compare: true, rankings: true, discover: true,
-        vs: deepLink?.type !== 'challenge',
-        daily: deepLink?.type !== 'daily',
-        decide: true,
-      };
-    }
-    return {
-      compare: false,
-      vs: false,
-      daily: false,
-      rankings: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.rankings ?? 0),
-      discover: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.discover ?? 0),
-      decide: unlockAllFeatures ? false : postOnboardingComparisons < (TAB_UNLOCK_THRESHOLDS.decide ?? 0),
-    };
-  }, [postOnboardingComparisons, unlockAllFeatures, isGuestMode, deepLink]);
+  // All tabs are always navigable — screens handle their own empty/locked states inline
+  const lockedTabs = useMemo((): Record<TabType, boolean> => ({
+    compare: false, rankings: false, discover: false,
+    vs: false, daily: false, decide: false,
+  }), []);
 
   const handleLockedTabPress = useCallback((tab: TabType) => {
     if (isGuestMode) {
