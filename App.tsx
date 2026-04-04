@@ -21,7 +21,6 @@ import { AuthScreen } from './src/screens/AuthScreen';
 // FriendsScreen is now accessed via ProfileScreen
 import { DailyScreen } from './src/screens/DailyScreen';
 import { DecideScreen } from './src/screens/DecideScreen';
-import { VsScreen } from './src/screens/VsScreen';
 import { ChallengeScreen } from './src/screens/ChallengeScreen';
 
 // Lazy-load screens that are locked behind comparison thresholds or shown as overlays
@@ -430,8 +429,6 @@ function MainApp() {
   const [showSearch, setShowSearch] = useState(false);
   const [showAaybee100, setShowAaybee100] = useState(false);
   const [showTv, setShowTv] = useState(false);
-  const [showVs, setShowVs] = useState(false);
-  const [vsInitialCode, setVsInitialCode] = useState<string | undefined>();
   const [challengeInitialCode, setChallengeInitialCode] = useState<string | undefined>();
   const [rankingReveal, setRankingReveal] = useState<'classic' | 'top25' | 'all' | null>(null);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
@@ -556,7 +553,6 @@ function MainApp() {
     setShowSearch(false);
     setShowAaybee100(false);
     setShowTv(false);
-    setShowVs(false);
   }, []);
 
   // Handle opening profile - remember current tab
@@ -620,10 +616,9 @@ function MainApp() {
       handleModeChange('social');
       setSocialTab('daily');
     } else if (deepLink.type === 'vs') {
-      // Legacy VS links — open VS overlay (keep for backwards compat)
-      closeAllOverlays();
-      setVsInitialCode(deepLink.code);
-      setShowVs(true);
+      handleModeChange('social');
+      setSocialTab('vs');
+      setChallengeInitialCode(deepLink.code);
     } else if (deepLink.type === 'challenge') {
       handleModeChange('social');
       setSocialTab('vs');
@@ -793,16 +788,6 @@ function MainApp() {
           <Suspense fallback={<LoadingScreen />}>
             <TvScreen onClose={() => setShowTv(false)} />
           </Suspense>
-        </View>
-      )}
-
-      {/* VS overlay */}
-      {showVs && (
-        <View style={styles.screenOverlay}>
-          <VsScreen
-            onClose={() => { setShowVs(false); setVsInitialCode(undefined); }}
-            initialCode={vsInitialCode}
-          />
         </View>
       )}
 

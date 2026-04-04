@@ -114,6 +114,9 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   const [showPacks, setShowPacks] = useState(false);
   const [friendTopMovies, setFriendTopMovies] = useState<Map<string, { title: string }[]>>(new Map());
 
+  // Inline code input for home screen
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+
   // ============================================
   // LOAD INITIAL CODE (deep link join)
   // ============================================
@@ -255,6 +258,104 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   }, [user, selectedIds, availableMovies, haptics]);
 
   // ============================================
+  // PRIMARY CTA: "challenge a friend"
+  // ============================================
+
+  const handleCreateChallenge = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    setError(null);
+    const movies = await challengeService.getTopMoviesForChallenge(user.id, 9);
+    if (movies.length >= 9) {
+      const selectedMovies = movies.slice(0, 9);
+      const creatorRanking = selectedMovies.map(m => m.id);
+      const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
+      const { challenge: c, error: err } = await challengeService.createChallenge(
+        user.id, displayName, selectedMovies, creatorRanking,
+      );
+      if (c) {
+        setChallenge(c);
+        setStep('share');
+        haptics.success();
+      } else {
+        setError(err || 'Failed');
+      }
+    } else {
+      setShowPacks(true);
+    }
+    setLoading(false);
+  }, [user, haptics]);
+
+  // ============================================
+  // REMATCH
+  // ============================================
+
+  const handleRematch = useCallback(async () => {
+    if (!challenge || !user?.id) return;
+    setLoading(true);
+    const movies = await challengeService.getTopMoviesForChallenge(user.id, 9);
+    if (movies.length >= 9) {
+      const selectedMovies = movies.slice(0, 9);
+      const creatorRanking = selectedMovies.map(m => m.id);
+      const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
+      const { challenge: c } = await challengeService.createChallenge(user.id, displayName, selectedMovies, creatorRanking);
+      if (c) {
+        setChallenge(c);
+        setResults(null);
+        setStep('share');
+      }
+    } else {
+      setShowPacks(true);
+      setResults(null);
+      setStep('home');
+    }
+    setLoading(false);
+  }, [challenge, user]);
+
+  // ============================================
+  // JOIN CODE FROM HOME SCREEN INPUT
+  // ============================================
+
+  const handleJoinCodeInput = useCallback(async (text: string) => {
+    const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    setJoinCodeInput(cleaned);
+    if (cleaned.length === 6) {
+      setLoading(true);
+      const c = await challengeService.getChallengeByCode(cleaned);
+      if (c) {
+        setChallenge(c);
+        if (c.status === 'complete' && c.results) {
+          setResults(c.results as ChallengeResults);
+          setStep('results');
+        } else if (user?.id) {
+          const autoName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
+          setChallengerName(autoName);
+          const { challenge: updated } = await challengeService.joinChallenge(c.code, autoName, user.id);
+          if (updated) {
+            setChallenge(updated);
+            if (updated.status === 'complete' && updated.results) {
+              setResults(updated.results as ChallengeResults);
+              setStep('results');
+            } else {
+              const pairs = generateSwissPairs((updated || c).movies);
+              setRankingPairs(pairs);
+              setCurrentPairIndex(0);
+              setScores(new Map((updated || c).movies.map(m => [m.id, 0])));
+              setStep('rank');
+            }
+          }
+        } else {
+          setStep('name');
+        }
+      } else {
+        setError('Challenge not found');
+      }
+      setLoading(false);
+      setJoinCodeInput('');
+    }
+  }, [user]);
+
+  // ============================================
   // JOIN + RANK FLOW
   // ============================================
 
@@ -352,7 +453,16 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
   const handleShareLink = useCallback(async () => {
     if (!challenge) return;
     const url = shareService.getChallengeShareUrl(challenge.code);
-    const message = `${challenge.creator_name} challenged you to rank ${challenge.movies.length} movies! can you match their taste?\n\n${url}`;
+
+    // Social proof from last game
+    let proofText = 'I ranked 9 movies on aaybee — can you match my taste?';
+    if (leaderboard.length > 0) {
+      const lastGame = leaderboard[0];
+      const tier = getMatchTier(lastGame.matchPercent);
+      proofText = `I got ${lastGame.matchPercent}% with ${lastGame.name} — ${tier.name}. can you beat that?`;
+    }
+
+    const message = `${proofText}\n\n${url}`;
 
     try {
       if (Platform.OS === 'web' && navigator?.share) {
@@ -370,7 +480,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
         console.error('Share failed:', err);
       }
     }
-  }, [challenge, haptics]);
+  }, [challenge, leaderboard, haptics]);
 
   const handleShareResults = useCallback(async () => {
     if (!challenge || !results) return;
@@ -490,10 +600,6 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
         posterUrl: m.poster_url || '',
       }));
 
-      // Don't create the challenge yet — let the user rank these movies first
-      // For a curated pack the creator doesn't have a pre-existing ranking.
-      // So we need the creator to rank them too. Set up the challenge with these movies
-      // but go to the select step so they can see what they're challenging with.
       setAvailableMovies(packMovies);
       setSelectedIds(new Set(packMovies.map(m => m.id)));
       setShowPacks(false);
@@ -580,10 +686,34 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
     </View>
   );
 
-  // HOME: social hub with friends + challenges
+  // HOME: unified VS flow
   const renderHome = () => (
     <ScrollView style={styles.homeScroll} contentContainerStyle={styles.homeScrollContent}>
       <Text style={styles.vsTitle}>VS</Text>
+
+      {/* Primary CTA */}
+      <Pressable
+        style={[styles.primaryCta, loading && styles.actionButtonDisabled]}
+        onPress={handleCreateChallenge}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator size="small" color={colors.background} />
+        ) : (
+          <Text style={styles.primaryCtaText}>challenge a friend</Text>
+        )}
+      </Pressable>
+
+      {/* Always-visible code input */}
+      <TextInput
+        style={styles.codeInputInline}
+        placeholder="enter a code"
+        placeholderTextColor={colors.textMuted}
+        value={joinCodeInput}
+        onChangeText={handleJoinCodeInput}
+        maxLength={6}
+        autoCapitalize="characters"
+      />
 
       {/* Curated Pack Selection */}
       {showPacks && (
@@ -605,208 +735,163 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
         </Animated.View>
       )}
 
-      {/* YOUR PEOPLE - friends leaderboard */}
-      <Animated.View entering={FadeInDown.delay(100)} style={styles.sectionBlock}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionLabel}>your people</Text>
-          {user?.id && (
-            <View style={styles.headerActions}>
-              <Pressable onPress={() => setShowQr(!showQr)} style={styles.subtleAction}>
-                <Text style={styles.subtleActionText}>QR</Text>
-              </Pressable>
-              <Pressable onPress={() => setShowSearch(!showSearch)} style={styles.subtleAction}>
-                <Text style={styles.subtleActionText}>+ add</Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-
-        {/* QR expansion */}
-        {showQr && (
-          <Animated.View entering={FadeIn.duration(200)} style={styles.qrSection}>
-            {Platform.OS === 'web' && QRCodeSVG && user?.id && (
-              <QRCodeSVG
-                value={`https://aaybee.netlify.app/connect/${user.id}`}
-                size={140}
-                bgColor="transparent"
-                fgColor="#F5F5F5"
-                level="M"
-              />
-            )}
-            <Text style={styles.qrHint}>friends can scan to add you</Text>
-          </Animated.View>
-        )}
-
-        {/* Inline search + share link (shown when + add tapped) */}
-        {showSearch && (
-          <Animated.View entering={FadeIn.duration(200)}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="search people or enter code..."
-              placeholderTextColor={colors.textMuted}
-              value={searchQuery}
-              onChangeText={(text) => {
-                setSearchQuery(text);
-                // Auto-detect 6-char code
-                const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                if (cleaned.length === 6) {
-                  (async () => {
-                    setLoading(true);
-                    const c = await challengeService.getChallengeByCode(cleaned);
-                    if (c) {
-                      setChallenge(c);
-                      if (c.status === 'complete' && c.results) {
-                        setResults(c.results as ChallengeResults);
-                        setStep('results');
-                      } else if (user?.id) {
-                        const autoName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
-                        setChallengerName(autoName);
-                        const { challenge: updated } = await challengeService.joinChallenge(c.code, autoName, user.id);
-                        if (updated) {
-                          setChallenge(updated);
-                          if (updated.status === 'complete' && updated.results) {
-                            setResults(updated.results as ChallengeResults);
-                            setStep('results');
-                          } else {
-                            const pairs = generateSwissPairs((updated || c).movies);
-                            setRankingPairs(pairs);
-                            setCurrentPairIndex(0);
-                            setScores(new Map((updated || c).movies.map(m => [m.id, 0])));
-                            setStep('rank');
-                          }
-                        }
-                      } else {
-                        setStep('name');
-                      }
-                    } else {
-                      // Not a code, treat as search
-                      handleSearch(text);
-                    }
-                    setLoading(false);
-                  })();
-                } else {
-                  handleSearch(text);
-                }
-              }}
-              autoFocus
-              autoCapitalize="none"
-            />
-            {/* Share challenge link button */}
-            <Pressable
-              style={styles.shareLinkButton}
-              onPress={async () => {
-                if (!user?.id) return;
-                // Sharing to unknown person — always show collection picker
-                setShowPacks(true);
-              }}
-            >
-              <Text style={styles.shareLinkText}>share challenge link</Text>
-            </Pressable>
-            {/* Search results */}
-            {searchResults.map(result => (
-              <View key={result.id} style={styles.searchResultRow}>
-                <Text style={styles.searchResultName}>{result.display_name}</Text>
-                {result.is_friend ? (
-                  <Text style={styles.searchResultStatus}>friends</Text>
-                ) : result.request_pending ? (
-                  <Text style={styles.searchResultStatus}>pending</Text>
-                ) : (
-                  <Pressable onPress={() => handleSendRequest(result.id)} style={styles.addButton}>
-                    <Text style={styles.addButtonText}>add</Text>
-                  </Pressable>
-                )}
+      {/* YOUR PEOPLE - friends leaderboard (only if friends exist) */}
+      {(friends.length > 0 || (user?.id && showSearch)) && (
+        <Animated.View entering={FadeInDown.delay(100)} style={styles.sectionBlock}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionLabel}>your people</Text>
+            {user?.id && (
+              <View style={styles.headerActions}>
+                <Pressable onPress={() => setShowQr(!showQr)} style={styles.subtleAction}>
+                  <Text style={styles.subtleActionText}>QR</Text>
+                </Pressable>
+                <Pressable onPress={() => setShowSearch(!showSearch)} style={styles.subtleAction}>
+                  <Text style={styles.subtleActionText}>+ add</Text>
+                </Pressable>
               </View>
-            ))}
-            {/* Pending requests inline */}
-            {friendRequests.length > 0 && (
-              <View style={{ marginTop: spacing.sm }}>
-                <Text style={[styles.sectionLabel, { marginBottom: spacing.xs }]}>{friendRequests.length} pending</Text>
-                {friendRequests.map(req => (
-                  <View key={req.id} style={styles.requestRow}>
-                    <Text style={styles.requestName}>{req.from_user.display_name}</Text>
-                    <View style={styles.requestActions}>
-                      <Pressable style={styles.acceptButton} onPress={() => handleAcceptRequest(req.id)}>
-                        <Text style={styles.acceptText}>accept</Text>
+            )}
+          </View>
+
+          {/* QR expansion */}
+          {showQr && (
+            <Animated.View entering={FadeIn.duration(200)} style={styles.qrSection}>
+              {Platform.OS === 'web' && QRCodeSVG && user?.id && (
+                <QRCodeSVG
+                  value={`https://aaybee.netlify.app/connect/${user.id}`}
+                  size={140}
+                  bgColor="transparent"
+                  fgColor="#F5F5F5"
+                  level="M"
+                />
+              )}
+              <Text style={styles.qrHint}>friends can scan to add you</Text>
+            </Animated.View>
+          )}
+
+          {/* Inline search (shown when + add tapped) */}
+          {showSearch && (
+            <Animated.View entering={FadeIn.duration(200)}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="search people..."
+                placeholderTextColor={colors.textMuted}
+                value={searchQuery}
+                onChangeText={(text) => {
+                  setSearchQuery(text);
+                  handleSearch(text);
+                }}
+                autoFocus
+                autoCapitalize="none"
+              />
+              {/* Search results */}
+              {searchResults.map(result => (
+                <View key={result.id} style={styles.searchResultRow}>
+                  <Text style={styles.searchResultName}>{result.display_name}</Text>
+                  {result.is_friend ? (
+                    <Text style={styles.searchResultStatus}>friends</Text>
+                  ) : result.request_pending ? (
+                    <Text style={styles.searchResultStatus}>pending</Text>
+                  ) : (
+                    <Pressable onPress={() => handleSendRequest(result.id)} style={styles.addButton}>
+                      <Text style={styles.addButtonText}>add</Text>
+                    </Pressable>
+                  )}
+                </View>
+              ))}
+              {/* Pending requests inline */}
+              {friendRequests.length > 0 && (
+                <View style={{ marginTop: spacing.sm }}>
+                  <Text style={[styles.sectionLabel, { marginBottom: spacing.xs }]}>{friendRequests.length} pending</Text>
+                  {friendRequests.map(req => (
+                    <View key={req.id} style={styles.requestRow}>
+                      <Text style={styles.requestName}>{req.from_user.display_name}</Text>
+                      <View style={styles.requestActions}>
+                        <Pressable style={styles.acceptButton} onPress={() => handleAcceptRequest(req.id)}>
+                          <Text style={styles.acceptText}>accept</Text>
+                        </Pressable>
+                        <Pressable onPress={() => handleRejectRequest(req.id)}>
+                          <Text style={styles.rejectText}>decline</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </Animated.View>
+          )}
+
+          {/* Friend leaderboard */}
+          {friends.length > 0 ? (
+            friends
+              .map(friend => {
+                const name = friend.friend?.display_name || 'Anonymous';
+                const friendGames = leaderboard.filter(l => l.name === name);
+                const avgMatch = friendGames.length > 0
+                  ? Math.round(friendGames.reduce((s, g) => s + g.matchPercent, 0) / friendGames.length)
+                  : (friend.taste_match ? Math.round(friend.taste_match) : null);
+                return { friend, name, avgMatch, gameCount: friendGames.length, friendGames };
+              })
+              .sort((a, b) => (b.avgMatch ?? -1) - (a.avgMatch ?? -1))
+              .map(({ friend, name, avgMatch, gameCount, friendGames }, rank) => {
+                const isExpanded = expandedFriendId === friend.friend_id;
+                const topMovies = friendTopMovies.get(friend.friend_id);
+                const rankLabel = avgMatch !== null && rank < 3 ? `#${rank + 1}` : '';
+                return (
+                  <Animated.View key={friend.friend_id} entering={FadeInDown.delay(150 + rank * 50)}>
+                    <View style={styles.friendRow}>
+                      {rankLabel ? (
+                        <Text style={styles.rankBadge}>{rankLabel}</Text>
+                      ) : (
+                        <View style={styles.rankSpacer} />
+                      )}
+                      <Pressable style={styles.friendInfo} onPress={() => handleFriendTap(friend)}>
+                        <Text style={styles.friendName}>{name}</Text>
+                        <Text style={styles.friendMatch}>
+                          {avgMatch !== null ? `${avgMatch}% avg` : '\u2014'}
+                          {gameCount > 0 ? `  ${gameCount} game${gameCount !== 1 ? 's' : ''}` : ''}
+                        </Text>
                       </Pressable>
-                      <Pressable onPress={() => handleRejectRequest(req.id)}>
-                        <Text style={styles.rejectText}>decline</Text>
+                      <Pressable style={styles.challengeButton} onPress={() => handleQuickChallenge(friend)}>
+                        <Text style={styles.challengeButtonLabel}>challenge</Text>
                       </Pressable>
                     </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </Animated.View>
-        )}
-
-        {/* Friend leaderboard */}
-        {friends.length > 0 ? (
-          friends
-            .map(friend => {
-              const name = friend.friend?.display_name || 'Anonymous';
-              const friendGames = leaderboard.filter(l => l.name === name);
-              const avgMatch = friendGames.length > 0
-                ? Math.round(friendGames.reduce((s, g) => s + g.matchPercent, 0) / friendGames.length)
-                : (friend.taste_match ? Math.round(friend.taste_match) : null);
-              return { friend, name, avgMatch, gameCount: friendGames.length, friendGames };
-            })
-            .sort((a, b) => (b.avgMatch ?? -1) - (a.avgMatch ?? -1))
-            .map(({ friend, name, avgMatch, gameCount, friendGames }, rank) => {
-              const isExpanded = expandedFriendId === friend.friend_id;
-              const topMovies = friendTopMovies.get(friend.friend_id);
-              const rankLabel = avgMatch !== null && rank < 3 ? `#${rank + 1}` : '';
-              return (
-                <Animated.View key={friend.friend_id} entering={FadeInDown.delay(150 + rank * 50)}>
-                  <View style={styles.friendRow}>
-                    {rankLabel ? (
-                      <Text style={styles.rankBadge}>{rankLabel}</Text>
-                    ) : (
-                      <View style={styles.rankSpacer} />
+                    {isExpanded && (
+                      <Animated.View entering={FadeIn.duration(200)} style={styles.friendExpanded}>
+                        {topMovies && topMovies.length > 0 && (
+                          <Text style={styles.friendMovies}>
+                            top 5: {topMovies.map(m => m.title).join(', ')}
+                          </Text>
+                        )}
+                        {friendGames.length > 0 && (
+                          <Text style={styles.friendStat}>
+                            avg match: {avgMatch}% · last played: {friendGames[0]?.date ? new Date(friendGames[0].date).toLocaleDateString() : '\u2014'}
+                          </Text>
+                        )}
+                        {friendGames.length === 0 && (
+                          <Text style={styles.friendStat}>no challenges yet</Text>
+                        )}
+                      </Animated.View>
                     )}
-                    <Pressable style={styles.friendInfo} onPress={() => handleFriendTap(friend)}>
-                      <Text style={styles.friendName}>{name}</Text>
-                      <Text style={styles.friendMatch}>
-                        {avgMatch !== null ? `${avgMatch}% avg` : '\u2014'}
-                        {gameCount > 0 ? `  ${gameCount} game${gameCount !== 1 ? 's' : ''}` : ''}
-                      </Text>
-                    </Pressable>
-                    <Pressable style={styles.challengeButton} onPress={() => handleQuickChallenge(friend)}>
-                      <Text style={styles.challengeButtonLabel}>challenge</Text>
-                    </Pressable>
-                  </View>
-                  {isExpanded && (
-                    <Animated.View entering={FadeIn.duration(200)} style={styles.friendExpanded}>
-                      {topMovies && topMovies.length > 0 && (
-                        <Text style={styles.friendMovies}>
-                          top 5: {topMovies.map(m => m.title).join(', ')}
-                        </Text>
-                      )}
-                      {friendGames.length > 0 && (
-                        <Text style={styles.friendStat}>
-                          avg match: {avgMatch}% · last played: {friendGames[0]?.date ? new Date(friendGames[0].date).toLocaleDateString() : '\u2014'}
-                        </Text>
-                      )}
-                      {friendGames.length === 0 && (
-                        <Text style={styles.friendStat}>no challenges yet</Text>
-                      )}
-                    </Animated.View>
-                  )}
-                </Animated.View>
-              );
-            })
-        ) : !showSearch && user?.id ? (
-          <Pressable onPress={() => setShowSearch(true)}>
-            <Text style={styles.emptyPrompt}>add friends to challenge them +</Text>
-          </Pressable>
-        ) : null}
+                  </Animated.View>
+                );
+              })
+          ) : null}
+        </Animated.View>
+      )}
 
-        {/* Pending requests badge (when search is closed) */}
-        {!showSearch && friendRequests.length > 0 && (
-          <Pressable onPress={() => setShowSearch(true)}>
-            <Text style={styles.pendingBadge}>{friendRequests.length} pending request{friendRequests.length !== 1 ? 's' : ''} ›</Text>
-          </Pressable>
-        )}
-      </Animated.View>
+      {/* +add prompt when no friends and search not open */}
+      {friends.length === 0 && !showSearch && user?.id && (
+        <Pressable onPress={() => setShowSearch(true)} style={styles.sectionBlock}>
+          <Text style={styles.emptyPrompt}>add friends to challenge them +</Text>
+        </Pressable>
+      )}
+
+      {/* Pending requests badge (when search is closed) */}
+      {!showSearch && friendRequests.length > 0 && (
+        <Pressable onPress={() => setShowSearch(true)}>
+          <Text style={styles.pendingBadge}>{friendRequests.length} pending request{friendRequests.length !== 1 ? 's' : ''} ›</Text>
+        </Pressable>
+      )}
 
       {/* ACTIVE - in-progress challenges */}
       {activeChallenges.filter(c => c.status !== 'complete').length > 0 && (
@@ -815,6 +900,12 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
           {activeChallenges.filter(c => c.status !== 'complete').map(c => {
             const isCreator = c.creator_id === user?.id;
             const opponentName = isCreator ? (c.challenger_name || 'waiting...') : c.creator_name;
+            const statusText = c.status === 'pending'
+              ? 'waiting...'
+              : isCreator
+                ? 'waiting...'
+                : 'your turn!';
+            const timeAgo = c.created_at ? getTimeAgo(c.created_at) : '';
             return (
               <Pressable key={c.id} style={styles.challengeRow} onPress={() => {
                 setChallenge(c);
@@ -829,7 +920,7 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
               }}>
                 <Text style={styles.challengeRowName}>{opponentName}</Text>
                 <Text style={styles.challengeRowStatus}>
-                  {c.status === 'pending' ? 'waiting...' : 'ranking...'}
+                  {statusText}{timeAgo ? ` · ${timeAgo}` : ''}
                 </Text>
               </Pressable>
             );
@@ -901,15 +992,10 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
     </Animated.View>
   );
 
-  // SHARE: show link
+  // SHARE: waiting/share screen
   const renderShare = () => (
     <Animated.View entering={FadeIn} style={styles.centeredContent}>
-      <Text style={styles.heroTitle}>ready!</Text>
-      <Text style={styles.heroSubtitle}>share this with your friend</Text>
-
-      <View style={styles.codeDisplay}>
-        <Text style={styles.codeDisplayText}>{challenge?.code}</Text>
-      </View>
+      <Text style={styles.heroTitle}>send this to a friend</Text>
 
       {Platform.OS === 'web' && QRCodeSVG && (
         <View style={styles.qrContainer}>
@@ -923,12 +1009,17 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
         </View>
       )}
 
+      <View style={styles.codeDisplay}>
+        <Text style={styles.codeLabel}>CODE</Text>
+        <Text style={styles.codeDisplayText}>{challenge?.code}</Text>
+      </View>
+
       <Pressable
-        style={[styles.actionButton, styles.actionButtonPrimary, { marginTop: spacing.xl }]}
+        style={[styles.primaryCta, { marginTop: spacing.xl, width: '100%', maxWidth: 320 }]}
         onPress={handleShareLink}
       >
-        <Text style={styles.actionButtonTextPrimary}>
-          {copied ? 'copied!' : 'share challenge'}
+        <Text style={styles.primaryCtaText}>
+          {copied ? 'copied!' : 'share link'}
         </Text>
       </Pressable>
 
@@ -1045,9 +1136,11 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
     );
   };
 
-  // RESULTS
+  // RESULTS: updated layout with new CTAs
   const renderResults = () => {
     if (!results || !challenge) return null;
+    const tier = getMatchTier(results.matchPercent);
+    const isGuest = !user?.id;
 
     return (
       <Animated.View entering={FadeIn} style={styles.fullContent}>
@@ -1055,9 +1148,8 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
           <Animated.Text entering={FadeInDown.delay(200)} style={styles.matchPercent}>
             {results.matchPercent}%
           </Animated.Text>
-          <Text style={styles.matchLabel}>taste match</Text>
-          <Text style={styles.matchTierName}>{getMatchTier(results.matchPercent).name}</Text>
-          <Text style={styles.matchTierSubtitle}>{getMatchTier(results.matchPercent).subtitle}</Text>
+          <Text style={styles.matchTierName}>{tier.name}</Text>
+          <Text style={styles.matchTierSubtitle}>"{tier.subtitle}"</Text>
           <Text style={styles.matchNames}>
             {challenge.creator_name} & {challenge.challenger_name}
           </Text>
@@ -1089,22 +1181,45 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
           )}
         </ScrollView>
 
+        {/* Primary: challenge someone else */}
         <Pressable
-          style={[styles.actionButton, styles.actionButtonPrimary]}
+          style={[styles.primaryCta, { width: '100%', maxWidth: 320, alignSelf: 'center' }]}
+          onPress={handleCreateChallenge}
+        >
+          <Text style={styles.primaryCtaText}>challenge someone else</Text>
+        </Pressable>
+
+        {/* Secondary: share result */}
+        <Pressable
+          style={[styles.actionButton, { marginTop: spacing.sm, backgroundColor: colors.surface }]}
           onPress={handleShareResults}
         >
-          <Text style={styles.actionButtonTextPrimary}>
-            {copied ? 'copied!' : 'send to another friend'}
+          <Text style={styles.actionButtonText}>
+            {copied ? 'copied!' : 'share result'}
           </Text>
         </Pressable>
 
-        <Text style={styles.circlePrompt}>play daily with friends? create a circle in the daily tab</Text>
+        {/* Tertiary: rematch */}
+        {user?.id && (
+          <Pressable
+            style={[styles.actionButton, { marginTop: spacing.sm, backgroundColor: colors.card }]}
+            onPress={handleRematch}
+          >
+            <Text style={styles.actionButtonText}>rematch</Text>
+          </Pressable>
+        )}
 
+        {/* Guest signup prompt */}
+        {isGuest && (
+          <Text style={styles.guestPrompt}>sign up to save your rankings</Text>
+        )}
+
+        {/* Back */}
         <Pressable
           style={[styles.actionButton, { marginTop: spacing.xs, backgroundColor: 'transparent' }]}
           onPress={() => { setStep('home'); setChallenge(null); setResults(null); }}
         >
-          <Text style={styles.actionButtonText}>back</Text>
+          <Text style={[styles.actionButtonText, { color: colors.textMuted }]}>back</Text>
         </Pressable>
 
       </Animated.View>
@@ -1134,6 +1249,22 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
       )}
     </View>
   );
+}
+
+// ============================================
+// HELPERS
+// ============================================
+
+function getTimeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 60) return `${diffMins}m`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d`;
 }
 
 // ============================================
@@ -1189,6 +1320,36 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
+  },
+
+  // Primary CTA
+  primaryCta: {
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  primaryCtaText: {
+    ...typography.bodyMedium,
+    color: colors.background,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+
+  // Inline code input
+  codeInputInline: {
+    ...typography.body,
+    color: colors.textPrimary,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    textAlign: 'center',
+    letterSpacing: 3,
+    marginBottom: spacing.lg,
   },
 
   // Buttons
@@ -1259,6 +1420,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     borderWidth: 1,
     borderColor: colors.accent,
+    alignItems: 'center',
+  },
+  codeLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textTransform: 'uppercase' as any,
+    letterSpacing: 2,
+    marginBottom: spacing.xs,
   },
   qrContainer: {
     alignItems: 'center' as const,
@@ -1433,6 +1602,13 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textMuted,
     marginLeft: spacing.sm,
+  },
+  guestPrompt: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.xl,
   },
 
   // Leaderboard (kept for compatibility)
