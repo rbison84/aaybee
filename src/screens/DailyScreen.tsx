@@ -44,6 +44,14 @@ import { crewService, Crew, CrewMember, CrewDailyResult } from '../services/crew
 import { getMatchTier } from '../services/challengeService';
 import { useAuth } from '../contexts/AuthContext';
 
+// Only import QR on web
+let QRCodeSVG: any = null;
+if (Platform.OS === 'web') {
+  try {
+    QRCodeSVG = require('qrcode.react').QRCodeSVG;
+  } catch {}
+}
+
 interface DailyScreenProps {
   onNavigateToCompare?: () => void;
 }
@@ -696,11 +704,51 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
               ))}
             </View>
 
+            {/* Nudge button — when < half have played */}
+            {(() => {
+              const playedCount = members.filter(m => m.played_today).length;
+              const halfCount = Math.ceil(members.length / 2);
+              if (playedCount < halfCount && playedCount > 0) {
+                return (
+                  <Pressable
+                    style={styles.nudgeButton}
+                    onPress={async () => {
+                      const waiting = members.length - playedCount;
+                      const msg = `${playedCount}/${members.length} have played today's daily on aaybee — waiting for ${waiting} more! join: https://aaybee.netlify.app/daily`;
+                      if (Platform.OS === 'web' && navigator?.share) {
+                        await navigator.share({ text: msg });
+                      } else if (Platform.OS === 'web' && navigator?.clipboard) {
+                        await navigator.clipboard.writeText(msg);
+                      } else {
+                        await Share.share({ message: msg });
+                      }
+                    }}
+                  >
+                    <Text style={styles.nudgeText}>send to chat · {members.length - playedCount} waiting</Text>
+                  </Pressable>
+                );
+              }
+              return null;
+            })()}
+
             {/* Crew code */}
             <View style={styles.crewCodeSection}>
               <Text style={styles.sectionLabel}>invite code</Text>
               <Text style={styles.crewCodeDisplay}>{selectedCrew.code}</Text>
             </View>
+
+            {/* QR Code for circle invite */}
+            {Platform.OS === 'web' && QRCodeSVG && selectedCrew && (
+              <View style={styles.circleQrSection}>
+                <QRCodeSVG
+                  value={`https://aaybee.netlify.app/crew/${selectedCrew.code}`}
+                  size={120}
+                  bgColor="transparent"
+                  fgColor="#F5F5F5"
+                  level="M"
+                />
+              </View>
+            )}
 
             {/* Leave */}
             <Pressable
@@ -1750,6 +1798,24 @@ const styles = StyleSheet.create({
     color: colors.accent,
     letterSpacing: 3,
     marginTop: spacing.xs,
+  },
+  nudgeButton: {
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  nudgeText: {
+    ...typography.captionMedium,
+    color: colors.background,
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  circleQrSection: {
+    alignItems: 'center',
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
   },
   leaveButton: {
     marginTop: spacing.xl,

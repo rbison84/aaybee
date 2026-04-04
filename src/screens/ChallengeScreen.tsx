@@ -1098,6 +1098,8 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
           </Text>
         </Pressable>
 
+        <Text style={styles.circlePrompt}>play daily with friends? create a circle in the daily tab</Text>
+
         <Pressable
           style={[styles.actionButton, { marginTop: spacing.xs, backgroundColor: 'transparent' }]}
           onPress={() => { setStep('home'); setChallenge(null); setResults(null); }}
@@ -1630,5 +1632,12 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center' as const,
     paddingVertical: spacing.sm,
+  },
+  circlePrompt: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center' as const,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.xl,
   },
 });

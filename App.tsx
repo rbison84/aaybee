@@ -861,17 +861,19 @@ function MainApp() {
 
           {screenContent}
 
-          {/* Bottom navigation: pill toggle + tabs */}
-          {!isGuestMode && (
-            <ModeTogglePill mode={mode} onModeChange={handleModeChange} socialBadge={pendingChallengeCount > 0} />
-          )}
-          <TabBar
-            mode={mode}
-            activeTab={activeTab}
-            onTabPress={handleTabPress}
-            lockedTabs={lockedTabs}
-            onLockedTabPress={handleLockedTabPress}
-          />
+          {/* Bottom navigation: pill toggle + tabs in distinct bar */}
+          <View style={styles.bottomNav}>
+            {!isGuestMode && (
+              <ModeTogglePill mode={mode} onModeChange={handleModeChange} socialBadge={pendingChallengeCount > 0} />
+            )}
+            <TabBar
+              mode={mode}
+              activeTab={activeTab}
+              onTabPress={handleTabPress}
+              lockedTabs={lockedTabs}
+              onLockedTabPress={handleLockedTabPress}
+            />
+          </View>
         </>
       )}
 
@@ -1015,35 +1017,38 @@ const styles = StyleSheet.create({
   loadingSpinner: {
     marginTop: spacing.sm,
   },
-  // Mode toggle pill — compact, above tab bar
+  // Bottom navigation container — distinct background
+  bottomNav: {
+    backgroundColor: colors.card,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  // Mode toggle pill — small, centered
   modePill: {
     alignItems: 'center',
     paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-    backgroundColor: colors.background,
+    paddingBottom: 2,
   },
   modePillInner: {
     flexDirection: 'row',
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
     position: 'relative',
-    width: '60%',
-    maxWidth: 240,
+    width: '45%',
+    maxWidth: 180,
   } as any,
   modePillItem: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    paddingVertical: 5,
     zIndex: 1,
   },
   modePillText: {
-    ...typography.captionMedium,
     color: colors.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    fontSize: 10,
+    letterSpacing: 0.8,
+    fontSize: 9,
+    fontWeight: '600',
   } as any,
   modePillTextActive: {
     color: colors.textPrimary,
@@ -1053,24 +1058,24 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: '50%',
-    backgroundColor: colors.surface,
-    borderRadius: 20,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
   } as any,
   modePillBadge: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: colors.accent,
     position: 'absolute',
-    top: 4,
-    right: '15%',
+    top: 3,
+    right: '12%',
   } as any,
   // Tab Bar - 3 contextual tabs
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderTopColor: colors.tabBarBorder,
+    backgroundColor: colors.card,
     paddingTop: spacing.xs,
     // paddingBottom is set dynamically via safe area insets in the component
   },
