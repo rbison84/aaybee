@@ -41,6 +41,7 @@ import {
 } from '../utils/dailySwiss';
 import { shareService } from '../services/shareService';
 import { crewService, Crew, CrewMember, CrewDailyResult } from '../services/crewService';
+import { notificationService } from '../services/notificationService';
 import { getMatchTier } from '../services/challengeService';
 import { useAuth } from '../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -300,14 +301,29 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
       for (const crew of crews) {
         if (user?.id) {
           // Authenticated: submit to server
-          crewService.submitDailyPick(crew.id, user.id, dailyNumber, ranking);
+          await crewService.submitDailyPick(crew.id, user.id, dailyNumber, ranking);
+
+          // Refresh member data to check play counts
+          const updatedMembers = await crewService.getCrewMembers(crew.id, dailyNumber);
+          setCrewMembers(prev => new Map(prev).set(crew.id, updatedMembers));
+
+          const playedCount = updatedMembers.filter(m => m.played_today).length;
+          const totalCount = updatedMembers.length;
+
+          // Notify if >= 50% played but not all
+          if (playedCount >= Math.ceil(totalCount / 2) && playedCount < totalCount) {
+            notificationService.notifyCircleDaily(crew.id, crew.name, playedCount, totalCount).catch(() => {});
+          }
+          // Notify if everyone played
+          if (playedCount === totalCount && totalCount > 1) {
+            notificationService.notifyCircleResults(crew.id, crew.name).catch(() => {});
+          }
+
+          // Load results
           crewService.getCrewDailyResults(crew.id, dailyNumber).then(result => {
             if (result) {
               setCrewResults(prev => new Map(prev).set(crew.id, result));
             }
-          });
-          crewService.getCrewMembers(crew.id, dailyNumber).then(members => {
-            setCrewMembers(prev => new Map(prev).set(crew.id, members));
           });
         }
         // Guest picks stored locally — will be submitted on signup
@@ -1051,9 +1067,50 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
           )}
 
           <View style={styles.resultsButtons}>
+            {/* Primary: share */}
             <Pressable style={styles.copyButton} onPress={handleShareResult}>
               <Text style={styles.copyButtonText}>send to a friend</Text>
             </Pressable>
+
+            {/* Secondary: circle growth */}
+            {crews.length === 0 ? (
+              <Pressable
+                style={[styles.copyButton, { backgroundColor: colors.card }]}
+                onPress={() => setCrewCreateMode(true)}
+              >
+                <Text style={[styles.copyButtonText, { color: colors.textPrimary }]}>start a circle</Text>
+              </Pressable>
+            ) : (() => {
+              // Find smallest circle
+              const smallestCrew = crews.reduce((smallest, crew) => {
+                const count = crewMembers.get(crew.id)?.length || 0;
+                const smallestCount = crewMembers.get(smallest.id)?.length || 0;
+                return count < smallestCount ? crew : smallest;
+              }, crews[0]);
+              const memberCount = crewMembers.get(smallestCrew.id)?.length || 0;
+              if (memberCount < 5) {
+                return (
+                  <Pressable
+                    style={[styles.copyButton, { backgroundColor: colors.card }]}
+                    onPress={async () => {
+                      const msg = `join my circle "${smallestCrew.name}" on aaybee: https://aaybee.netlify.app/crew/${smallestCrew.code}`;
+                      if (Platform.OS === 'web' && navigator?.share) {
+                        await navigator.share({ text: msg });
+                      } else if (Platform.OS === 'web' && navigator?.clipboard) {
+                        await navigator.clipboard.writeText(msg);
+                      } else {
+                        await Share.share({ message: msg });
+                      }
+                    }}
+                  >
+                    <Text style={[styles.copyButtonText, { color: colors.textPrimary }]}>invite more</Text>
+                  </Pressable>
+                );
+              }
+              return null;
+            })()}
+
+            {/* Back */}
             <Pressable style={styles.backToTodayButton} onPress={handleBackToIntro}>
               <Text style={styles.backToTodayText}>back</Text>
             </Pressable>

@@ -54,13 +54,14 @@ type ChallengeStep =
 
 interface ChallengeScreenProps {
   initialCode?: string;
+  onOpenAuth?: () => void;
 }
 
 // ============================================
 // COMPONENT
 // ============================================
 
-export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
+export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProps) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { isDesktop, isWeb } = useAppDimensions();
@@ -1215,8 +1216,13 @@ export function ChallengeScreen({ initialCode }: ChallengeScreenProps) {
         )}
 
         {/* Guest signup prompt */}
-        {isGuest && (
-          <Text style={styles.guestPrompt}>sign up to save your rankings</Text>
+        {isGuest && onOpenAuth && (
+          <Pressable
+            style={[styles.actionButton, { backgroundColor: colors.surface, marginTop: spacing.xs }]}
+            onPress={onOpenAuth}
+          >
+            <Text style={styles.actionButtonText}>sign up to keep your rankings</Text>
+          </Pressable>
         )}
 
         {/* Back */}

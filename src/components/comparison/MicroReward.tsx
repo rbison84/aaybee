@@ -8,6 +8,7 @@ import { colors, borderRadius, typography, spacing } from '../../theme/cinematic
 
 export type RewardType =
   // Feature unlocks (based on postOnboardingComparisons)
+  | 'taste_preview'           // 5 comparisons - early archetype preview
   | 'unlock_top10_search'     // 10 comparisons - top 10 + search
   | 'unlock_top25'            // 20 comparisons
   // Encouragement milestones
@@ -26,6 +27,7 @@ interface MicroRewardProps {
   type: RewardType;
   data?: {
     movieTitle?: string;
+    archetypeName?: string;
     count?: number;
   };
   onComplete: () => void;
@@ -83,6 +85,12 @@ const REWARD_CONFIG: Record<RewardType, {
     title: 'new #1',
     subtitle: '',
   },
+  taste_preview: {
+    title: 'your taste is taking shape',
+    subtitle: '',
+    navigateLabel: 'see your taste',
+    continueLabel: 'keep comparing',
+  },
 };
 
 export function MicroReward({ type, data, onComplete, onNavigate }: MicroRewardProps) {
@@ -90,12 +98,14 @@ export function MicroReward({ type, data, onComplete, onNavigate }: MicroRewardP
 
   const isUnlockType = type.startsWith('unlock_');
   const isEncouragementType = type.startsWith('encouragement_');
-  const isInteractiveType = isUnlockType || isEncouragementType || type === 'recommendation_earned';
+  const isInteractiveType = isUnlockType || isEncouragementType || type === 'recommendation_earned' || type === 'taste_preview';
 
   const config = REWARD_CONFIG[type];
-  const subtitle = type === 'new_top_movie' && data?.movieTitle
-    ? data.movieTitle
-    : config.subtitle;
+  const subtitle = type === 'taste_preview' && data?.archetypeName
+    ? `you're ${data.archetypeName}`
+    : type === 'new_top_movie' && data?.movieTitle
+      ? data.movieTitle
+      : config.subtitle;
 
   useEffect(() => {
     haptics.success();
@@ -166,6 +176,7 @@ export function checkUnlockMilestone(
   previousPostOnboarding: number
 ): RewardType | null {
   const milestones: { threshold: number; type: RewardType }[] = [
+    { threshold: 5, type: 'taste_preview' },
     { threshold: 10, type: 'unlock_top10_search' },
     { threshold: 20, type: 'encouragement_30' },
     { threshold: 30, type: 'unlock_top25' },

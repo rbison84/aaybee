@@ -16,6 +16,7 @@ import { useDevSettings } from '../contexts/DevSettingsContext';
 import { prefetchImages } from '../utils/imageCache';
 import { Movie } from '../types';
 import { VIBE_GENRE_MAP } from '../utils/genreAffinity';
+import { computeTasteAxes, getArchetype } from '../utils/tasteAxes';
 import { colors, spacing, borderRadius, typography, shadows, animation } from '../theme/cinematic';
 import { CinematicBackground, CinematicCard } from '../components/cinematic';
 import { MicroReward, RewardType, checkUnlockMilestone, checkTopMovieChange } from '../components/comparison/MicroReward';
@@ -151,7 +152,7 @@ export function ComparisonScreen({ onOpenRanking, onOpenDiscover, onOpenDecide, 
   // Micro-reward state
   const [activeReward, setActiveReward] = useState<{
     type: RewardType;
-    data?: { movieTitle?: string };
+    data?: { movieTitle?: string; archetypeName?: string };
   } | null>(null);
 
   // Recommendation reveal overlay state
@@ -340,14 +341,26 @@ export function ComparisonScreen({ onOpenRanking, onOpenDiscover, onOpenDecide, 
     const recTrackResult = newPostOnboarding > 40 ? trackComparison() : { unlocked: false };
 
     // Compute reward immediately (show after transition)
-    let pendingReward: { type: RewardType; data?: { movieTitle?: string } } | null = null;
+    let pendingReward: { type: RewardType; data?: { movieTitle?: string; archetypeName?: string } } | null = null;
 
     const unlockMilestone = checkUnlockMilestone(newPostOnboarding, postOnboardingComparisons);
     if (unlockMilestone) {
       if (unlockMilestone === 'unlock_recommendations') {
         grantFirstRecommendation();
       }
-      pendingReward = { type: unlockMilestone };
+      if (unlockMilestone === 'taste_preview') {
+        const ranked = getRankedMovies();
+        const movieData = ranked.map(m => ({
+          year: m.year,
+          genres: m.genres as string[],
+          userBeta: m.beta,
+        }));
+        const axes = computeTasteAxes(movieData);
+        const archetype = getArchetype(axes);
+        pendingReward = { type: unlockMilestone, data: { archetypeName: archetype.name } };
+      } else {
+        pendingReward = { type: unlockMilestone };
+      }
     } else if (recTrackResult.unlocked && newPostOnboarding > 40) {
       // Skip MicroReward, go straight to reveal overlay
       setShowRevealOverlay(true);

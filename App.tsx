@@ -625,7 +625,10 @@ function MainApp() {
   // Handle notification taps — route to challenge tab
   useEffect(() => {
     return notificationService.addNotificationResponseListener((data) => {
-      if (data.type === 'vs' && data.code) {
+      if (data.type === 'daily') {
+        handleModeChange('social');
+        setSocialTab('daily');
+      } else if (data.type === 'vs' && data.code) {
         handleModeChange('social');
         setSocialTab('vs');
         setChallengeInitialCode(data.code as string);
@@ -712,6 +715,7 @@ function MainApp() {
         return (
           <ChallengeScreen
             initialCode={challengeInitialCode}
+            onOpenAuth={() => setShowAuth(true)}
           />
         );
       case 'discover':

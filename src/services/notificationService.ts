@@ -3,6 +3,7 @@ import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import { getDailyNumber } from '../data/dailyCategories';
 
 // Configure how notifications appear when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -176,6 +177,74 @@ export const notificationService = {
       `${challengedName} made their picks! Your turn.`,
       { type: 'vs', code: challengeCode },
     );
+  },
+
+  /**
+   * Notify circle members who haven't played today that others have.
+   */
+  async notifyCircleDaily(crewId: string, crewName: string, playedCount: number, totalCount: number): Promise<void> {
+    try {
+      // Fetch crew members who haven't played today
+      const { data: members } = await supabase
+        .from('crew_members')
+        .select('user_id')
+        .eq('crew_id', crewId);
+
+      if (!members) return;
+
+      // Get today's daily number to check who played
+      const dailyNumber = getDailyNumber();
+      const { data: picks } = await supabase
+        .from('crew_daily_picks')
+        .select('user_id')
+        .eq('crew_id', crewId)
+        .eq('daily_number', dailyNumber);
+
+      const playedUserIds = new Set(picks?.map(p => p.user_id) || []);
+      const unplayedMembers = members.filter(m => !playedUserIds.has(m.user_id));
+
+      for (const member of unplayedMembers) {
+        const token = await getUserPushToken(member.user_id);
+        if (token) {
+          await sendPushNotification(
+            token,
+            crewName,
+            `${playedCount}/${totalCount} have played today — don't be last`,
+            { type: 'daily', crewId },
+          );
+        }
+      }
+    } catch (err) {
+      console.error('[NotificationService] notifyCircleDaily error:', err);
+    }
+  },
+
+  /**
+   * Notify all circle members that everyone has played.
+   */
+  async notifyCircleResults(crewId: string, crewName: string): Promise<void> {
+    try {
+      const { data: members } = await supabase
+        .from('crew_members')
+        .select('user_id')
+        .eq('crew_id', crewId);
+
+      if (!members) return;
+
+      for (const member of members) {
+        const token = await getUserPushToken(member.user_id);
+        if (token) {
+          await sendPushNotification(
+            token,
+            crewName,
+            "everyone's played — see how your circle ranked",
+            { type: 'daily', crewId },
+          );
+        }
+      }
+    } catch (err) {
+      console.error('[NotificationService] notifyCircleResults error:', err);
+    }
   },
 
   /**
