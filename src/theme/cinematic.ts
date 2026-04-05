@@ -91,6 +91,10 @@ export const cinematic = {
     purple: '#FF6B2B',            // Maps to accent
     purpleSubtle: 'rgba(255, 107, 43, 0.08)',
 
+    // Tournament / decide labels
+    tournamentA: '#E5A84B',       // Amber
+    tournamentB: '#4ABFED',       // Blue
+
     // Tab bar
     tabBarBackground: '#0A0A0A',
     tabBarBorder: '#1A1A1A',

@@ -32,27 +32,28 @@ interface MiniOnboardingScreenProps {
 export function MiniOnboardingScreen({ onComplete }: MiniOnboardingScreenProps) {
   const { movies, setBirthDecade, recordComparison, completeOnboarding } = useAppStore();
   const haptics = useHaptics();
-  const [step, setStep] = useState<'decade' | 'pairs'>('decade');
+  const [step, setStep] = useState<'pairs' | 'decade'>('pairs');
   const [pairIndex, setPairIndex] = useState(0);
 
   const handleDecadeSelect = useCallback((decade: number) => {
     setBirthDecade(decade);
     haptics.light();
-    setStep('pairs');
-  }, [setBirthDecade, haptics]);
+    // Done — complete onboarding
+    completeOnboarding();
+    onComplete();
+  }, [setBirthDecade, haptics, completeOnboarding, onComplete]);
 
   const handlePick = useCallback((winnerId: string, loserId: string) => {
     recordComparison(winnerId, loserId);
     haptics.light();
 
     if (pairIndex + 1 >= SEED_PAIRS.length) {
-      // Done — complete onboarding
-      completeOnboarding();
-      onComplete();
+      // Movies done — ask for decade
+      setStep('decade');
     } else {
       setPairIndex(prev => prev + 1);
     }
-  }, [pairIndex, recordComparison, haptics, completeOnboarding, onComplete]);
+  }, [pairIndex, recordComparison, haptics]);
 
   if (step === 'decade') {
     return (

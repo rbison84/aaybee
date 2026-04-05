@@ -10,8 +10,9 @@ import {
   Share,
   Platform,
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { HeaderBar } from '../components/HeaderBar';
+import { ShareIcon, DiamondIcon } from '../components/icons';
 import { useAppStore } from '../store/useAppStore';
 import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
@@ -37,58 +38,6 @@ interface RarePick {
   userRank: number;
   uniqueUsers: number;
   percentile: number;
-}
-
-// ============================================
-// ICONS
-// ============================================
-
-function CloseIcon() {
-  return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M18 6L6 18M6 6l12 12"
-        stroke={colors.textMuted}
-        strokeWidth={2}
-        strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
-function ShareIcon({ color }: { color: string }) {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M12 3v12M12 3l4 4M12 3L8 7"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-
-function DiamondIcon() {
-  return (
-    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M12 2L2 9l10 13L22 9 12 2z"
-        stroke="#9333EA"
-        strokeWidth={2}
-        fill="none"
-      />
-    </Svg>
-  );
 }
 
 // ============================================
@@ -309,12 +258,7 @@ Find your taste profile at aaybee.netlify.app`;
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>taste profile</Text>
-          <Pressable style={styles.closeButton} onPress={onClose}>
-            <CloseIcon />
-          </Pressable>
-        </View>
+        <HeaderBar title="taste profile" onClose={onClose} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>analyzing your taste...</Text>
@@ -326,12 +270,7 @@ Find your taste profile at aaybee.netlify.app`;
   if (rankedMovies.length < 10) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>taste profile</Text>
-          <Pressable style={styles.closeButton} onPress={onClose}>
-            <CloseIcon />
-          </Pressable>
-        </View>
+        <HeaderBar title="taste profile" onClose={onClose} />
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>not enough data yet</Text>
           <Text style={styles.emptyText}>
@@ -347,18 +286,7 @@ Find your taste profile at aaybee.netlify.app`;
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>taste profile</Text>
-        <View style={styles.headerButtons}>
-          <Pressable style={styles.shareButton} onPress={handleShare}>
-            <ShareIcon color={colors.textSecondary} />
-          </Pressable>
-          <Pressable style={styles.closeButton} onPress={onClose}>
-            <CloseIcon />
-          </Pressable>
-        </View>
-      </View>
+      <HeaderBar title="taste profile" onClose={onClose} />
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* ARCHETYPE + RADAR */}
@@ -867,7 +795,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   genreStrengthPositive: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.success,
   },
   genreStrengthNegative: {
     backgroundColor: colors.textMuted,
@@ -879,7 +807,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   genreStrengthLabelPositive: {
-    color: '#4CAF50',
+    color: colors.success,
   },
   genreStrengthLabelNegative: {
     color: colors.textMuted,

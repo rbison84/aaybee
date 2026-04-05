@@ -265,8 +265,8 @@ function PreferenceCard({
   );
 }
 
-const LABEL_COLOR_A = '#E5A84B'; // Orange/amber (hardcoded to preserve across themes)
-const LABEL_COLOR_B = '#4ABFED'; // Blue (matches onboarding)
+const LABEL_COLOR_A = colors.tournamentA;
+const LABEL_COLOR_B = colors.tournamentB;
 
 function TournamentCard({
   movie,
@@ -1549,7 +1549,7 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
                 >
                   <Image source={{ uri: MODE_POSTER_PERSONAL }} style={styles.modeCardPoster} resizeMode="cover" />
                   <View style={styles.modeCardPosterGradient} />
-                  <View style={[styles.modeCardBadge, { backgroundColor: '#E5A84B' }]}>
+                  <View style={[styles.modeCardBadge, { backgroundColor: colors.tournamentA }]}>
                     <Text style={styles.modeCardBadgeText}>A</Text>
                   </View>
                 </Pressable>
@@ -1565,7 +1565,7 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
                 >
                   <Image source={{ uri: MODE_POSTER_GROUP }} style={styles.modeCardPoster} resizeMode="cover" />
                   <View style={styles.modeCardPosterGradient} />
-                  <View style={[styles.modeCardBadge, { backgroundColor: '#4ABFED' }]}>
+                  <View style={[styles.modeCardBadge, { backgroundColor: colors.tournamentB }]}>
                     <Text style={styles.modeCardBadgeText}>B</Text>
                   </View>
                 </Pressable>
@@ -2581,7 +2581,7 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   preferenceCardSelectedB: {
-    borderColor: '#4ABFED',
+    borderColor: colors.tournamentB,
   },
   preferenceCardLoser: {
     opacity: 0.3,

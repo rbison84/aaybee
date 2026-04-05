@@ -457,8 +457,11 @@ function MainApp() {
   // Save mode on change
   const handleModeChange = useCallback((newMode: AppMode) => {
     if (newMode === 'solo' && !hasCompletedOnboarding) {
-      // First time tapping FOR YOU — show mini onboarding
+      // First time tapping FOR YOU — show mini onboarding inline in compare tab
       setShowMiniOnboarding(true);
+      setMode('solo');
+      setSoloTab('compare');
+      AsyncStorage.setItem('aaybee_mode', 'solo').catch(() => {});
       return;
     }
     setMode(newMode);
@@ -688,8 +691,30 @@ function MainApp() {
   // Safety fallback: if active tab is locked, force compare
   const effectiveTab = lockedTabs[activeTab] ? 'compare' : activeTab;
   const renderScreenContent = () => {
+    // Profile renders inline, replacing tab content — nav stays visible
+    if (showProfile) {
+      return (
+        <ProfileScreen
+          onOpenDebug={toggleDebug}
+          onClose={handleProfileClose}
+          isGuestMode={isGuestMode}
+          onOpenAuth={() => { setShowProfile(false); setShowAuth(true); }}
+          onOpenTv={() => { setShowProfile(false); closeAllOverlays(); setShowTv(true); }}
+        />
+      );
+    }
+
     switch (effectiveTab) {
       case 'compare':
+        if (showMiniOnboarding) {
+          return (
+            <MiniOnboardingScreen
+              onComplete={() => {
+                setShowMiniOnboarding(false);
+              }}
+            />
+          );
+        }
         return (
           <ComparisonScreen
             onOpenRanking={() => { handleModeChange('solo'); setSoloTab('rankings'); }}
@@ -755,19 +780,6 @@ function MainApp() {
   const screenContent = (
     <View style={styles.screenContainer}>
       {renderScreenContent()}
-
-      {/* Profile screen overlay */}
-      {showProfile && (
-        <View style={styles.screenOverlay}>
-          <ProfileScreen
-            onOpenDebug={toggleDebug}
-            onClose={handleProfileClose}
-            isGuestMode={isGuestMode}
-            onOpenAuth={() => { setShowProfile(false); setShowAuth(true); }}
-            onOpenTv={() => { setShowProfile(false); closeAllOverlays(); setShowTv(true); }}
-          />
-        </View>
-      )}
 
       {/* Aaybee 100 overlay */}
       {showAaybee100 && (
@@ -902,18 +914,7 @@ function MainApp() {
         </View>
       )}
 
-      {/* Mini onboarding overlay — shown when tapping FOR YOU without completing onboarding */}
-      {showMiniOnboarding && (
-        <View style={styles.overlay}>
-          <MiniOnboardingScreen
-            onComplete={() => {
-              setShowMiniOnboarding(false);
-              setMode('solo');
-              setSoloTab('compare');
-            }}
-          />
-        </View>
-      )}
+      {/* Mini onboarding now renders inline in compare tab — no overlay needed */}
 
     </View>
   );

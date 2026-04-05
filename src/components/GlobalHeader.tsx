@@ -1,39 +1,9 @@
 import React from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
-import Svg, { Path, Circle } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { SearchIcon, PersonIcon } from './icons';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
-
-function SearchIcon({ size = 20, color = colors.textMuted }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-    </Svg>
-  );
-}
-
-function PersonIcon({ size = 18, color = colors.textMuted }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx="12" cy="8" r="4" stroke={color} strokeWidth={2} fill="none" />
-      <Path
-        d="M4 21c0-4.418 3.582-8 8-8s8 3.582 8 8"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        fill="none"
-      />
-    </Svg>
-  );
-}
 
 interface GlobalHeaderProps {
   onProfilePress: () => void;

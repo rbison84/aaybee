@@ -1049,7 +1049,7 @@ const styles = StyleSheet.create({
   debugStrategy: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#60a5fa',
+    color: colors.tournamentB,
     marginBottom: 6,
     textAlign: 'center',
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,

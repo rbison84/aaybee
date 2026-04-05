@@ -3,12 +3,11 @@ import {
   StyleSheet,
   Text,
   View,
-  SafeAreaView,
   ScrollView,
   Pressable,
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { HeaderBar } from '../components/HeaderBar';
 import { useAppStore } from '../store/useAppStore';
 import { useAuth } from '../contexts/AuthContext';
 import { useRecommendationTracking } from '../contexts/RecommendationTrackingContext';
@@ -16,23 +15,8 @@ import { useHaptics } from '../hooks/useHaptics';
 import { useAlert } from '../contexts/AlertContext';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
 import { openLetterboxdHome } from '../utils/letterboxd';
-import { CinematicBackground, CinematicButton } from '../components/cinematic';
+import { CinematicButton } from '../components/cinematic';
 import { AuthScreen } from './AuthScreen';
-
-// Back arrow icon
-function BackIcon() {
-  return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M15 18l-6-6 6-6"
-        stroke={colors.textPrimary}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
 
 interface SettingsScreenProps {
   onClose: () => void;
@@ -93,16 +77,8 @@ export function SettingsScreen({ onClose, onOpenDebug }: SettingsScreenProps) {
   }
 
   return (
-    <CinematicBackground>
-      <SafeAreaView style={styles.safeArea}>
-        {/* Header with back button */}
-        <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={onClose}>
-            <BackIcon />
-          </Pressable>
-          <Text style={styles.title}>settings</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+    <View style={styles.safeArea}>
+        <HeaderBar title="settings" onBack={onClose} />
 
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           {/* Account Section */}
@@ -182,8 +158,7 @@ export function SettingsScreen({ onClose, onOpenDebug }: SettingsScreenProps) {
             <Text style={styles.footerText}>made for movie lovers</Text>
           </View>
         </ScrollView>
-      </SafeAreaView>
-    </CinematicBackground>
+    </View>
   );
 }
 

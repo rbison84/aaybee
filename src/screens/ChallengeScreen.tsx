@@ -804,27 +804,27 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
           <Text style={styles.vsTitle}>VS</Text>
           <Text style={[styles.emptyPrompt, { textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.xl, fontSize: 15, lineHeight: 22 }]}>
             {isGuestUser
-              ? 'compare your movie taste with a friend.\npick a category, share a link, see who agrees.'
+              ? 'someone challenged you?\nenter their code to play.'
               : 'find out who has better taste.\nchallenge a friend — it takes 30 seconds.'}
           </Text>
 
-          <Pressable
-            style={[styles.primaryCta, { width: '100%', maxWidth: 320 }, loading && styles.actionButtonDisabled]}
-            onPress={handleCreateChallenge}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color={colors.background} />
-            ) : (
-              <Text style={styles.primaryCtaText}>
-                {isGuestUser ? 'pick a category' : 'challenge a friend'}
-              </Text>
-            )}
-          </Pressable>
+          {!isGuestUser && (
+            <Pressable
+              style={[styles.primaryCta, { width: '100%', maxWidth: 320 }, loading && styles.actionButtonDisabled]}
+              onPress={handleCreateChallenge}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={colors.background} />
+              ) : (
+                <Text style={styles.primaryCtaText}>challenge a friend</Text>
+              )}
+            </Pressable>
+          )}
 
           <TextInput
             style={[styles.codeInputInline, { maxWidth: 320, width: '100%' }]}
-            placeholder="have a code? enter it here"
+            placeholder={isGuestUser ? 'enter your code' : 'have a code? enter it here'}
             placeholderTextColor={colors.textMuted}
             value={joinCodeInput}
             onChangeText={handleJoinCodeInput}
@@ -834,10 +834,10 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
 
           {isGuestUser && onOpenAuth && (
             <Pressable
-              style={{ marginTop: spacing.lg, padding: spacing.sm }}
+              style={[styles.primaryCta, { width: '100%', maxWidth: 320, marginTop: spacing.md }]}
               onPress={onOpenAuth}
             >
-              <Text style={{ color: colors.textMuted, fontSize: 14 }}>already have an account? sign in</Text>
+              <Text style={styles.primaryCtaText}>join aaybee to challenge friends</Text>
             </Pressable>
           )}
 
