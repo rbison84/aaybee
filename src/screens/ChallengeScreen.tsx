@@ -63,7 +63,8 @@ type ChallengeStep =
   | 'vs-waiting'    // Waiting for other player
   | 'vs-result'     // Score/N result
   // Knockout bracket flow
-  | 'knockout'        // Playing bracket
+  | 'knockout-name'    // Guest name entry before knockout
+  | 'knockout'         // Playing bracket
   | 'knockout-result'; // Bracket results
 
 interface ChallengeScreenProps {
@@ -146,6 +147,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
   const [bracketMovies, setBracketMovies] = useState<BracketMovie[]>([]);
   const [bracketPicks, setBracketPicks] = useState<BracketPick[]>([]);
   const [bracketWinner, setBracketWinner] = useState<BracketMovie | null>(null);
+  const [knockoutGuestName, setKnockoutGuestName] = useState('');
 
   // Inline code input for home screen
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -397,9 +399,23 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
   useEffect(() => {
     if (autoStartKnockout && !autoStarted.current && !initialCode) {
       autoStarted.current = true;
-      handleStartKnockout();
+      if (user?.id) {
+        // Signed in → straight to knockout
+        handleStartKnockout();
+      } else {
+        // Guest → name entry first
+        setStep('knockout-name');
+      }
     }
-  }, [autoStartKnockout, initialCode, handleStartKnockout]);
+  }, [autoStartKnockout, initialCode, handleStartKnockout, user?.id]);
+
+  // Guest enters name → show pack picker to start knockout
+  const handleGuestKnockoutStart = useCallback(() => {
+    if (!knockoutGuestName.trim()) return;
+    setChallengerName(knockoutGuestName.trim());
+    setStep('home');
+    setShowPacks(true);
+  }, [knockoutGuestName]);
 
   const handleKnockoutComplete = useCallback((picks: BracketPick[], winner: BracketMovie) => {
     setBracketPicks(picks);
@@ -1945,6 +1961,43 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
           {step === 'vs-comparing' && renderVsComparing()}
           {step === 'vs-waiting' && renderVsWaiting()}
           {step === 'vs-result' && renderVsResult()}
+          {step === 'knockout-name' && (
+            <View style={styles.centeredContent}>
+              <Text style={styles.vsTitle}>VS</Text>
+              <Text style={[styles.emptyPrompt, { textAlign: 'center', marginBottom: spacing.xl, fontSize: 13, letterSpacing: 0.5, textTransform: 'uppercase' }]}>
+                WHAT'S YOUR NAME?
+              </Text>
+              <TextInput
+                style={[styles.codeInputInline, { maxWidth: 320, width: '100%' }]}
+                placeholder="ENTER NAME"
+                placeholderTextColor={colors.textMuted}
+                value={knockoutGuestName}
+                onChangeText={setKnockoutGuestName}
+                maxLength={20}
+                autoFocus
+                autoCapitalize="words"
+                onSubmitEditing={handleGuestKnockoutStart}
+              />
+              <Pressable
+                style={[styles.primaryCta, { width: '100%', maxWidth: 320, marginTop: spacing.md }, !knockoutGuestName.trim() && styles.actionButtonDisabled]}
+                onPress={handleGuestKnockoutStart}
+                disabled={!knockoutGuestName.trim()}
+              >
+                <Text style={styles.primaryCtaText}>START</Text>
+              </Pressable>
+              {onOpenAuth && (
+                <View style={{ marginTop: spacing.xxl, alignItems: 'center', width: '100%', maxWidth: 320 }}>
+                  <Text style={{ fontSize: 10, color: colors.textMuted, letterSpacing: 1, marginBottom: spacing.md }}>OR</Text>
+                  <Pressable
+                    style={[styles.secondaryCta, { width: '100%' }]}
+                    onPress={onOpenAuth}
+                  >
+                    <Text style={styles.secondaryCtaText}>SIGN IN</Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          )}
           {step === 'knockout' && (
             <BracketPlay
               movies={bracketMovies}
