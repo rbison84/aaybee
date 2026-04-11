@@ -42,7 +42,7 @@ import {
 import { shareService } from '../services/shareService';
 import { crewService, Crew, CrewMember, CrewDailyResult } from '../services/crewService';
 import { notificationService } from '../services/notificationService';
-import { getMatchTier } from '../services/challengeService';
+import { getMatchTier, challengeService } from '../services/challengeService';
 import { useAuth } from '../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
@@ -326,10 +326,25 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
             notificationService.notifyCircleResults(crew.id, crew.name).catch(() => {});
           }
 
-          // Load results
+          // Load results and update pairwise friendship stats
           crewService.getCrewDailyResults(crew.id, dailyNumber).then(result => {
             if (result) {
               setCrewResults(prev => new Map(prev).set(crew.id, result));
+
+              // Update friendship stats for all member pairs
+              if (result.memberResults && result.memberResults.length >= 2) {
+                for (let i = 0; i < result.memberResults.length; i++) {
+                  for (let j = i + 1; j < result.memberResults.length; j++) {
+                    const a = result.memberResults[i];
+                    const b = result.memberResults[j];
+                    if (a.userId && b.userId) {
+                      // Use average of their alignment percentages as match
+                      const pairMatch = Math.round((a.alignmentPercent + b.alignmentPercent) / 2);
+                      challengeService.updateFriendshipStats(a.userId, b.userId, pairMatch).catch(() => {});
+                    }
+                  }
+                }
+              }
             }
           });
         }

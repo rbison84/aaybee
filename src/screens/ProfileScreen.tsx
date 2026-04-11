@@ -30,9 +30,10 @@ interface ProfileScreenProps {
   onOpenAuth?: () => void;
   onOpenTv?: () => void;
   onOpenAaybee100?: () => void;
+  onOpenMyGames?: () => void;
 }
 
-export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, onOpenTv, onOpenAaybee100 }: ProfileScreenProps) {
+export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, onOpenTv, onOpenAaybee100, onOpenMyGames }: ProfileScreenProps) {
   const { postOnboardingComparisons } = useAppStore();
   const { showLockedFeature } = useLockedFeature();
   const { unlockAllFeatures } = useDevSettings();
@@ -109,8 +110,24 @@ export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, o
       <HeaderBar title="PROFILE" onClose={onClose} />
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {/* MY GAMES BUTTON */}
+          {onOpenMyGames && !isGuestMode && (
+            <Animated.View entering={FadeInDown.delay(50)} style={styles.settingsSection}>
+              <Pressable
+                style={styles.settingsButton}
+                onPress={onOpenMyGames}
+              >
+                <View style={styles.settingsLeft}>
+                  <Text style={{ fontSize: 16, color: colors.textSecondary }}>&#9654;</Text>
+                  <Text style={styles.settingsText}>MY GAMES</Text>
+                </View>
+                <ChevronRightIcon />
+              </Pressable>
+            </Animated.View>
+          )}
+
           {/* RANKINGS BUTTON */}
-          <Animated.View entering={FadeInDown.delay(50)} style={styles.settingsSection}>
+          <Animated.View entering={FadeInDown.delay(100)} style={styles.settingsSection}>
             <Pressable
               style={styles.settingsButton}
               onPress={() => setShowRankings(true)}

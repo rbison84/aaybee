@@ -23,6 +23,7 @@ import { DailyScreen } from './src/screens/DailyScreen';
 import { DecideScreen } from './src/screens/DecideScreen';
 import { ChallengeScreen } from './src/screens/ChallengeScreen';
 import { FriendsScreen } from './src/screens/FriendsScreen';
+import { MyGamesScreen } from './src/screens/MyGamesScreen';
 
 // Lazy-load screens that are locked behind comparison thresholds or shown as overlays
 const DiscoverScreen = React.lazy(() => import('./src/screens/DiscoverScreen').then(m => ({ default: m.DiscoverScreen })));
@@ -51,11 +52,12 @@ import { notificationService } from './src/services/notificationService';
 import { vsService } from './src/services/vsService';
 import { friendService } from './src/services/friendService';
 import { challengeService } from './src/services/challengeService';
+import { knockoutService } from './src/services/knockoutService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius, typography } from './src/theme/cinematic';
 
 // Navigation — SameGoat-style: landing page with PLAY + FRIENDS buttons
-type NavPhase = 'landing' | 'playMenu' | 'vs' | 'daily' | 'decide' | 'discover' | 'friends' | 'profile';
+type NavPhase = 'landing' | 'playMenu' | 'vs' | 'daily' | 'decide' | 'discover' | 'friends' | 'profile' | 'myGames';
 // Keep TabType for compatibility with components that reference it
 type TabType = 'vs' | 'daily' | 'decide' | 'discover' | 'compare' | 'rankings';
 
@@ -556,6 +558,8 @@ function MainApp() {
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const [showMiniOnboarding, setShowMiniOnboarding] = useState(false);
   const [discoverTab, setDiscoverTab] = useState<'compare' | 'recommend'>('compare');
+  const [challengedFriendId, setChallengedFriendId] = useState<string | undefined>();
+  const [challengedFriendName, setChallengedFriendName] = useState<string | undefined>();
 
   // Deep link: parse URL on mount
   const [deepLink] = useState<DeepLinkIntent>(() => {
@@ -676,7 +680,9 @@ function MainApp() {
         (c.status === 'pending' && c.creator_id === user.id) ||
         (c.status === 'active' && c.challenger_id === user.id)
       );
-      if (mounted) setPendingChallengeCount(pendingVs.length + friendRequests.length + pendingFriendChallenges.length);
+      // Also count knockout ready games
+      const knockoutReady = await knockoutService.getReadyGamesCount(user.id);
+      if (mounted) setPendingChallengeCount(pendingVs.length + friendRequests.length + pendingFriendChallenges.length + knockoutReady);
     };
     checkPending();
     const interval = setInterval(checkPending, 30000);
@@ -714,7 +720,7 @@ function MainApp() {
         return (
           <PlayMenu
             onBack={() => setPhase('landing')}
-            onVs={() => setPhase('vs')}
+            onVs={() => { setChallengedFriendId(undefined); setChallengedFriendName(undefined); setChallengeInitialCode(undefined); setPhase('vs'); }}
             onDaily={() => setPhase('daily')}
             onDecide={() => setPhase('decide')}
             onDiscover={() => {
@@ -732,6 +738,8 @@ function MainApp() {
             initialCode={challengeInitialCode}
             onOpenAuth={() => setShowAuth(true)}
             autoStartKnockout={!challengeInitialCode}
+            challengedFriendId={challengedFriendId}
+            challengedFriendName={challengedFriendName}
           />
         );
 
@@ -769,6 +777,33 @@ function MainApp() {
         return (
           <FriendsScreen
             onChallenge={(friendId, friendName) => {
+              setChallengedFriendId(friendId);
+              setChallengedFriendName(friendName);
+              setChallengeInitialCode(undefined);
+              setPhase('vs');
+            }}
+            onAcceptChallenge={(code) => {
+              setChallengedFriendId(undefined);
+              setChallengedFriendName(undefined);
+              setChallengeInitialCode(code);
+              setPhase('vs');
+            }}
+          />
+        );
+
+      case 'myGames':
+        return (
+          <MyGamesScreen
+            onViewGame={(code) => {
+              setChallengeInitialCode(code);
+              setChallengedFriendId(undefined);
+              setChallengedFriendName(undefined);
+              setPhase('vs');
+            }}
+            onPlayChallenge={(code) => {
+              setChallengeInitialCode(code);
+              setChallengedFriendId(undefined);
+              setChallengedFriendName(undefined);
               setPhase('vs');
             }}
           />
@@ -783,6 +818,7 @@ function MainApp() {
             onOpenAuth={() => { setShowAuth(true); }}
             onOpenTv={() => { closeAllOverlays(); setShowTv(true); }}
             onOpenAaybee100={() => { closeAllOverlays(); setShowAaybee100(true); }}
+            onOpenMyGames={() => setPhase('myGames')}
           />
         );
 
@@ -803,7 +839,7 @@ function MainApp() {
   const showScreenHeader = !['landing', 'playMenu'].includes(phase);
   const screenTitles: Record<NavPhase, string> = {
     landing: '', playMenu: '', vs: 'VS', daily: 'DAILY',
-    decide: 'DECIDE', discover: 'DISCOVER', friends: 'FRIENDS', profile: 'PROFILE',
+    decide: 'DECIDE', discover: 'DISCOVER', friends: 'FRIENDS', profile: 'PROFILE', myGames: 'MY GAMES',
   };
 
   const screenContent = (
@@ -861,6 +897,8 @@ function MainApp() {
                 // VS/Daily/Decide/Discover go back to play menu; Friends/Profile go to landing
                 if (['vs', 'daily', 'decide', 'discover'].includes(phase)) {
                   setPhase('playMenu');
+                } else if (phase === 'myGames') {
+                  setPhase('profile');
                 } else {
                   setPhase('landing');
                 }

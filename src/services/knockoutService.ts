@@ -15,6 +15,7 @@ export interface KnockoutChallenge {
   creator_name: string;
   creator_picks: BracketPick[] | null;
   creator_winner: BracketMovie | null;
+  challenged_user_id: string | null;
   challenger_id: string | null;
   challenger_name: string | null;
   challenger_picks: BracketPick[] | null;
@@ -47,6 +48,7 @@ function generateCode(): string {
 export const knockoutService = {
   /**
    * Create a knockout challenge after Player A finishes their bracket.
+   * If challengedUserId is provided, this is a directed friend challenge.
    */
   async createChallenge(
     movies: BracketMovie[],
@@ -55,6 +57,7 @@ export const knockoutService = {
     winner: BracketMovie,
     creatorId: string | null,
     creatorName: string,
+    challengedUserId?: string | null,
   ): Promise<{ challenge: KnockoutChallenge | null; error?: string }> {
     const code = generateCode();
 
@@ -68,6 +71,7 @@ export const knockoutService = {
         creator_name: creatorName,
         creator_picks: picks,
         creator_winner: winner,
+        challenged_user_id: challengedUserId || null,
         status: 'waiting',
       })
       .select()
@@ -107,7 +111,6 @@ export const knockoutService = {
     creatorPicks: BracketPick[],
     movieCount: number,
   ): Promise<{ challenge: KnockoutChallenge | null; error?: string }> {
-    // Compute taste match
     const comparison = compareBrackets(movieCount, creatorPicks, picks);
 
     const { data, error } = await supabase
@@ -132,7 +135,6 @@ export const knockoutService = {
       return { challenge: null, error: error.message };
     }
 
-    // Update friendship stats if both players are authenticated
     const result = data as KnockoutChallenge;
     if (result.creator_id && challengerId && result.creator_id !== challengerId) {
       challengeService.updateFriendshipStats(
@@ -146,18 +148,57 @@ export const knockoutService = {
   },
 
   /**
-   * Get user's knockout challenges (as creator or challenger).
+   * Get user's knockout challenges (as creator, challenger, or challenged target).
    */
   async getMyChallenges(userId: string): Promise<KnockoutChallenge[]> {
     const { data, error } = await supabase
       .from('knockout_challenges')
       .select('*')
-      .or(`creator_id.eq.${userId},challenger_id.eq.${userId}`)
+      .or(`creator_id.eq.${userId},challenger_id.eq.${userId},challenged_user_id.eq.${userId}`)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(30);
 
     if (error) return [];
     return (data || []) as KnockoutChallenge[];
+  },
+
+  /**
+   * Get pending challenges directed at a specific user (where creator played, user hasn't).
+   */
+  async getPendingChallengesForUser(userId: string): Promise<KnockoutChallenge[]> {
+    const { data, error } = await supabase
+      .from('knockout_challenges')
+      .select('*')
+      .eq('challenged_user_id', userId)
+      .eq('status', 'waiting')
+      .order('created_at', { ascending: false });
+
+    if (error) return [];
+    return (data || []) as KnockoutChallenge[];
+  },
+
+  /**
+   * Get count of unviewed completed challenges for a user.
+   * "Unviewed" = completed challenges where user is creator or challenger,
+   * completed after their last picks submission.
+   */
+  async getReadyGamesCount(userId: string): Promise<number> {
+    // Challenges directed at user that are waiting (they need to play)
+    const { count: pendingCount } = await supabase
+      .from('knockout_challenges')
+      .select('id', { count: 'exact', head: true })
+      .eq('challenged_user_id', userId)
+      .eq('status', 'waiting');
+
+    // Challenges user created that are now complete (friend played back)
+    const { count: completedCount } = await supabase
+      .from('knockout_challenges')
+      .select('id', { count: 'exact', head: true })
+      .eq('creator_id', userId)
+      .eq('status', 'complete')
+      .not('challenger_id', 'is', null);
+
+    return (pendingCount || 0) + (completedCount || 0);
   },
 };
 

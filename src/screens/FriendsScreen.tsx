@@ -21,6 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { friendService, FriendWithProfile, FriendRequest, UserSearchResult } from '../services/friendService';
 import { crewService, Crew, CrewMember } from '../services/crewService';
 import { challengeService } from '../services/challengeService';
+import { knockoutService, KnockoutChallenge } from '../services/knockoutService';
 import { QRCode } from '../components/QRCode';
 import { ContactInvite } from '../components/ContactInvite';
 import { TasteRadar } from '../components/TasteRadar';
@@ -31,10 +32,11 @@ type FriendsTabType = 'friends' | 'circles';
 
 interface FriendsScreenProps {
   onChallenge?: (friendId: string, friendName: string) => void;
+  onAcceptChallenge?: (code: string) => void;
   onViewCrew?: (crewId: string) => void;
 }
 
-export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
+export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew }: FriendsScreenProps) {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<FriendsTabType>('friends');
 
@@ -53,6 +55,9 @@ export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
   const [removing, setRemoving] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
+  // Knockout challenges state
+  const [pendingKnockouts, setPendingKnockouts] = useState<KnockoutChallenge[]>([]);
+
   // Crews state
   const [crews, setCrews] = useState<Crew[]>([]);
   const [crewsLoading, setCrewsLoading] = useState(false);
@@ -63,16 +68,18 @@ export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
   const [crewError, setCrewError] = useState('');
   const [creatingCrew, setCreatingCrew] = useState(false);
 
-  // Load friends
+  // Load friends + pending knockout challenges
   useEffect(() => {
     if (!user?.id) return;
     setLoading(true);
     Promise.all([
       friendService.getFriends(user.id),
       friendService.getPendingRequests(user.id),
-    ]).then(([friendsData, requestsData]) => {
+      knockoutService.getPendingChallengesForUser(user.id),
+    ]).then(([friendsData, requestsData, knockoutsData]) => {
       setFriends(friendsData);
       setFriendRequests(requestsData);
+      setPendingKnockouts(knockoutsData);
       setLoading(false);
     });
   }, [user?.id]);
@@ -247,6 +254,27 @@ export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
             <Text style={styles.emptyText}>NO USERS FOUND</Text>
           )}
         </Animated.View>
+      )}
+
+      {/* Incoming knockout challenges */}
+      {pendingKnockouts.length > 0 && (
+        <View style={styles.requestsSection}>
+          <Text style={styles.sectionLabel}>INCOMING CHALLENGES</Text>
+          {pendingKnockouts.map(kc => (
+            <View key={kc.id} style={styles.requestRow}>
+              <View>
+                <Text style={styles.requestName}>{kc.creator_name}</Text>
+                <Text style={styles.challengeSubtext}>CHALLENGED YOU</Text>
+              </View>
+              <Pressable
+                style={styles.acceptButton}
+                onPress={() => onAcceptChallenge?.(kc.code)}
+              >
+                <Text style={styles.acceptText}>PLAY</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
       )}
 
       {/* Pending requests */}
@@ -621,6 +649,13 @@ const styles = StyleSheet.create({
   requestActions: {
     flexDirection: 'row',
     gap: spacing.md,
+  },
+  challengeSubtext: {
+    fontSize: 8,
+    fontWeight: '400',
+    color: colors.textMuted,
+    letterSpacing: 1,
+    marginTop: 2,
   },
   acceptButton: {
     backgroundColor: colors.textPrimary,

@@ -66,19 +66,22 @@ type ChallengeStep =
   // Knockout bracket flow
   | 'knockout-name'    // Guest name entry before knockout
   | 'knockout'         // Playing bracket
+  | 'knockout-sent'    // Challenge sent confirmation (directed challenge)
   | 'knockout-result'; // Bracket results
 
 interface ChallengeScreenProps {
   initialCode?: string;
   onOpenAuth?: () => void;
   autoStartKnockout?: boolean;
+  challengedFriendId?: string;
+  challengedFriendName?: string;
 }
 
 // ============================================
 // COMPONENT
 // ============================================
 
-export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: ChallengeScreenProps) {
+export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, challengedFriendId, challengedFriendName }: ChallengeScreenProps) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { isDesktop, isWeb } = useAppDimensions();
@@ -495,10 +498,17 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
       winner,
       user?.id || null,
       displayName,
+      challengedFriendId || null,
     );
     if (created) setKnockoutChallenge(created);
-    setStep('knockout-result');
-  }, [knockoutChallenge, bracketMovies, knockoutSeed, user, challengerName]);
+
+    // If directed challenge, show "challenge sent" confirmation first
+    if (challengedFriendId) {
+      setStep('knockout-sent');
+    } else {
+      setStep('knockout-result');
+    }
+  }, [knockoutChallenge, bracketMovies, knockoutSeed, user, challengerName, challengedFriendId]);
 
   const handleKnockoutPackSelect = useCallback(async (pack: CuratedPack) => {
     setLoading(true);
@@ -2073,6 +2083,26 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
                   </Pressable>
                 </View>
               )}
+            </View>
+          )}
+          {step === 'knockout-sent' && knockoutChallenge && (
+            <View style={styles.centeredContent}>
+              <Text style={styles.vsTitle}>CHALLENGE SENT</Text>
+              <Text style={[styles.emptyPrompt, { textAlign: 'center', marginBottom: spacing.xl, fontSize: 13, letterSpacing: 0.5, textTransform: 'uppercase' }]}>
+                {challengedFriendName ? `${challengedFriendName.toUpperCase()} WILL SEE IT NEXT TIME THEY OPEN THE APP` : 'YOUR FRIEND WILL SEE THE CHALLENGE'}
+              </Text>
+              <Pressable
+                style={[styles.primaryCta, { width: '100%', maxWidth: 320 }]}
+                onPress={() => setStep('knockout-result')}
+              >
+                <Text style={styles.primaryCtaText}>SEE YOUR BRACKET</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.secondaryCta, { width: '100%', maxWidth: 320, marginTop: spacing.md }]}
+                onPress={() => setStep('home')}
+              >
+                <Text style={styles.secondaryCtaText}>DONE</Text>
+              </Pressable>
             </View>
           )}
           {step === 'knockout' && (
