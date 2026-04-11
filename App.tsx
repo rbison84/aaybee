@@ -86,23 +86,26 @@ function LandingPage({ onPlay, onFriends, onSignIn, onProfile, friendsBadge }: {
 
   return (
     <View style={landingStyles.container}>
-      {/* Profile button — top right */}
+      {/* Top bar: AAYBEE left, profile right */}
       <View style={[landingStyles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-        <View />
-        <Pressable onPress={onProfile} style={landingStyles.profileButton}>
-          <Text style={landingStyles.profileText}>
-            {isGuest ? '?' : userInitial}
+        <Text style={landingStyles.topLogo}>AAYBEE</Text>
+        <Pressable onPress={onProfile}>
+          <Text style={landingStyles.profileLink}>
+            {isSignedIn ? (user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'profile').toLowerCase() : 'sign in'}
           </Text>
+          {!!friendsBadge && friendsBadge > 0 && isSignedIn && (
+            <View style={landingStyles.profileDot} />
+          )}
         </Pressable>
       </View>
 
-      {/* Center content */}
+      {/* Center: logo + tagline */}
       <View style={landingStyles.center}>
         <Text style={landingStyles.logo}>AAYBEE</Text>
         <Text style={landingStyles.tagline}>(your movies, ranked.)</Text>
       </View>
 
-      {/* Two big buttons */}
+      {/* Bottom buttons — SameGoat style: white bg, black text, side by side */}
       <View style={[landingStyles.buttons, { paddingBottom: Math.max(insets.bottom + spacing.lg, spacing.xxxl) }]}>
         <View style={landingStyles.buttonRow}>
           <Pressable style={landingStyles.bigButton} onPress={onPlay}>
@@ -112,11 +115,11 @@ function LandingPage({ onPlay, onFriends, onSignIn, onProfile, friendsBadge }: {
           {isSignedIn ? (
             <Pressable style={landingStyles.bigButton} onPress={onFriends}>
               <Text style={landingStyles.bigButtonLabel}>FRIENDS</Text>
-              <Text style={landingStyles.bigButtonSub}>(your people.)</Text>
+              <Text style={landingStyles.bigButtonSub}>
+                {friendsBadge && friendsBadge > 0 ? `(${friendsBadge} challenge${friendsBadge !== 1 ? 's' : ''})` : '(your people.)'}
+              </Text>
               {!!friendsBadge && friendsBadge > 0 && (
-                <View style={landingStyles.badge}>
-                  <Text style={landingStyles.badgeText}>{friendsBadge > 9 ? '9+' : friendsBadge}</Text>
-                </View>
+                <View style={landingStyles.badge} />
               )}
             </Pressable>
           ) : (
@@ -140,24 +143,31 @@ const landingStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xl,
   },
-  profileButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
+  topLogo: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.accent,
+    letterSpacing: 3,
   },
-  profileText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textPrimary,
+  profileLink: {
+    fontSize: 10,
+    fontWeight: '400',
+    color: colors.textMuted,
+    letterSpacing: 1,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
+  profileDot: {
+    position: 'absolute',
+    left: -8,
+    top: '50%',
+    marginTop: -3,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
+  } as any,
   center: {
     flex: 1,
     justifyContent: 'center',
@@ -165,64 +175,53 @@ const landingStyles = StyleSheet.create({
   },
   logo: {
     fontSize: 48,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    letterSpacing: 4,
-    textTransform: 'uppercase',
+    fontWeight: '900',
+    color: colors.accent,
+    letterSpacing: 6,
   },
   tagline: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.textMuted,
     letterSpacing: 1,
     marginTop: spacing.sm,
   },
   buttons: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xl,
   },
   buttonRow: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   bigButton: {
     flex: 1,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.xxl,
-    paddingVertical: spacing.xxl,
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.sm,
     position: 'relative',
   },
   bigButtonLabel: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    letterSpacing: 2,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#000000',
     textTransform: 'uppercase',
   },
   bigButtonSub: {
-    fontSize: 10,
-    color: colors.textMuted,
-    letterSpacing: 0.5,
-    marginTop: spacing.xs,
+    fontSize: 8,
+    color: 'rgba(0,0,0,0.5)',
+    letterSpacing: 0.3,
   },
   badge: {
     position: 'absolute',
-    top: spacing.sm,
-    right: spacing.sm,
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: colors.accent,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.background,
   },
 });
 
@@ -269,14 +268,14 @@ const playMenuStyles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   topBar: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xl,
   },
   backButton: {
     paddingVertical: spacing.sm,
   },
   backText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '400',
     color: colors.textMuted,
     letterSpacing: 1,
     textTransform: 'uppercase',
@@ -284,8 +283,8 @@ const playMenuStyles = StyleSheet.create({
   center: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
   },
   modeButton: {
     backgroundColor: colors.card,
@@ -296,14 +295,14 @@ const playMenuStyles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
   },
   modeLabel: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     color: colors.textPrimary,
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
   modeSub: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.textMuted,
     letterSpacing: 0.5,
     marginTop: spacing.xs,
