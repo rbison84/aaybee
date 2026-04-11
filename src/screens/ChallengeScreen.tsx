@@ -363,7 +363,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
       let pool: BracketMovie[] = [];
 
       if (user?.id) {
-        // Get user's ranked movies for the bracket
+        // Signed in: use their ranked movies
         const movies = await challengeService.getTopMoviesForChallenge(user.id, 50);
         pool = movies.map(m => ({
           id: m.id,
@@ -374,10 +374,27 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
       }
 
       if (pool.length < 16) {
-        // Not enough ranked movies — fall back to curated packs
-        // Go to home step so pack picker is visible
-        setStep('home');
-        setShowPacks(true);
+        // Not enough ranked movies (or guest) — fetch random highly rated movies
+        const { data: randomMovies } = await supabase
+          .from('movies')
+          .select('id, title, year, poster_url')
+          .lte('tier', 2)
+          .limit(80);
+
+        if (randomMovies && randomMovies.length >= 16) {
+          // Shuffle and take 16
+          const shuffled = [...randomMovies].sort(() => Math.random() - 0.5);
+          pool = shuffled.slice(0, 40).map(m => ({
+            id: m.id,
+            title: m.title,
+            posterUrl: m.poster_url || '',
+            year: m.year,
+          }));
+        }
+      }
+
+      if (pool.length < 16) {
+        setError('Not enough movies available');
         setLoading(false);
         return;
       }
@@ -409,13 +426,12 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
     }
   }, [autoStartKnockout, initialCode, handleStartKnockout, user?.id]);
 
-  // Guest enters name → show pack picker to start knockout
+  // Guest enters name → straight to knockout with random highly rated movies
   const handleGuestKnockoutStart = useCallback(() => {
     if (!knockoutGuestName.trim()) return;
     setChallengerName(knockoutGuestName.trim());
-    setStep('home');
-    setShowPacks(true);
-  }, [knockoutGuestName]);
+    handleStartKnockout();
+  }, [knockoutGuestName, handleStartKnockout]);
 
   const handleKnockoutComplete = useCallback((picks: BracketPick[], winner: BracketMovie) => {
     setBracketPicks(picks);
