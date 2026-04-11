@@ -246,6 +246,7 @@ export const friendService = {
           status: 'accepted' as const,
           created_at: friendship?.created_at || new Date().toISOString(),
           updated_at: friendship?.updated_at || new Date().toISOString(),
+          taste_match: (friendship as any)?.similarity_score || 0,
           friend: {
             id: friendId,
             display_name: profile?.display_name || 'Unknown User',
@@ -254,6 +255,9 @@ export const friendService = {
           },
         };
       });
+
+      // Sort by taste_match descending (best match first)
+      friendsWithProfiles.sort((a, b) => (b.taste_match || 0) - (a.taste_match || 0));
 
       return friendsWithProfiles;
     } catch (error) {

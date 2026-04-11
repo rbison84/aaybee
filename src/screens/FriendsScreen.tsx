@@ -14,6 +14,7 @@ import {
   TextInput,
   ActivityIndicator,
   Platform,
+  Share,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useAuth } from '../contexts/AuthContext';
@@ -295,8 +296,13 @@ export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
                 </View>
                 <View style={styles.friendRight}>
                   <Text style={[styles.friendPercent, isTop && styles.friendPercentTop]}>
-                    {friend.taste_match ?? '--'}%
+                    {friend.taste_match ? `${friend.taste_match}%` : '--'}
                   </Text>
+                  {(friend as any).games_played > 0 && (
+                    <Text style={[styles.friendGames, isTop && { color: colors.background }]}>
+                      {(friend as any).games_played} GAMES
+                    </Text>
+                  )}
                 </View>
               </View>
 
@@ -403,14 +409,32 @@ export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
         </View>
       ) : (
         crews.map((crew) => (
-          <Pressable
-            key={crew.id}
-            style={styles.crewCard}
-            onPress={() => onViewCrew?.(crew.id)}
-          >
-            <Text style={styles.crewName}>{crew.name.toUpperCase()}</Text>
-            <Text style={styles.crewCode}>CODE: {crew.code}</Text>
-          </Pressable>
+          <View key={crew.id} style={styles.crewCard}>
+            <Pressable onPress={() => onViewCrew?.(crew.id)}>
+              <Text style={styles.crewName}>{crew.name.toUpperCase()}</Text>
+              <Text style={styles.crewCode}>CODE: {crew.code}</Text>
+            </Pressable>
+            <View style={styles.crewShareRow}>
+              <Pressable
+                style={styles.crewShareButton}
+                onPress={async () => {
+                  const url = `https://aaybee.netlify.app/crew/${crew.code}`;
+                  const msg = `JOIN MY CIRCLE "${crew.name}" ON AAYBEE\n\n${url}`;
+                  try {
+                    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
+                      await navigator.share({ text: msg });
+                    } else if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+                      await navigator.clipboard.writeText(msg);
+                    } else {
+                      await Share.share({ message: msg });
+                    }
+                  } catch {}
+                }}
+              >
+                <Text style={styles.crewShareText}>INVITE</Text>
+              </Pressable>
+            </View>
+          </View>
         ))
       )}
     </View>
@@ -698,6 +722,13 @@ const styles = StyleSheet.create({
   friendPercentTop: {
     color: colors.background,
   },
+  friendGames: {
+    fontSize: 8,
+    fontWeight: '400',
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
   friendActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -811,5 +842,25 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     letterSpacing: 1,
     marginTop: spacing.xs,
+  },
+  crewShareRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  crewShareButton: {
+    backgroundColor: colors.textPrimary,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.lg,
+  },
+  crewShareText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.background,
+    letterSpacing: 1,
   },
 });

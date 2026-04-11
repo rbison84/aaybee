@@ -65,8 +65,9 @@ export function BracketResults({
   const path = buildBracketPath(movies, picks);
   const hasMatch = matchPercent !== undefined && matchPercent !== null;
 
-  // Build share URL (for now just the base URL — could include a challenge code)
-  const shareUrl = shareUrlProp || 'https://aaybee.netlify.app';
+  // Build share URL with ref param for attribution
+  const baseShareUrl = shareUrlProp || 'https://aaybee.netlify.app';
+  const shareUrl = user?.id ? (baseShareUrl.includes('?') ? `${baseShareUrl}&ref=${user.id}` : `${baseShareUrl}?ref=${user.id}`) : baseShareUrl;
   const displayName = playerName || user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'Someone';
 
   const shareMessage = `${displayName}'s last movie standing is "${winnerMovie.title}" — can you beat it?\n\n${shareUrl}`;

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { BracketMovie, BracketPick, compareBrackets } from '../utils/movieBracket';
+import { challengeService } from './challengeService';
 
 // ============================================
 // TYPES
@@ -131,7 +132,17 @@ export const knockoutService = {
       return { challenge: null, error: error.message };
     }
 
-    return { challenge: data as KnockoutChallenge };
+    // Update friendship stats if both players are authenticated
+    const result = data as KnockoutChallenge;
+    if (result.creator_id && challengerId && result.creator_id !== challengerId) {
+      challengeService.updateFriendshipStats(
+        result.creator_id,
+        challengerId,
+        comparison.matchPercent,
+      ).catch(() => {});
+    }
+
+    return { challenge: result };
   },
 
   /**
