@@ -2028,6 +2028,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
               movies={bracketMovies}
               picks={bracketPicks}
               winnerMovie={bracketWinner}
+              playerName={challengerName || undefined}
               isGuest={!user?.id}
               onSignUp={onOpenAuth}
               onPlayAgain={handleStartKnockout}

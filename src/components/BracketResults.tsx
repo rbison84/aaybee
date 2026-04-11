@@ -1,9 +1,9 @@
 // ============================================
 // Movie Knockout Bracket — Results Component
-// Shows winner, bracket path, share CTA
+// SameGoat-style: winner, "send to friend", QR, share, bracket
 // ============================================
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -17,7 +17,9 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHaptics } from '../hooks/useHaptics';
-import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
+import { useAuth } from '../contexts/AuthContext';
+import { colors, spacing, borderRadius } from '../theme/cinematic';
+import { QRCode } from './QRCode';
 import {
   BracketMovie,
   BracketPick,
@@ -29,12 +31,12 @@ interface BracketResultsProps {
   movies: BracketMovie[];
   picks: BracketPick[];
   winnerMovie: BracketMovie;
+  playerName?: string;
   shareUrl?: string;
   friendPicks?: BracketPick[];
   friendName?: string;
   isGuest?: boolean;
   onSignUp?: () => void;
-  onShare?: () => void;
   onPlayAgain?: () => void;
   onHome: () => void;
 }
@@ -43,39 +45,48 @@ export function BracketResults({
   movies,
   picks,
   winnerMovie,
-  shareUrl,
+  playerName,
+  shareUrl: shareUrlProp,
   friendPicks,
   friendName,
   isGuest,
   onSignUp,
-  onShare,
   onPlayAgain,
   onHome,
 }: BracketResultsProps) {
   const insets = useSafeAreaInsets();
   const haptics = useHaptics();
+  const { user } = useAuth();
+  const [copied, setCopied] = useState(false);
 
   const path = buildBracketPath(movies, picks);
   const comparison = friendPicks ? compareBrackets(picks, friendPicks) : null;
 
+  // Build share URL (for now just the base URL — could include a challenge code)
+  const shareUrl = shareUrlProp || 'https://aaybee.netlify.app';
+  const displayName = playerName || user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'Someone';
+
+  const shareMessage = `${displayName}'s last movie standing is "${winnerMovie.title}" — can you beat it?\n\n${shareUrl}`;
+
   const handleShare = async () => {
-    const message = `My last movie standing is "${winnerMovie.title}" on aaybee.\n\nplay knockout: ${shareUrl || 'https://aaybee.app'}`;
     try {
       if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
-        await navigator.share({ text: message });
+        await navigator.share({ text: shareMessage });
       } else if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(message);
+        await navigator.clipboard.writeText(shareMessage);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
       } else {
-        await Share.share({ message });
+        await Share.share({ message: shareMessage });
       }
       haptics.success();
     } catch {}
-    onShare?.();
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + spacing.lg }]}>
+    <View style={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
         {/* Winner announcement */}
         <Animated.View entering={FadeInDown.duration(400)} style={styles.winnerSection}>
           <Text style={styles.winnerLabel}>LAST MOVIE STANDING</Text>
@@ -98,9 +109,31 @@ export function BracketResults({
           )}
         </Animated.View>
 
+        {/* "SEND THIS TO A FRIEND" + QR + Share */}
+        <Animated.View entering={FadeInDown.delay(200).duration(400)} style={styles.shareSection}>
+          <Text style={styles.sendTitle}>SEND THIS TO A FRIEND</Text>
+
+          {/* QR Card */}
+          <View style={styles.qrCard}>
+            <Text style={styles.qrLabel}>SCAN OR SHARE</Text>
+            <QRCode
+              value={shareUrl}
+              size={160}
+              backgroundColor="transparent"
+              color="#FFFFFF"
+            />
+            <Text style={styles.qrUrl} numberOfLines={2}>{shareUrl}</Text>
+          </View>
+
+          {/* Share button */}
+          <Pressable style={styles.shareButton} onPress={handleShare}>
+            <Text style={styles.shareButtonText}>{copied ? 'COPIED' : 'SHARE LINK'}</Text>
+          </Pressable>
+        </Animated.View>
+
         {/* Friend comparison */}
         {comparison && friendName && (
-          <Animated.View entering={FadeInDown.delay(200).duration(400)} style={styles.comparisonSection}>
+          <Animated.View entering={FadeInDown.delay(300).duration(400)} style={styles.comparisonSection}>
             <Text style={styles.comparisonText}>
               YOU & {friendName.toUpperCase()}: AGREED ON {comparison.agreements}/{comparison.total} MATCHUPS
             </Text>
@@ -108,8 +141,8 @@ export function BracketResults({
           </Animated.View>
         )}
 
-        {/* Bracket visualization — compact */}
-        <Animated.View entering={FadeInDown.delay(300).duration(400)} style={styles.bracketSection}>
+        {/* Bracket visualization */}
+        <Animated.View entering={FadeInDown.delay(400).duration(400)} style={styles.bracketSection}>
           <Text style={styles.bracketLabel}>YOUR BRACKET</Text>
           <View style={styles.bracketGrid}>
             {path.map((round, roundIdx) => (
@@ -119,7 +152,7 @@ export function BracketResults({
                   const isWinner = movieIdx === (picks.find(p => p.round === 3)?.winnerIdx);
                   return (
                     <View
-                      key={movieIdx}
+                      key={`${roundIdx}-${movieIdx}`}
                       style={[
                         styles.bracketItem,
                         isWinner && styles.bracketItemWinner,
@@ -136,17 +169,13 @@ export function BracketResults({
           </View>
         </Animated.View>
 
-        {/* CTAs */}
+        {/* Secondary CTAs */}
         <View style={styles.ctas}>
           {isGuest && onSignUp && (
-            <Pressable style={styles.ctaPrimary} onPress={onSignUp}>
-              <Text style={styles.ctaPrimaryText}>SIGN UP TO SAVE</Text>
+            <Pressable style={styles.ctaSecondary} onPress={onSignUp}>
+              <Text style={styles.ctaSecondaryText}>SIGN UP TO SAVE</Text>
             </Pressable>
           )}
-
-          <Pressable style={styles.ctaPrimary} onPress={handleShare}>
-            <Text style={styles.ctaPrimaryText}>SHARE YOUR PICK</Text>
-          </Pressable>
 
           {onPlayAgain && (
             <Pressable style={styles.ctaSecondary} onPress={onPlayAgain}>
@@ -176,6 +205,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,
   },
+
+  // Winner
   winnerSection: {
     alignItems: 'center',
     marginBottom: spacing.xxl,
@@ -188,8 +219,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   winnerPoster: {
-    width: 200,
-    height: 300,
+    width: 180,
+    height: 270,
     borderRadius: borderRadius.xl,
     borderWidth: 2,
     borderColor: colors.accent,
@@ -201,12 +232,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   posterPlaceholderText: {
-    fontSize: 64,
+    fontSize: 56,
     fontWeight: '800',
     color: colors.textMuted,
   },
   winnerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
     color: colors.textPrimary,
     letterSpacing: 1.5,
@@ -219,6 +250,60 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: spacing.xs,
   },
+
+  // Share section
+  shareSection: {
+    alignItems: 'center',
+    marginBottom: spacing.xxl,
+  },
+  sendTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: 2,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  qrCard: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.xxl,
+    padding: spacing.xl,
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: spacing.lg,
+  },
+  qrLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.accent,
+    letterSpacing: 2,
+    marginBottom: spacing.lg,
+  },
+  qrUrl: {
+    fontSize: 10,
+    fontWeight: '400',
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+    marginTop: spacing.lg,
+    textAlign: 'center',
+  },
+  shareButton: {
+    backgroundColor: colors.textPrimary,
+    borderRadius: borderRadius.xxl,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+    width: '100%',
+  },
+  shareButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.background,
+    letterSpacing: 2,
+  },
+
+  // Friend comparison
   comparisonSection: {
     alignItems: 'center',
     backgroundColor: colors.card,
@@ -242,6 +327,8 @@ const styles = StyleSheet.create({
     color: colors.accent,
     letterSpacing: 2,
   },
+
+  // Bracket
   bracketSection: {
     marginBottom: spacing.xxl,
   },
@@ -283,20 +370,10 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontWeight: '700',
   },
+
+  // CTAs
   ctas: {
     gap: spacing.md,
-  },
-  ctaPrimary: {
-    backgroundColor: colors.textPrimary,
-    borderRadius: borderRadius.xxl,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-  },
-  ctaPrimaryText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.background,
-    letterSpacing: 1.5,
   },
   ctaSecondary: {
     backgroundColor: colors.card,
@@ -307,10 +384,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ctaSecondaryText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.textPrimary,
-    letterSpacing: 1.5,
+    letterSpacing: 1,
   },
   ctaGhost: {
     paddingVertical: spacing.md,
