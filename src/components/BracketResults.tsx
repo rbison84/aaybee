@@ -24,7 +24,6 @@ import {
   BracketMovie,
   BracketPick,
   buildBracketPath,
-  compareBrackets,
 } from '../utils/movieBracket';
 
 interface BracketResultsProps {
@@ -33,8 +32,10 @@ interface BracketResultsProps {
   winnerMovie: BracketMovie;
   playerName?: string;
   shareUrl?: string;
-  friendPicks?: BracketPick[];
-  friendName?: string;
+  matchPercent?: number;
+  sameWinner?: boolean;
+  creatorName?: string;
+  challengerName?: string;
   isGuest?: boolean;
   onSignUp?: () => void;
   onPlayAgain?: () => void;
@@ -47,8 +48,10 @@ export function BracketResults({
   winnerMovie,
   playerName,
   shareUrl: shareUrlProp,
-  friendPicks,
-  friendName,
+  matchPercent,
+  sameWinner,
+  creatorName,
+  challengerName,
   isGuest,
   onSignUp,
   onPlayAgain,
@@ -60,7 +63,7 @@ export function BracketResults({
   const [copied, setCopied] = useState(false);
 
   const path = buildBracketPath(movies, picks);
-  const comparison = friendPicks ? compareBrackets(picks, friendPicks) : null;
+  const hasMatch = matchPercent !== undefined && matchPercent !== null;
 
   // Build share URL (for now just the base URL — could include a challenge code)
   const shareUrl = shareUrlProp || 'https://aaybee.netlify.app';
@@ -131,13 +134,19 @@ export function BracketResults({
           </Pressable>
         </Animated.View>
 
-        {/* Friend comparison */}
-        {comparison && friendName && (
+        {/* Taste match (shown when challenger completes) */}
+        {hasMatch && (
           <Animated.View entering={FadeInDown.delay(300).duration(400)} style={styles.comparisonSection}>
-            <Text style={styles.comparisonText}>
-              YOU & {friendName.toUpperCase()}: AGREED ON {comparison.agreements}/{comparison.total} MATCHUPS
-            </Text>
-            <Text style={styles.comparisonPercent}>{comparison.percent}%</Text>
+            <Text style={styles.comparisonLabel}>TASTE MATCH</Text>
+            <Text style={styles.comparisonPercent}>{matchPercent}%</Text>
+            {creatorName && challengerName && (
+              <Text style={styles.comparisonNames}>
+                {creatorName.toUpperCase()} & {challengerName.toUpperCase()}
+              </Text>
+            )}
+            {sameWinner && (
+              <Text style={styles.sameWinnerText}>SAME LAST MOVIE STANDING</Text>
+            )}
           </Animated.View>
         )}
 
@@ -303,7 +312,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
 
-  // Friend comparison
+  // Taste match
   comparisonSection: {
     alignItems: 'center',
     backgroundColor: colors.card,
@@ -313,19 +322,32 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     marginBottom: spacing.xxl,
   },
-  comparisonText: {
+  comparisonLabel: {
     fontSize: 10,
     fontWeight: '700',
-    color: colors.textSecondary,
-    letterSpacing: 1,
-    textAlign: 'center',
+    color: colors.accent,
+    letterSpacing: 2,
     marginBottom: spacing.sm,
   },
   comparisonPercent: {
-    fontSize: 48,
+    fontSize: 56,
     fontWeight: '800',
-    color: colors.accent,
+    color: colors.textPrimary,
     letterSpacing: 2,
+  },
+  comparisonNames: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: colors.textMuted,
+    letterSpacing: 1,
+    marginTop: spacing.sm,
+  },
+  sameWinnerText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.accent,
+    letterSpacing: 1,
+    marginTop: spacing.sm,
   },
 
   // Bracket

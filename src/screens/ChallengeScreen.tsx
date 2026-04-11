@@ -44,6 +44,7 @@ import {
   BracketPick,
   createVsBracket,
 } from '../utils/movieBracket';
+import { knockoutService, KnockoutChallenge } from '../services/knockoutService';
 
 // ============================================
 // TYPES
@@ -148,6 +149,8 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
   const [bracketPicks, setBracketPicks] = useState<BracketPick[]>([]);
   const [bracketWinner, setBracketWinner] = useState<BracketMovie | null>(null);
   const [knockoutGuestName, setKnockoutGuestName] = useState('');
+  const [knockoutChallenge, setKnockoutChallenge] = useState<KnockoutChallenge | null>(null);
+  const [knockoutSeed, setKnockoutSeed] = useState(0);
 
   // Inline code input for home screen
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -208,6 +211,32 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
           setStep('vs-selecting');
         } else {
           setStep('vs-name');
+        }
+        setLoading(false);
+        return;
+      }
+
+      // Try knockout challenge
+      const kc = await knockoutService.getChallengeByCode(initialCode);
+      if (kc) {
+        setKnockoutChallenge(kc);
+        setBracketMovies(kc.movies);
+        if (kc.status === 'complete') {
+          // Already complete — show results
+          setBracketPicks(kc.challenger_picks || kc.creator_picks || []);
+          setBracketWinner(kc.challenger_winner || kc.creator_winner || null);
+          setStep('knockout-result');
+        } else {
+          // Waiting for challenger — play the same bracket
+          setBracketPicks([]);
+          setBracketWinner(null);
+          if (user?.id) {
+            const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
+            setChallengerName(displayName);
+            setStep('knockout');
+          } else {
+            setStep('knockout-name');
+          }
         }
         setLoading(false);
         return;
@@ -399,10 +428,13 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
         return;
       }
 
-      const bracket = createVsBracket(pool);
+      const seed = Date.now();
+      setKnockoutSeed(seed);
+      const bracket = createVsBracket(pool, seed);
       setBracketMovies(bracket);
       setBracketPicks([]);
       setBracketWinner(null);
+      setKnockoutChallenge(null);
       setStep('knockout');
     } catch (err) {
       setError('Failed to create bracket');
@@ -433,11 +465,40 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
     handleStartKnockout();
   }, [knockoutGuestName, handleStartKnockout]);
 
-  const handleKnockoutComplete = useCallback((picks: BracketPick[], winner: BracketMovie) => {
+  const handleKnockoutComplete = useCallback(async (picks: BracketPick[], winner: BracketMovie) => {
     setBracketPicks(picks);
     setBracketWinner(winner);
+
+    // If this is a challenger completing a shared bracket, submit picks
+    if (knockoutChallenge && knockoutChallenge.creator_picks) {
+      const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || challengerName || 'Guest';
+      const { challenge: updated } = await knockoutService.submitChallengerPicks(
+        knockoutChallenge.id,
+        picks,
+        winner,
+        user?.id || null,
+        displayName,
+        knockoutChallenge.creator_picks,
+        bracketMovies.length,
+      );
+      if (updated) setKnockoutChallenge(updated);
+      setStep('knockout-result');
+      return;
+    }
+
+    // Creator finishing — save to DB to generate share code
+    const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || challengerName || 'Guest';
+    const { challenge: created } = await knockoutService.createChallenge(
+      bracketMovies,
+      knockoutSeed,
+      picks,
+      winner,
+      user?.id || null,
+      displayName,
+    );
+    if (created) setKnockoutChallenge(created);
     setStep('knockout-result');
-  }, []);
+  }, [knockoutChallenge, bracketMovies, knockoutSeed, user, challengerName]);
 
   const handleKnockoutPackSelect = useCallback(async (pack: CuratedPack) => {
     setLoading(true);
@@ -2029,6 +2090,11 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
               picks={bracketPicks}
               winnerMovie={bracketWinner}
               playerName={challengerName || undefined}
+              shareUrl={knockoutChallenge ? `https://aaybee.netlify.app/vs/${knockoutChallenge.code}` : undefined}
+              matchPercent={knockoutChallenge?.match_percent ?? undefined}
+              sameWinner={knockoutChallenge?.same_winner ?? undefined}
+              creatorName={knockoutChallenge?.creator_name}
+              challengerName={knockoutChallenge?.challenger_name ?? undefined}
               isGuest={!user?.id}
               onSignUp={onOpenAuth}
               onPlayAgain={handleStartKnockout}

@@ -256,29 +256,92 @@ export function buildBracketPath(movies: BracketMovie[], picks: BracketPick[]): 
 }
 
 /**
- * Compare two sets of bracket picks and count agreements.
+ * Convert bracket picks into an implicit ranking of all movies.
+ * Winner = rank 0, finalist = rank 1, semi losers = rank 2-3, etc.
+ * Returns array of movie indices sorted by rank (best first).
  */
-export function compareBrackets(picksA: BracketPick[], picksB: BracketPick[]): {
-  agreements: number;
-  total: number;
-  percent: number;
+export function bracketToRanking(movieCount: number, picks: BracketPick[]): number[] {
+  const winners = new Map<string, number>();
+  for (const pick of picks) {
+    winners.set(`${pick.round}-${pick.match}`, pick.winnerIdx);
+  }
+
+  // Track which round each movie was eliminated in (higher = better)
+  // Movies that won later rounds get higher scores
+  const score = new Map<number, number>();
+
+  // Initialize all movies at 0
+  for (let i = 0; i < movieCount; i++) {
+    score.set(i, 0);
+  }
+
+  // Round 0 losers get score 0, round 0 winners get at least 1
+  // Each subsequent round won adds more score
+  // Round 0 winners: +1, Round 1 winners: +2, Round 2 winners: +4, Round 3 winner: +8
+  for (const pick of picks) {
+    const winnerIdx = pick.winnerIdx;
+    const roundBonus = Math.pow(2, pick.round);
+    score.set(winnerIdx, (score.get(winnerIdx) || 0) + roundBonus);
+  }
+
+  // Sort by score descending (highest = best)
+  const indices = Array.from({ length: movieCount }, (_, i) => i);
+  indices.sort((a, b) => (score.get(b) || 0) - (score.get(a) || 0));
+
+  return indices;
+}
+
+/**
+ * Compute Kendall tau distance between two rankings.
+ * Returns 0 (identical) to 1 (fully reversed).
+ */
+function kendallTauDistance(rankingA: number[], rankingB: number[]): number {
+  const n = rankingA.length;
+  if (n < 2) return 0;
+
+  // Position of each item in ranking B
+  const posB = new Map<number, number>();
+  rankingB.forEach((idx, pos) => posB.set(idx, pos));
+
+  let concordant = 0;
+  let discordant = 0;
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const biPos = posB.get(rankingA[i]);
+      const bjPos = posB.get(rankingA[j]);
+      if (biPos === undefined || bjPos === undefined) continue;
+
+      if (biPos < bjPos) concordant++;
+      else if (biPos > bjPos) discordant++;
+    }
+  }
+
+  const totalPairs = (n * (n - 1)) / 2;
+  return totalPairs > 0 ? discordant / totalPairs : 0;
+}
+
+/**
+ * Compare two bracket results using implicit ranking + Kendall tau.
+ * Returns a taste match percentage (0-100, higher = more similar).
+ */
+export function compareBrackets(movieCount: number, picksA: BracketPick[], picksB: BracketPick[]): {
+  matchPercent: number;
+  kendallTau: number;
+  sameWinner: boolean;
 } {
-  let agreements = 0;
-  const total = Math.min(picksA.length, picksB.length);
+  const rankingA = bracketToRanking(movieCount, picksA);
+  const rankingB = bracketToRanking(movieCount, picksB);
 
-  const mapB = new Map<string, number>();
-  for (const p of picksB) {
-    mapB.set(`${p.round}-${p.match}`, p.winnerIdx);
-  }
+  const tau = kendallTauDistance(rankingA, rankingB);
+  const matchPercent = Math.round((1 - tau) * 100);
 
-  for (const p of picksA) {
-    const bWinner = mapB.get(`${p.round}-${p.match}`);
-    if (bWinner === p.winnerIdx) agreements++;
-  }
+  const winnerA = picksA.find(p => p.round === 3)?.winnerIdx;
+  const winnerB = picksB.find(p => p.round === 3)?.winnerIdx;
 
   return {
-    agreements,
-    total,
-    percent: total > 0 ? Math.round((agreements / total) * 100) : 0,
+    matchPercent,
+    kendallTau: tau,
+    sameWinner: winnerA !== undefined && winnerA === winnerB,
   };
 }
