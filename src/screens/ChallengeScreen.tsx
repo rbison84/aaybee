@@ -69,13 +69,14 @@ type ChallengeStep =
 interface ChallengeScreenProps {
   initialCode?: string;
   onOpenAuth?: () => void;
+  autoStartKnockout?: boolean;
 }
 
 // ============================================
 // COMPONENT
 // ============================================
 
-export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProps) {
+export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: ChallengeScreenProps) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { isDesktop, isWeb } = useAppDimensions();
@@ -388,6 +389,15 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
 
     setLoading(false);
   }, [user?.id]);
+
+  // Auto-start knockout when entering VS directly
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (autoStartKnockout && !autoStarted.current && !initialCode) {
+      autoStarted.current = true;
+      handleStartKnockout();
+    }
+  }, [autoStartKnockout, initialCode, handleStartKnockout]);
 
   const handleKnockoutComplete = useCallback((picks: BracketPick[], winner: BracketMovie) => {
     setBracketPicks(picks);

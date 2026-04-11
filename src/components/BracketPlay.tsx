@@ -126,7 +126,7 @@ export function BracketPlay({
         <View style={[styles.progressBarFill, { width: `${(picks.length / 15) * 100}%` as any }]} />
       </View>
 
-      {/* Cards */}
+      {/* Cards — side by side like Compare */}
       {showContent ? (
         <Animated.View style={styles.cardsContainer} entering={FadeIn.duration(150)}>
           {/* Movie A */}
@@ -134,17 +134,19 @@ export function BracketPlay({
             style={styles.movieCard}
             onPress={() => choose(idxA)}
           >
-            {matchup.movieA.posterUrl ? (
-              <Image
-                source={{ uri: matchup.movieA.posterUrl }}
-                style={styles.poster}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={[styles.poster, styles.posterPlaceholder]}>
-                <Text style={styles.posterPlaceholderText}>{matchup.movieA.title.charAt(0)}</Text>
-              </View>
-            )}
+            <View style={styles.posterContainer}>
+              {matchup.movieA.posterUrl ? (
+                <Image
+                  source={{ uri: matchup.movieA.posterUrl }}
+                  style={styles.poster}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.poster, styles.posterPlaceholder]}>
+                  <Text style={styles.posterPlaceholderText}>{matchup.movieA.title.charAt(0)}</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.movieTitle} numberOfLines={2}>
               {matchup.movieA.title.toUpperCase()}
             </Text>
@@ -153,27 +155,24 @@ export function BracketPlay({
             )}
           </Pressable>
 
-          {/* VS indicator */}
-          <View style={styles.vsContainer}>
-            <Text style={styles.vsText}>VS</Text>
-          </View>
-
           {/* Movie B */}
           <Pressable
             style={styles.movieCard}
             onPress={() => choose(idxB)}
           >
-            {matchup.movieB.posterUrl ? (
-              <Image
-                source={{ uri: matchup.movieB.posterUrl }}
-                style={styles.poster}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={[styles.poster, styles.posterPlaceholder]}>
-                <Text style={styles.posterPlaceholderText}>{matchup.movieB.title.charAt(0)}</Text>
-              </View>
-            )}
+            <View style={styles.posterContainer}>
+              {matchup.movieB.posterUrl ? (
+                <Image
+                  source={{ uri: matchup.movieB.posterUrl }}
+                  style={styles.poster}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.poster, styles.posterPlaceholder]}>
+                  <Text style={styles.posterPlaceholderText}>{matchup.movieB.title.charAt(0)}</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.movieTitle} numberOfLines={2}>
               {matchup.movieB.title.toUpperCase()}
             </Text>
@@ -241,25 +240,27 @@ const styles = StyleSheet.create({
   },
   cardsContainer: {
     flex: 1,
+    flexDirection: 'row',
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
     gap: spacing.md,
   },
   movieCard: {
     flex: 1,
-    backgroundColor: colors.card,
+    alignItems: 'center',
+  },
+  posterContainer: {
+    width: '100%',
+    aspectRatio: 2 / 3,
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: borderRadius.xxl,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: spacing.md,
+    backgroundColor: colors.card,
   },
   poster: {
     width: '100%',
-    flex: 1,
-    minHeight: 120,
+    height: '100%',
   },
   posterPlaceholder: {
     backgroundColor: colors.surface,
@@ -267,20 +268,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   posterPlaceholderText: {
-    fontSize: 48,
+    fontSize: 36,
     fontWeight: '800',
     color: colors.textMuted,
     textTransform: 'uppercase',
   },
   movieTitle: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textPrimary,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
     textAlign: 'center',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.xs,
     paddingTop: spacing.sm,
+    lineHeight: 16,
   },
   movieYear: {
     fontSize: 10,
@@ -288,16 +290,5 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     letterSpacing: 0.5,
     marginTop: 2,
-  },
-  vsContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 40,
-  },
-  vsText: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: colors.accent,
-    letterSpacing: 4,
   },
 });

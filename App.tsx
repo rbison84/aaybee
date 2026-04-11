@@ -236,7 +236,7 @@ function PlayMenu({ onBack, onVs, onDaily, onDecide, onDiscover }: {
 
   const modes = [
     { label: 'VS', sub: 'head to head.', onPress: onVs },
-    { label: 'DAILY', sub: "today's crew play.", onPress: onDaily },
+    { label: 'DAILY', sub: "today's circle play.", onPress: onDaily },
     { label: 'DECIDE', sub: 'settle it.', onPress: onDecide },
     { label: 'DISCOVER', sub: 'compare & explore.', onPress: onDiscover },
   ];
@@ -731,6 +731,7 @@ function MainApp() {
           <ChallengeScreen
             initialCode={challengeInitialCode}
             onOpenAuth={() => setShowAuth(true)}
+            autoStartKnockout={!challengeInitialCode}
           />
         );
 

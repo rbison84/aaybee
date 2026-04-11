@@ -1,6 +1,6 @@
 // ============================================
 // Friends Screen — SameGoat-style layout
-// Two tabs: Friends | Crews
+// Two tabs: Friends | Circles
 // Requires sign-in (parent gates access)
 // ============================================
 
@@ -26,7 +26,7 @@ import { TasteRadar } from '../components/TasteRadar';
 import { computeTasteAxes } from '../utils/tasteAxes';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
 
-type TabType = 'friends' | 'crews';
+type FriendsTabType = 'friends' | 'circles';
 
 interface FriendsScreenProps {
   onChallenge?: (friendId: string, friendName: string) => void;
@@ -35,7 +35,7 @@ interface FriendsScreenProps {
 
 export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabType>('friends');
+  const [activeTab, setActiveTab] = useState<FriendsTabType>('friends');
 
   // Friends state
   const [friends, setFriends] = useState<FriendWithProfile[]>([]);
@@ -78,7 +78,7 @@ export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
 
   // Load crews
   useEffect(() => {
-    if (!user?.id || activeTab !== 'crews') return;
+    if (!user?.id || activeTab !== 'circles') return;
     setCrewsLoading(true);
     crewService.getMyCrews(user.id).then((data) => {
       setCrews(data);
@@ -349,7 +349,7 @@ export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
         <Animated.View entering={FadeIn.duration(200)} style={styles.crewForm}>
           <TextInput
             style={styles.crewInput}
-            placeholder="CREW NAME (E.G. ROOMMATES)"
+            placeholder="CIRCLE NAME (E.G. ROOMMATES)"
             placeholderTextColor={colors.textMuted}
             value={newCrewName}
             onChangeText={setNewCrewName}
@@ -362,7 +362,7 @@ export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
             onPress={handleCreateCrew}
             disabled={!newCrewName.trim() || creatingCrew}
           >
-            <Text style={styles.crewSubmitText}>{creatingCrew ? '...' : 'CREATE CREW'}</Text>
+            <Text style={styles.crewSubmitText}>{creatingCrew ? '...' : 'CREATE CIRCLE'}</Text>
           </Pressable>
           {!!crewError && <Text style={styles.crewErrorText}>{crewError}</Text>}
         </Animated.View>
@@ -387,7 +387,7 @@ export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
             onPress={handleJoinCrew}
             disabled={!joinCrewCode.trim() || creatingCrew}
           >
-            <Text style={styles.crewSubmitText}>{creatingCrew ? '...' : 'JOIN CREW'}</Text>
+            <Text style={styles.crewSubmitText}>{creatingCrew ? '...' : 'JOIN CIRCLE'}</Text>
           </Pressable>
           {!!crewError && <Text style={styles.crewErrorText}>{crewError}</Text>}
         </Animated.View>
@@ -398,8 +398,8 @@ export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
         <ActivityIndicator size="small" color={colors.textMuted} style={{ marginTop: spacing.xxl }} />
       ) : crews.length === 0 ? (
         <View style={styles.emptySection}>
-          <Text style={styles.emptyTitle}>NO CREWS YET</Text>
-          <Text style={styles.emptySubtitle}>CREATE A CREW AND SHARE THE CODE WITH YOUR GROUP CHAT</Text>
+          <Text style={styles.emptyTitle}>NO CIRCLES YET</Text>
+          <Text style={styles.emptySubtitle}>CREATE A CIRCLE AND SHARE THE CODE WITH YOUR GROUP CHAT</Text>
         </View>
       ) : (
         crews.map((crew) => (
@@ -423,8 +423,8 @@ export function FriendsScreen({ onChallenge, onViewCrew }: FriendsScreenProps) {
         <Pressable style={[styles.tab, activeTab === 'friends' && styles.tabActive]} onPress={() => setActiveTab('friends')}>
           <Text style={[styles.tabText, activeTab === 'friends' && styles.tabTextActive]}>FRIENDS</Text>
         </Pressable>
-        <Pressable style={[styles.tab, activeTab === 'crews' && styles.tabActive]} onPress={() => setActiveTab('crews')}>
-          <Text style={[styles.tabText, activeTab === 'crews' && styles.tabTextActive]}>CREWS</Text>
+        <Pressable style={[styles.tab, activeTab === 'circles' && styles.tabActive]} onPress={() => setActiveTab('circles')}>
+          <Text style={[styles.tabText, activeTab === 'circles' && styles.tabTextActive]}>CIRCLES</Text>
         </Pressable>
       </View>
 
