@@ -55,6 +55,7 @@ import { challengeService } from './src/services/challengeService';
 import { knockoutService } from './src/services/knockoutService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius, typography } from './src/theme/cinematic';
+import Svg, { Path, Circle as SvgCircle, Line, Polygon, Polyline } from 'react-native-svg';
 
 // Navigation — SameGoat-style: landing page with PLAY + FRIENDS buttons
 type NavPhase = 'landing' | 'playMenu' | 'vs' | 'daily' | 'decide' | 'discover' | 'friends' | 'profile' | 'myGames';
@@ -82,18 +83,21 @@ function PersistentTopBar({ onProfile, onHome, hasBadge }: {
   const isSignedIn = !!user?.id && !isGuest;
 
   return (
-    <View style={[navStyles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-      <Pressable onPress={onHome}>
-        <Text style={navStyles.topLogo}>AAYBEE</Text>
-      </Pressable>
-      <Pressable onPress={onProfile}>
-        <Text style={navStyles.profileLink}>
-          {isSignedIn ? (user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'profile').toLowerCase() : 'sign in'}
-        </Text>
-        {!!hasBadge && isSignedIn && (
-          <View style={navStyles.profileDot} />
-        )}
-      </Pressable>
+    <View style={{ backgroundColor: colors.background }}>
+      <View style={[navStyles.topBar, { paddingTop: insets.top + spacing.sm }]}>
+        <Pressable onPress={onHome}>
+          <Text style={navStyles.topLogo}>AAYBEE</Text>
+        </Pressable>
+        <Pressable onPress={onProfile}>
+          <Text style={navStyles.profileLink}>
+            {isSignedIn ? (user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'profile').toLowerCase() : 'sign in'}
+          </Text>
+          {!!hasBadge && isSignedIn && (
+            <View style={navStyles.profileDot} />
+          )}
+        </Pressable>
+      </View>
+      <View style={navStyles.topBarLine} />
     </View>
   );
 }
@@ -126,10 +130,10 @@ const navStyles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   topLogo: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '900',
     color: colors.accent,
-    letterSpacing: 3,
+    letterSpacing: 4,
   },
   profileLink: {
     fontSize: 10,
@@ -148,6 +152,10 @@ const navStyles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: colors.accent,
   } as any,
+  topBarLine: {
+    height: 1,
+    backgroundColor: colors.border,
+  },
   subNav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -159,10 +167,10 @@ const navStyles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   subNavLabel: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
     color: colors.accent,
-    letterSpacing: 2,
+    letterSpacing: 3,
     textTransform: 'uppercase',
   },
   backButton: {
@@ -177,6 +185,52 @@ const navStyles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 });
+
+// Button icons — inline SVG, black stroke, no fill (matching SameGoat)
+const IconPlay = () => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Polygon points="5,3 19,12 5,21" stroke="#000" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+  </Svg>
+);
+const IconPeople = () => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <SvgCircle cx={9} cy={7} r={3} stroke="#000" strokeWidth={1.5} />
+    <Path d="M3 21v-1a6 6 0 0 1 12 0v1" stroke="#000" strokeWidth={1.5} strokeLinecap="round" />
+    <SvgCircle cx={17} cy={9} r={2.5} stroke="#000" strokeWidth={1.5} />
+    <Path d="M21 21v-.5a4.5 4.5 0 0 0-4-4.47" stroke="#000" strokeWidth={1.5} strokeLinecap="round" />
+  </Svg>
+);
+const IconSignIn = () => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="#000" strokeWidth={1.5} strokeLinecap="round" />
+    <Polyline points="10,17 15,12 10,7" stroke="#000" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    <Line x1={15} y1={12} x2={3} y2={12} stroke="#000" strokeWidth={1.5} strokeLinecap="round" />
+  </Svg>
+);
+const IconGlobe = () => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <SvgCircle cx={12} cy={12} r={10} stroke="#000" strokeWidth={1.5} />
+    <Path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z" stroke="#000" strokeWidth={1.5} />
+  </Svg>
+);
+const IconBracket = () => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path d="M4 4v4h4M4 20v-4h4M20 12h-8M12 4v16M8 8h4M8 16h4" stroke="#000" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+const IconQuestion = () => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <SvgCircle cx={12} cy={12} r={10} stroke="#000" strokeWidth={1.5} />
+    <Path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="#000" strokeWidth={1.5} strokeLinecap="round" />
+    <SvgCircle cx={12} cy={17} r={0.5} fill="#000" />
+  </Svg>
+);
+const IconCompass = () => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <SvgCircle cx={12} cy={12} r={10} stroke="#000" strokeWidth={1.5} />
+    <Polygon points="16.24,7.76 14.12,14.12 7.76,16.24 9.88,9.88" stroke="#000" strokeWidth={1.5} strokeLinejoin="round" />
+  </Svg>
+);
 
 // Landing content — logo + tagline above, stacked buttons below
 function LandingContent({ onPlay, onFriends, onSignIn, friendsBadge }: {
@@ -199,23 +253,32 @@ function LandingContent({ onPlay, onFriends, onSignIn, friendsBadge }: {
       {/* Stacked buttons */}
       <View style={landingStyles.buttons}>
         <Pressable style={landingStyles.bigButton} onPress={onPlay}>
-          <Text style={landingStyles.bigButtonLabel}>PLAY</Text>
-          <Text style={landingStyles.bigButtonSub}>(pick a mode.)</Text>
+          <IconPlay />
+          <View>
+            <Text style={landingStyles.bigButtonLabel}>PLAY</Text>
+            <Text style={landingStyles.bigButtonSub}>(pick a mode.)</Text>
+          </View>
         </Pressable>
         {isSignedIn ? (
           <Pressable style={landingStyles.bigButton} onPress={onFriends}>
-            <Text style={landingStyles.bigButtonLabel}>FRIENDS</Text>
-            <Text style={landingStyles.bigButtonSub}>
-              {friendsBadge && friendsBadge > 0 ? `(${friendsBadge} challenge${friendsBadge !== 1 ? 's' : ''})` : '(your people.)'}
-            </Text>
+            <IconPeople />
+            <View style={{ flex: 1 }}>
+              <Text style={landingStyles.bigButtonLabel}>FRIENDS</Text>
+              <Text style={landingStyles.bigButtonSub}>
+                {friendsBadge && friendsBadge > 0 ? `(${friendsBadge} challenge${friendsBadge !== 1 ? 's' : ''})` : '(your people.)'}
+              </Text>
+            </View>
             {!!friendsBadge && friendsBadge > 0 && (
               <View style={landingStyles.badge} />
             )}
           </Pressable>
         ) : (
           <Pressable style={landingStyles.bigButton} onPress={onSignIn}>
-            <Text style={landingStyles.bigButtonLabel}>SIGN IN</Text>
-            <Text style={landingStyles.bigButtonSub}>(save your games.)</Text>
+            <IconSignIn />
+            <View>
+              <Text style={landingStyles.bigButtonLabel}>SIGN IN</Text>
+              <Text style={landingStyles.bigButtonSub}>(save your games.)</Text>
+            </View>
           </Pressable>
         )}
       </View>
@@ -289,19 +352,22 @@ function PlayMenuContent({ onVs, onDaily, onDecide, onDiscover }: {
   onDecide: () => void;
   onDiscover: () => void;
 }) {
-  const modes = [
-    { label: 'VS', sub: 'head to head.', onPress: onVs },
-    { label: 'DAILY', sub: "today's circle play.", onPress: onDaily },
-    { label: 'DECIDE', sub: 'settle it.', onPress: onDecide },
-    { label: 'DISCOVER', sub: 'compare & explore.', onPress: onDiscover },
+  const modes: { label: string; sub: string; icon: React.ReactNode; onPress: () => void }[] = [
+    { label: 'VS', sub: 'head to head.', icon: <IconBracket />, onPress: onVs },
+    { label: 'DAILY', sub: "today's circle play.", icon: <IconGlobe />, onPress: onDaily },
+    { label: 'DECIDE', sub: 'settle it.', icon: <IconQuestion />, onPress: onDecide },
+    { label: 'DISCOVER', sub: 'compare & explore.', icon: <IconCompass />, onPress: onDiscover },
   ];
 
   return (
     <View style={playMenuStyles.container}>
       {modes.map((mode) => (
         <Pressable key={mode.label} style={playMenuStyles.modeButton} onPress={mode.onPress}>
-          <Text style={playMenuStyles.modeLabel}>{mode.label}</Text>
-          <Text style={playMenuStyles.modeSub}>{mode.sub}</Text>
+          {mode.icon}
+          <View style={{ flex: 1 }}>
+            <Text style={playMenuStyles.modeLabel}>{mode.label}</Text>
+            <Text style={playMenuStyles.modeSub}>{mode.sub}</Text>
+          </View>
         </Pressable>
       ))}
     </View>
@@ -320,19 +386,22 @@ const playMenuStyles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     paddingVertical: spacing.xl,
     paddingHorizontal: spacing.xxl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
   },
   modeLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
     color: '#000000',
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
   modeSub: {
-    fontSize: 10,
-    color: 'rgba(0,0,0,0.5)',
-    letterSpacing: 0.5,
-    marginTop: spacing.xs,
+    fontSize: 9,
+    color: 'rgba(0,0,0,0.45)',
+    letterSpacing: 0.3,
+    marginTop: 2,
   },
 });
 
