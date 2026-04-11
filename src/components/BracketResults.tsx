@@ -88,7 +88,7 @@ export function BracketResults({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + spacing.md }]}>
+    <View style={styles.container}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* Winner announcement */}

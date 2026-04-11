@@ -96,9 +96,9 @@ export function BracketPlay({
 
   if (!matchup) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.container}>
         <View style={styles.navRow}>
-          <View />
+          <View style={{ minWidth: 60 }} />
           <Text style={styles.roundLabel}>COMPLETE</Text>
           <Text style={styles.progressText}>15/15</Text>
         </View>
@@ -111,12 +111,10 @@ export function BracketPlay({
   const idxB = movies.indexOf(matchup.movieB);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Nav row */}
+    <View style={styles.container}>
+      {/* Round + progress row (no back button — persistent nav handles it) */}
       <View style={styles.navRow}>
-        <Pressable onPress={goBack} style={styles.backButton}>
-          <Text style={styles.backText}>{'<'} BACK</Text>
-        </Pressable>
+        <View style={{ minWidth: 60 }} />
         <Text style={styles.roundLabel}>{roundName.toUpperCase()}</Text>
         <Text style={styles.progressText}>{picks.length + 1}/15</Text>
       </View>

@@ -31,7 +31,7 @@ const DiscoverScreen = React.lazy(() => import('./src/screens/DiscoverScreen').t
 const Aaybee100Screen = React.lazy(() => import('./src/screens/Aaybee100Screen').then(m => ({ default: m.Aaybee100Screen })));
 const TvScreen = React.lazy(() => import('./src/screens/TvScreen').then(m => ({ default: m.TvScreen })));
 import { GlobalHeader } from './src/components/GlobalHeader';
-import { SearchIcon } from './src/components/icons';
+// SearchIcon removed — no longer used in App shell
 // TabIcon no longer needed — nav uses text labels
 import { DebugPanel } from './src/components/debug';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -71,79 +71,59 @@ function LoadingScreen() {
   );
 }
 
-// Landing Page — two big buttons: PLAY + FRIENDS (SameGoat-style)
-function LandingPage({ onPlay, onFriends, onSignIn, onProfile, friendsBadge }: {
-  onPlay: () => void;
-  onFriends: () => void;
-  onSignIn: () => void;
+// Persistent Top Bar — AAYBEE left, profile right. Always visible.
+function PersistentTopBar({ onProfile, onHome, hasBadge }: {
   onProfile: () => void;
-  friendsBadge?: number;
+  onHome: () => void;
+  hasBadge?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const { user, isGuest } = useAuth();
-  const userInitial = user?.email?.charAt(0).toUpperCase() || '?';
   const isSignedIn = !!user?.id && !isGuest;
 
   return (
-    <View style={landingStyles.container}>
-      {/* Top bar: AAYBEE left, profile right */}
-      <View style={[landingStyles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-        <Text style={landingStyles.topLogo}>AAYBEE</Text>
-        <Pressable onPress={onProfile}>
-          <Text style={landingStyles.profileLink}>
-            {isSignedIn ? (user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'profile').toLowerCase() : 'sign in'}
-          </Text>
-          {!!friendsBadge && friendsBadge > 0 && isSignedIn && (
-            <View style={landingStyles.profileDot} />
-          )}
-        </Pressable>
-      </View>
-
-      {/* Center: logo + tagline */}
-      <View style={landingStyles.center}>
-        <Text style={landingStyles.logo}>AAYBEE</Text>
-        <Text style={landingStyles.tagline}>(your movies, ranked.)</Text>
-      </View>
-
-      {/* Bottom buttons — SameGoat style: white bg, black text, side by side */}
-      <View style={[landingStyles.buttons, { paddingBottom: Math.max(insets.bottom + spacing.lg, spacing.xxxl) }]}>
-        <View style={landingStyles.buttonRow}>
-          <Pressable style={landingStyles.bigButton} onPress={onPlay}>
-            <Text style={landingStyles.bigButtonLabel}>PLAY</Text>
-            <Text style={landingStyles.bigButtonSub}>(pick a mode.)</Text>
-          </Pressable>
-          {isSignedIn ? (
-            <Pressable style={landingStyles.bigButton} onPress={onFriends}>
-              <Text style={landingStyles.bigButtonLabel}>FRIENDS</Text>
-              <Text style={landingStyles.bigButtonSub}>
-                {friendsBadge && friendsBadge > 0 ? `(${friendsBadge} challenge${friendsBadge !== 1 ? 's' : ''})` : '(your people.)'}
-              </Text>
-              {!!friendsBadge && friendsBadge > 0 && (
-                <View style={landingStyles.badge} />
-              )}
-            </Pressable>
-          ) : (
-            <Pressable style={landingStyles.bigButton} onPress={onSignIn}>
-              <Text style={landingStyles.bigButtonLabel}>SIGN IN</Text>
-              <Text style={landingStyles.bigButtonSub}>(save your games.)</Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
+    <View style={[navStyles.topBar, { paddingTop: insets.top + spacing.sm }]}>
+      <Pressable onPress={onHome}>
+        <Text style={navStyles.topLogo}>AAYBEE</Text>
+      </Pressable>
+      <Pressable onPress={onProfile}>
+        <Text style={navStyles.profileLink}>
+          {isSignedIn ? (user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'profile').toLowerCase() : 'sign in'}
+        </Text>
+        {!!hasBadge && isSignedIn && (
+          <View style={navStyles.profileDot} />
+        )}
+      </Pressable>
     </View>
   );
 }
 
-const landingStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+// Sub-nav bar — shows current section label + back button. Always visible below top bar.
+function SubNavBar({ label, onBack }: { label: string; onBack?: () => void }) {
+  if (!label) return null;
+  return (
+    <View style={navStyles.subNav}>
+      {onBack ? (
+        <Pressable onPress={onBack} style={navStyles.backButton}>
+          <Text style={navStyles.backText}>{'<'} BACK</Text>
+        </Pressable>
+      ) : (
+        <View />
+      )}
+      <Text style={navStyles.subNavLabel}>{label}</Text>
+      <View style={{ minWidth: 50 }} />
+    </View>
+  );
+}
+
+const navStyles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.background,
   },
   topLogo: {
     fontSize: 14,
@@ -168,10 +148,91 @@ const landingStyles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: colors.accent,
   } as any,
-  center: {
-    flex: 1,
-    justifyContent: 'center',
+  subNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  subNavLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.accent,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  backButton: {
+    paddingVertical: spacing.xs,
+    minWidth: 50,
+  },
+  backText: {
+    fontSize: 10,
+    fontWeight: '400',
+    color: colors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+});
+
+// Landing content — logo + tagline above, stacked buttons below
+function LandingContent({ onPlay, onFriends, onSignIn, friendsBadge }: {
+  onPlay: () => void;
+  onFriends: () => void;
+  onSignIn: () => void;
+  friendsBadge?: number;
+}) {
+  const { user, isGuest } = useAuth();
+  const isSignedIn = !!user?.id && !isGuest;
+
+  return (
+    <View style={landingStyles.container}>
+      {/* Logo + tagline — upper area */}
+      <View style={landingStyles.logoSection}>
+        <Text style={landingStyles.logo}>AAYBEE</Text>
+        <Text style={landingStyles.tagline}>(your movies, ranked.)</Text>
+      </View>
+
+      {/* Stacked buttons */}
+      <View style={landingStyles.buttons}>
+        <Pressable style={landingStyles.bigButton} onPress={onPlay}>
+          <Text style={landingStyles.bigButtonLabel}>PLAY</Text>
+          <Text style={landingStyles.bigButtonSub}>(pick a mode.)</Text>
+        </Pressable>
+        {isSignedIn ? (
+          <Pressable style={landingStyles.bigButton} onPress={onFriends}>
+            <Text style={landingStyles.bigButtonLabel}>FRIENDS</Text>
+            <Text style={landingStyles.bigButtonSub}>
+              {friendsBadge && friendsBadge > 0 ? `(${friendsBadge} challenge${friendsBadge !== 1 ? 's' : ''})` : '(your people.)'}
+            </Text>
+            {!!friendsBadge && friendsBadge > 0 && (
+              <View style={landingStyles.badge} />
+            )}
+          </Pressable>
+        ) : (
+          <Pressable style={landingStyles.bigButton} onPress={onSignIn}>
+            <Text style={landingStyles.bigButtonLabel}>SIGN IN</Text>
+            <Text style={landingStyles.bigButtonSub}>(save your games.)</Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const landingStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  logoSection: {
+    alignItems: 'center',
+    marginBottom: spacing.xxxl,
   },
   logo: {
     fontSize: 48,
@@ -186,38 +247,34 @@ const landingStyles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   buttons: {
-    paddingHorizontal: spacing.xl,
-  },
-  buttonRow: {
-    flexDirection: 'row',
     gap: spacing.sm,
   },
   bigButton: {
-    flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.xxl,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.xxl,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.md,
     position: 'relative',
   },
   bigButtonLabel: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
     color: '#000000',
     textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   bigButtonSub: {
-    fontSize: 8,
+    fontSize: 10,
     color: 'rgba(0,0,0,0.5)',
     letterSpacing: 0.3,
   },
   badge: {
     position: 'absolute',
-    top: 6,
-    right: 6,
+    top: 8,
+    right: 8,
     width: 8,
     height: 8,
     borderRadius: 4,
@@ -225,16 +282,13 @@ const landingStyles = StyleSheet.create({
   },
 });
 
-// Play Menu — vertical stack of 4 modes (SameGoat-style)
-function PlayMenu({ onBack, onVs, onDaily, onDecide, onDiscover }: {
-  onBack: () => void;
+// Play Menu content — vertical stack of white buttons
+function PlayMenuContent({ onVs, onDaily, onDecide, onDiscover }: {
   onVs: () => void;
   onDaily: () => void;
   onDecide: () => void;
   onDiscover: () => void;
 }) {
-  const insets = useSafeAreaInsets();
-
   const modes = [
     { label: 'VS', sub: 'head to head.', onPress: onVs },
     { label: 'DAILY', sub: "today's circle play.", onPress: onDaily },
@@ -244,20 +298,12 @@ function PlayMenu({ onBack, onVs, onDaily, onDecide, onDiscover }: {
 
   return (
     <View style={playMenuStyles.container}>
-      <View style={[playMenuStyles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={onBack} style={playMenuStyles.backButton}>
-          <Text style={playMenuStyles.backText}>{'<'} BACK</Text>
+      {modes.map((mode) => (
+        <Pressable key={mode.label} style={playMenuStyles.modeButton} onPress={mode.onPress}>
+          <Text style={playMenuStyles.modeLabel}>{mode.label}</Text>
+          <Text style={playMenuStyles.modeSub}>{mode.sub}</Text>
         </Pressable>
-      </View>
-
-      <View style={playMenuStyles.center}>
-        {modes.map((mode) => (
-          <Pressable key={mode.label} style={playMenuStyles.modeButton} onPress={mode.onPress}>
-            <Text style={playMenuStyles.modeLabel}>{mode.label}</Text>
-            <Text style={playMenuStyles.modeSub}>{mode.sub}</Text>
-          </Pressable>
-        ))}
-      </View>
+      ))}
     </View>
   );
 }
@@ -265,31 +311,12 @@ function PlayMenu({ onBack, onVs, onDaily, onDecide, onDiscover }: {
 const playMenuStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  topBar: {
-    paddingHorizontal: spacing.xl,
-  },
-  backButton: {
-    paddingVertical: spacing.sm,
-  },
-  backText: {
-    fontSize: 10,
-    fontWeight: '400',
-    color: colors.textMuted,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  center: {
-    flex: 1,
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
     gap: spacing.sm,
   },
   modeButton: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
     borderRadius: borderRadius.xxl,
     paddingVertical: spacing.xl,
     paddingHorizontal: spacing.xxl,
@@ -297,13 +324,13 @@ const playMenuStyles = StyleSheet.create({
   modeLabel: {
     fontSize: 16,
     fontWeight: '800',
-    color: colors.textPrimary,
+    color: '#000000',
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
   modeSub: {
     fontSize: 10,
-    color: colors.textMuted,
+    color: 'rgba(0,0,0,0.5)',
     letterSpacing: 0.5,
     marginTop: spacing.xs,
   },
@@ -506,40 +533,7 @@ function DiscoverWrapper({ discoverTab, onTabChange, onOpenRanking, onOpenDecide
   );
 }
 
-// Minimal header for guest deep link users — just logo + profile
-function GuestHeader({ onProfilePress }: { onProfilePress: () => void }) {
-  const insets = useSafeAreaInsets();
-  return (
-    <View style={{ backgroundColor: colors.background, paddingTop: insets.top + spacing.xs }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, height: 44 }}>
-        <Text style={{ fontSize: 28, color: colors.textPrimary, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' as const }}>AAYBEE</Text>
-        <Pressable onPress={onProfilePress} style={{ padding: 4 }}>
-          <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ fontSize: 12, color: colors.textMuted, fontWeight: '700' }}>?</Text>
-          </View>
-        </Pressable>
-      </View>
-      <View style={{ height: 1, backgroundColor: colors.border }} />
-    </View>
-  );
-}
-
-// Screen header with back button — used when navigating into a play mode or friends
-function ScreenHeader({ title, onBack, rightElement }: { title: string; onBack: () => void; rightElement?: React.ReactNode }) {
-  const insets = useSafeAreaInsets();
-  return (
-    <View style={{ backgroundColor: colors.background, paddingTop: insets.top + spacing.xs }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, height: 44 }}>
-        <Pressable onPress={onBack} style={{ paddingVertical: spacing.xs, paddingRight: spacing.md }}>
-          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' as const }}>{'<'} BACK</Text>
-        </Pressable>
-        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary, letterSpacing: 2, textTransform: 'uppercase' as const }}>{title}</Text>
-        <View style={{ minWidth: 60 }}>{rightElement}</View>
-      </View>
-      <View style={{ height: 1, backgroundColor: colors.border }} />
-    </View>
-  );
-}
+// GuestHeader and ScreenHeader removed — replaced by PersistentTopBar + SubNavBar
 
 function MainApp() {
   const { hasCompletedOnboarding, isLoading, totalComparisons, postOnboardingComparisons, getStats } = useAppStore();
@@ -706,19 +700,17 @@ function MainApp() {
     switch (phase) {
       case 'landing':
         return (
-          <LandingPage
+          <LandingContent
             onPlay={() => setPhase('playMenu')}
             onFriends={() => setPhase('friends')}
             onSignIn={() => setShowAuth(true)}
-            onProfile={() => setPhase('profile')}
             friendsBadge={pendingChallengeCount}
           />
         );
 
       case 'playMenu':
         return (
-          <PlayMenu
-            onBack={() => setPhase('landing')}
+          <PlayMenuContent
             onVs={() => { setChallengedFriendId(undefined); setChallengedFriendName(undefined); setChallengeInitialCode(undefined); setPhase('vs'); }}
             onDaily={() => setPhase('daily')}
             onDecide={() => setPhase('decide')}
@@ -823,23 +815,29 @@ function MainApp() {
 
       default:
         return (
-          <LandingPage
+          <LandingContent
             onPlay={() => setPhase('playMenu')}
             onFriends={() => setPhase('friends')}
             onSignIn={() => setShowAuth(true)}
-            onProfile={() => setPhase('profile')}
             friendsBadge={pendingChallengeCount}
           />
         );
     }
   };
 
-  // Determine if we should show back-nav header (not on landing/playMenu which have their own nav)
-  const showScreenHeader = !['landing', 'playMenu'].includes(phase);
-  const screenTitles: Record<NavPhase, string> = {
-    landing: '', playMenu: '', vs: 'VS', daily: 'DAILY',
-    decide: 'DECIDE', discover: 'DISCOVER', friends: 'FRIENDS', profile: 'PROFILE', myGames: 'MY GAMES',
+  // Sub-nav config: label and back target for each phase
+  const subNavConfig: Record<NavPhase, { label: string; backTo?: NavPhase }> = {
+    landing: { label: '' },
+    playMenu: { label: 'PLAY', backTo: 'landing' },
+    vs: { label: 'VS', backTo: 'playMenu' },
+    daily: { label: 'DAILY', backTo: 'playMenu' },
+    decide: { label: 'DECIDE', backTo: 'playMenu' },
+    discover: { label: 'DISCOVER', backTo: 'playMenu' },
+    friends: { label: 'FRIENDS', backTo: 'landing' },
+    profile: { label: 'PROFILE', backTo: 'landing' },
+    myGames: { label: 'MY GAMES', backTo: 'profile' },
   };
+  const currentSubNav = subNavConfig[phase];
 
   const screenContent = (
     <View style={styles.screenContainer}>
@@ -888,34 +886,22 @@ function MainApp() {
         </View>
       ) : (
         <>
-          {/* Show header with back button on screen phases (not landing/playMenu which have their own) */}
-          {showScreenHeader && !isGuestMode && (
-            <ScreenHeader
-              title={screenTitles[phase]}
-              onBack={() => {
-                // VS/Daily/Decide/Discover go back to play menu; Friends/Profile go to landing
-                if (['vs', 'daily', 'decide', 'discover'].includes(phase)) {
-                  setPhase('playMenu');
-                } else if (phase === 'myGames') {
-                  setPhase('profile');
-                } else {
-                  setPhase('landing');
-                }
-              }}
-              rightElement={
-                <Pressable onPress={() => { closeAllOverlays(); setShowSearch(true); }} style={{ padding: 6 }}>
-                  <SearchIcon size={20} color={colors.textMuted} />
-                </Pressable>
-              }
+          {/* Persistent top bar — always visible */}
+          <PersistentTopBar
+            onProfile={() => setPhase('profile')}
+            onHome={() => setPhase('landing')}
+            hasBadge={pendingChallengeCount > 0}
+          />
+
+          {/* Sub-nav bar — shows section label + back (except landing) */}
+          {currentSubNav.label ? (
+            <SubNavBar
+              label={currentSubNav.label}
+              onBack={currentSubNav.backTo ? () => setPhase(currentSubNav.backTo!) : undefined}
             />
-          )}
-          {showScreenHeader && isGuestMode && (
-            <GuestHeader onProfilePress={() => setPhase('profile')} />
-          )}
+          ) : null}
 
           {screenContent}
-
-          {/* No bottom nav — navigation is through landing page buttons */}
         </>
       )}
 
