@@ -428,7 +428,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
         if (myResult.hottestTake) {
           const htMovie = movies.get(myResult.hottestTake.movieId);
           if (htMovie) {
-            const crewCta = `my crew ranked ${htMovie.title} #${myResult.hottestTake.consensusRank}. i put it #${myResult.hottestTake.userRank}. who's right?`;
+            const crewCta = `my circle ranked ${htMovie.title} #${myResult.hottestTake.consensusRank}. i put it #${myResult.hottestTake.userRank}. who's right?`;
             // Replace the generic CTA line with crew disagreement
             if (hotTake) {
               shareText = shareText.replace(`my hot take: ${hotTake}. prove me wrong:`, crewCta);
