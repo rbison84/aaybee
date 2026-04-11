@@ -373,6 +373,8 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout }: 
 
       if (pool.length < 16) {
         // Not enough ranked movies — fall back to curated packs
+        // Go to home step so pack picker is visible
+        setStep('home');
         setShowPacks(true);
         setLoading(false);
         return;

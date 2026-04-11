@@ -233,6 +233,19 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
     setStep('intro');
   }, [getAvailableMovieIds]);
 
+  // Auto-start today's daily category on mount
+  const autoStartedDaily = useRef(false);
+  useEffect(() => {
+    if (autoStartedDaily.current) return;
+    if (!featuredCategory) return;
+    // Wait for completedCategoryIds to load
+    if (completedCategoryIds.length === 0 && !streakData) return;
+    autoStartedDaily.current = true;
+    if (!completedCategoryIds.includes(featuredCategory.id)) {
+      startCategory(featuredCategory.id);
+    }
+  }, [featuredCategory, completedCategoryIds, streakData, startCategory]);
+
   // Begin ranking after seen selection
   const beginRanking = useCallback(() => {
     if (!activeCategoryId) return;
