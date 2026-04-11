@@ -478,7 +478,8 @@ const styles = StyleSheet.create({
   },
   containerHovered: {
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 0 20px rgba(167, 139, 250, 0.3), 0 8px 24px rgba(0,0,0,0.4)',
+      borderColor: colors.accent,
+      borderWidth: 2,
     } as any : {}),
   },
   glowEffect: {
@@ -636,16 +637,22 @@ const styles = StyleSheet.create({
   info: {
     paddingTop: 16,
     paddingHorizontal: 2,
-    height: 72, // Fixed height to accommodate 2 lines of title + year
+    height: 72,
   },
   title: {
-    ...typography.bodyMedium,
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.textPrimary,
     marginBottom: 4,
-    lineHeight: 20,
+    lineHeight: 18,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   meta: {
-    ...typography.caption,
+    fontSize: 10,
+    fontWeight: '400',
     color: colors.textMuted,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
 });

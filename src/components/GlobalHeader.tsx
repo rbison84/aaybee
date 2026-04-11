@@ -66,13 +66,14 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: colors.tabBarBorder,
+    backgroundColor: colors.border,
   },
   logo: {
     fontSize: 28,
     color: colors.textPrimary,
     fontWeight: '800',
-    letterSpacing: -1.5,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
   headerRight: {
     flexDirection: 'row',
@@ -83,26 +84,30 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   avatarButton: {
-    padding: 4, // Extra touch target
+    padding: 4,
   },
   avatar: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.accent,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    fontSize: 15,
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.background,
+    color: colors.textPrimary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   avatarGuest: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.surface,
+    backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: colors.border,
     justifyContent: 'center',
@@ -112,7 +117,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -2,
     right: -4,
-    backgroundColor: colors.error,
+    backgroundColor: colors.accent,
     borderRadius: 8,
     minWidth: 16,
     height: 16,
@@ -125,6 +130,6 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 9,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.background,
   },
 });

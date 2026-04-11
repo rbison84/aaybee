@@ -37,6 +37,13 @@ import { CURATED_PACKS, CuratedPack } from '../data/curatedPacks';
 import { supabase } from '../services/supabase';
 
 import { QRCode } from '../components/QRCode';
+import { BracketPlay } from '../components/BracketPlay';
+import { BracketResults } from '../components/BracketResults';
+import {
+  BracketMovie,
+  BracketPick,
+  createVsBracket,
+} from '../utils/movieBracket';
 
 // ============================================
 // TYPES
@@ -54,7 +61,10 @@ type ChallengeStep =
   | 'vs-selecting'  // Pick 4-10 movies from pool
   | 'vs-comparing'  // A/B pair picks
   | 'vs-waiting'    // Waiting for other player
-  | 'vs-result';    // Score/N result
+  | 'vs-result'     // Score/N result
+  // Knockout bracket flow
+  | 'knockout'        // Playing bracket
+  | 'knockout-result'; // Bracket results
 
 interface ChallengeScreenProps {
   initialCode?: string;
@@ -130,6 +140,11 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
   const [vsGuestName, setVsGuestName] = useState('');
   const vsPickingRef = useRef(false);
   const vsSubscriptionRef = useRef<any>(null);
+
+  // Knockout bracket state
+  const [bracketMovies, setBracketMovies] = useState<BracketMovie[]>([]);
+  const [bracketPicks, setBracketPicks] = useState<BracketPick[]>([]);
+  const [bracketWinner, setBracketWinner] = useState<BracketMovie | null>(null);
 
   // Inline code input for home screen
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -332,6 +347,82 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
     setShowPacks(true);
     setLoading(false);
   }, [user, haptics]);
+
+  // ============================================
+  // KNOCKOUT BRACKET
+  // ============================================
+
+  const handleStartKnockout = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      let pool: BracketMovie[] = [];
+
+      if (user?.id) {
+        // Get user's ranked movies for the bracket
+        const movies = await challengeService.getTopMoviesForChallenge(user.id, 50);
+        pool = movies.map(m => ({
+          id: m.id,
+          title: m.title,
+          posterUrl: m.posterUrl || '',
+          year: m.year,
+        }));
+      }
+
+      if (pool.length < 16) {
+        // Not enough ranked movies — fall back to curated packs
+        setShowPacks(true);
+        setLoading(false);
+        return;
+      }
+
+      const bracket = createVsBracket(pool);
+      setBracketMovies(bracket);
+      setBracketPicks([]);
+      setBracketWinner(null);
+      setStep('knockout');
+    } catch (err) {
+      setError('Failed to create bracket');
+    }
+
+    setLoading(false);
+  }, [user?.id]);
+
+  const handleKnockoutComplete = useCallback((picks: BracketPick[], winner: BracketMovie) => {
+    setBracketPicks(picks);
+    setBracketWinner(winner);
+    setStep('knockout-result');
+  }, []);
+
+  const handleKnockoutPackSelect = useCallback(async (pack: CuratedPack) => {
+    setLoading(true);
+
+    const { data: movieData } = await supabase
+      .from('movies')
+      .select('id, title, year, poster_url')
+      .in('id', pack.movieIds);
+
+    if (movieData && movieData.length >= 16) {
+      const pool: BracketMovie[] = movieData.map(m => ({
+        id: m.id,
+        title: m.title,
+        posterUrl: m.poster_url || '',
+        year: m.year,
+      }));
+
+      const bracket = createVsBracket(pool);
+      setBracketMovies(bracket);
+      setBracketPicks([]);
+      setBracketWinner(null);
+      setShowPacks(false);
+      setStep('knockout');
+    } else {
+      setError('Not enough movies in this pack for a knockout bracket');
+    }
+
+    setLoading(false);
+  }, []);
 
   // ============================================
   // REMATCH
@@ -802,29 +893,39 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
       return (
         <View style={[styles.homeScroll, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl }]}>
           <Text style={styles.vsTitle}>VS</Text>
-          <Text style={[styles.emptyPrompt, { textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.xl, fontSize: 15, lineHeight: 22 }]}>
+          <Text style={[styles.emptyPrompt, { textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.xl, fontSize: 13, lineHeight: 20, letterSpacing: 0.5, textTransform: 'uppercase' }]}>
             {isGuestUser
-              ? 'someone challenged you?\nenter their code to play.'
-              : 'find out who has better taste.\nchallenge a friend — it takes 30 seconds.'}
+              ? 'SOMEONE CHALLENGED YOU?\nENTER THEIR CODE TO PLAY.'
+              : '16 MOVIES. 4 ROUNDS.\nONE LAST MOVIE STANDING.'}
           </Text>
 
+          {/* Primary: Knockout bracket — guests get pack picker, signed-in users get their movies */}
+          <Pressable
+            style={[styles.primaryCta, { width: '100%', maxWidth: 320 }, loading && styles.actionButtonDisabled]}
+            onPress={isGuestUser ? () => setShowPacks(true) : handleStartKnockout}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color={colors.background} />
+            ) : (
+              <Text style={styles.primaryCtaText}>KNOCKOUT</Text>
+            )}
+          </Pressable>
+
+          {/* Secondary: Challenge a friend (existing flow) */}
           {!isGuestUser && (
             <Pressable
-              style={[styles.primaryCta, { width: '100%', maxWidth: 320 }, loading && styles.actionButtonDisabled]}
+              style={[styles.secondaryCta, { width: '100%', maxWidth: 320, marginTop: spacing.md }]}
               onPress={handleCreateChallenge}
               disabled={loading}
             >
-              {loading ? (
-                <ActivityIndicator size="small" color={colors.background} />
-              ) : (
-                <Text style={styles.primaryCtaText}>challenge a friend</Text>
-              )}
+              <Text style={styles.secondaryCtaText}>CHALLENGE A FRIEND</Text>
             </Pressable>
           )}
 
           <TextInput
             style={[styles.codeInputInline, { maxWidth: 320, width: '100%' }]}
-            placeholder={isGuestUser ? 'enter your code' : 'have a code? enter it here'}
+            placeholder={isGuestUser ? 'ENTER YOUR CODE' : 'HAVE A CODE? ENTER IT HERE'}
             placeholderTextColor={colors.textMuted}
             value={joinCodeInput}
             onChangeText={handleJoinCodeInput}
@@ -837,7 +938,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
               style={[styles.primaryCta, { width: '100%', maxWidth: 320, marginTop: spacing.md }]}
               onPress={onOpenAuth}
             >
-              <Text style={styles.primaryCtaText}>join aaybee to challenge friends</Text>
+              <Text style={styles.primaryCtaText}>JOIN AAYBEE TO PLAY</Text>
             </Pressable>
           )}
 
@@ -852,23 +953,32 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
     <ScrollView style={styles.homeScroll} contentContainerStyle={styles.homeScrollContent}>
       <Text style={styles.vsTitle}>VS</Text>
 
-      {/* Primary CTA */}
+      {/* Primary CTA: Knockout bracket */}
       <Pressable
         style={[styles.primaryCta, loading && styles.actionButtonDisabled]}
-        onPress={handleCreateChallenge}
+        onPress={handleStartKnockout}
         disabled={loading}
       >
         {loading ? (
           <ActivityIndicator size="small" color={colors.background} />
         ) : (
-          <Text style={styles.primaryCtaText}>challenge a friend</Text>
+          <Text style={styles.primaryCtaText}>KNOCKOUT</Text>
         )}
+      </Pressable>
+
+      {/* Secondary: Challenge a friend */}
+      <Pressable
+        style={[styles.secondaryCta, loading && styles.actionButtonDisabled]}
+        onPress={handleCreateChallenge}
+        disabled={loading}
+      >
+        <Text style={styles.secondaryCtaText}>CHALLENGE A FRIEND</Text>
       </Pressable>
 
       {/* Always-visible code input */}
       <TextInput
         style={styles.codeInputInline}
-        placeholder="enter a code"
+        placeholder="ENTER A CODE"
         placeholderTextColor={colors.textMuted}
         value={joinCodeInput}
         onChangeText={handleJoinCodeInput}
@@ -884,7 +994,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
             <Pressable
               key={pack.id}
               style={styles.packCard}
-              onPress={() => handleSelectPack(pack)}
+              onPress={() => handleKnockoutPackSelect(pack)}
             >
               <Text style={styles.packTitle}>{pack.title}</Text>
               <Text style={styles.packSubtitle}>{pack.subtitle}</Text>
@@ -1823,6 +1933,26 @@ export function ChallengeScreen({ initialCode, onOpenAuth }: ChallengeScreenProp
           {step === 'vs-comparing' && renderVsComparing()}
           {step === 'vs-waiting' && renderVsWaiting()}
           {step === 'vs-result' && renderVsResult()}
+          {step === 'knockout' && (
+            <BracketPlay
+              movies={bracketMovies}
+              initialPicks={bracketPicks}
+              onPick={(picks) => setBracketPicks(picks)}
+              onComplete={handleKnockoutComplete}
+              onBack={() => setStep('home')}
+            />
+          )}
+          {step === 'knockout-result' && bracketWinner && (
+            <BracketResults
+              movies={bracketMovies}
+              picks={bracketPicks}
+              winnerMovie={bracketWinner}
+              isGuest={!user?.id}
+              onSignUp={onOpenAuth}
+              onPlayAgain={handleStartKnockout}
+              onHome={() => setStep('home')}
+            />
+          )}
         </>
       )}
 
@@ -1921,17 +2051,35 @@ const styles = StyleSheet.create({
 
   // Primary CTA
   primaryCta: {
-    backgroundColor: colors.accent,
-    borderRadius: borderRadius.lg,
+    backgroundColor: colors.textPrimary,
+    borderRadius: borderRadius.xxl,
     paddingVertical: spacing.lg,
     alignItems: 'center',
     marginBottom: spacing.md,
   },
   primaryCtaText: {
-    ...typography.bodyMedium,
+    fontSize: 14,
     color: colors.background,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  // Secondary CTA
+  secondaryCta: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.xxl,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  secondaryCtaText: {
+    fontSize: 12,
+    color: colors.textPrimary,
     fontWeight: '700',
-    fontSize: 16,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
 
   // Inline code input
@@ -2268,11 +2416,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   vsTitle: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: '800',
     color: colors.textPrimary,
     textAlign: 'center',
-    letterSpacing: 4,
+    letterSpacing: 6,
+    textTransform: 'uppercase',
     marginTop: spacing.lg,
     marginBottom: spacing.md,
   },

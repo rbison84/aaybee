@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, ActivityIndicator, Pressable, Platform, Modal } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedStyle, withTiming, useSharedValue, interpolate } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import React, { useState, useCallback, useEffect, useRef, useMemo, Suspense } from 'react';
 import { AppProvider, useAppStore } from './src/store/useAppStore';
 import { useLockedFeature } from './src/contexts/LockedFeatureContext';
@@ -25,11 +25,12 @@ import { ChallengeScreen } from './src/screens/ChallengeScreen';
 
 // Lazy-load screens that are locked behind comparison thresholds or shown as overlays
 const DiscoverScreen = React.lazy(() => import('./src/screens/DiscoverScreen').then(m => ({ default: m.DiscoverScreen })));
-const UnifiedRankingsScreen = React.lazy(() => import('./src/screens/UnifiedRankingsScreen').then(m => ({ default: m.UnifiedRankingsScreen })));
+// UnifiedRankingsScreen now lazy-loaded inside ProfileScreen
 const Aaybee100Screen = React.lazy(() => import('./src/screens/Aaybee100Screen').then(m => ({ default: m.Aaybee100Screen })));
 const TvScreen = React.lazy(() => import('./src/screens/TvScreen').then(m => ({ default: m.TvScreen })));
 import { GlobalHeader } from './src/components/GlobalHeader';
-import { TabIcon } from './src/components/TabIcon';
+import { SearchIcon } from './src/components/icons';
+// TabIcon no longer needed — nav uses text labels
 import { DebugPanel } from './src/components/debug';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { WebContainer } from './src/components/WebContainer';
@@ -52,254 +53,308 @@ import { challengeService } from './src/services/challengeService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius, typography } from './src/theme/cinematic';
 
-// Navigation types — dual-mode with contextual bottom tabs
-type AppMode = 'solo' | 'social';
-type SoloTab = 'compare' | 'rankings' | 'discover';
-type SocialTab = 'vs' | 'daily' | 'decide';
-// Note: 'daily' was previously 'party' and 'crews'
-type TabType = SoloTab | SocialTab;
+// Navigation — SameGoat-style: landing page with PLAY + FRIENDS buttons
+type NavPhase = 'landing' | 'playMenu' | 'vs' | 'daily' | 'decide' | 'discover' | 'friends' | 'profile';
+// Keep TabType for compatibility with components that reference it
+type TabType = 'vs' | 'daily' | 'decide' | 'discover' | 'compare' | 'rankings';
 
 function LoadingScreen() {
   return (
     <View style={styles.loadingContainer}>
-      <Text style={styles.loadingTitle}>aaybee</Text>
-      <Text style={styles.loadingSubtitle}>your personal movie ranking</Text>
+      <Text style={styles.loadingTitle}>AAYBEE</Text>
+      <Text style={styles.loadingSubtitle}>(YOUR MOVIES, RANKED.)</Text>
       <ActivityIndicator size="small" color={colors.textMuted} style={styles.loadingSpinner} />
     </View>
   );
 }
 
-// Tab lock thresholds
-const TAB_UNLOCK_THRESHOLDS: Partial<Record<TabType, number>> = {
-  rankings: 10,
-  discover: 40,
-  decide: 0,
-  vs: 0, // always unlocked
-};
-
-// Mode toggle pill — compact, sits above bottom tabs
-function ModeTogglePill({ mode, onModeChange, socialBadge }: { mode: AppMode; onModeChange: (m: AppMode) => void; socialBadge?: boolean }) {
-  const indicatorX = useSharedValue(mode === 'social' ? 0 : 1);
-
-  useEffect(() => {
-    indicatorX.value = withTiming(mode === 'social' ? 0 : 1, { duration: 200 });
-  }, [mode]);
-
-  const indicatorStyle = useAnimatedStyle(() => ({
-    left: `${indicatorX.value * 50}%` as any,
-  }));
+// Landing Page — two big buttons: PLAY + FRIENDS (SameGoat-style)
+function LandingPage({ onPlay, onFriends, onProfile, friendsBadge }: {
+  onPlay: () => void;
+  onFriends: () => void;
+  onProfile: () => void;
+  friendsBadge?: number;
+}) {
+  const insets = useSafeAreaInsets();
+  const { user, isGuest } = useAuth();
+  const userInitial = user?.email?.charAt(0).toUpperCase() || '?';
 
   return (
-    <View style={styles.modePill}>
-      <View style={styles.modePillInner}>
-        <Animated.View style={[styles.modePillIndicator, indicatorStyle]} />
-        <Pressable style={styles.modePillItem} onPress={() => onModeChange('social')}>
-          <Text style={[styles.modePillText, mode === 'social' && styles.modePillTextActive]}>
-            ▶ PLAY
-          </Text>
-          {socialBadge && mode !== 'social' && <View style={styles.modePillBadge} />}
-        </Pressable>
-        <Pressable style={styles.modePillItem} onPress={() => onModeChange('solo')}>
-          <Text style={[styles.modePillText, mode === 'solo' && styles.modePillTextActive]}>
-            ✦ FOR YOU
+    <View style={landingStyles.container}>
+      {/* Profile button — top right */}
+      <View style={[landingStyles.topBar, { paddingTop: insets.top + spacing.sm }]}>
+        <View />
+        <Pressable onPress={onProfile} style={landingStyles.profileButton}>
+          <Text style={landingStyles.profileText}>
+            {isGuest ? '?' : userInitial}
           </Text>
         </Pressable>
+      </View>
+
+      {/* Center content */}
+      <View style={landingStyles.center}>
+        <Text style={landingStyles.logo}>AAYBEE</Text>
+        <Text style={landingStyles.tagline}>(your movies, ranked.)</Text>
+      </View>
+
+      {/* Two big buttons */}
+      <View style={[landingStyles.buttons, { paddingBottom: Math.max(insets.bottom + spacing.lg, spacing.xxxl) }]}>
+        <View style={landingStyles.buttonRow}>
+          <Pressable style={landingStyles.bigButton} onPress={onPlay}>
+            <Text style={landingStyles.bigButtonLabel}>PLAY</Text>
+            <Text style={landingStyles.bigButtonSub}>(pick a mode.)</Text>
+          </Pressable>
+          <Pressable style={landingStyles.bigButton} onPress={onFriends}>
+            <Text style={landingStyles.bigButtonLabel}>FRIENDS</Text>
+            <Text style={landingStyles.bigButtonSub}>(your people.)</Text>
+            {!!friendsBadge && friendsBadge > 0 && (
+              <View style={landingStyles.badge}>
+                <Text style={landingStyles.badgeText}>{friendsBadge > 9 ? '9+' : friendsBadge}</Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
       </View>
     </View>
   );
 }
 
-// Bottom Tab Bar — 3 contextual tabs per mode with slide animation
-interface TabBarProps {
-  mode: AppMode;
-  activeTab: TabType;
-  onTabPress: (tab: TabType) => void;
-  lockedTabs: Record<TabType, boolean>;
-  onLockedTabPress: (tab: TabType) => void;
-}
+const landingStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  profileButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logo: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: 4,
+    textTransform: 'uppercase',
+  },
+  tagline: {
+    fontSize: 12,
+    color: colors.textMuted,
+    letterSpacing: 1,
+    marginTop: spacing.sm,
+  },
+  buttons: {
+    paddingHorizontal: spacing.lg,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  bigButton: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.xxl,
+    paddingVertical: spacing.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  bigButtonLabel: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  bigButtonSub: {
+    fontSize: 10,
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+    marginTop: spacing.xs,
+  },
+  badge: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.background,
+  },
+});
 
-function TabBar({ mode, activeTab, onTabPress, lockedTabs, onLockedTabPress }: TabBarProps) {
+// Play Menu — vertical stack of 4 modes (SameGoat-style)
+function PlayMenu({ onBack, onVs, onDaily, onDecide, onDiscover }: {
+  onBack: () => void;
+  onVs: () => void;
+  onDaily: () => void;
+  onDecide: () => void;
+  onDiscover: () => void;
+}) {
   const insets = useSafeAreaInsets();
-  const translateX = useSharedValue(0);
-  const prevMode = useRef(mode);
 
-  useEffect(() => {
-    if (prevMode.current !== mode) {
-      const direction = mode === 'social' ? 1 : -1;
-      translateX.value = direction * 100;
-      translateX.value = withTiming(0, { duration: 250 });
-      prevMode.current = mode;
-    }
-  }, [mode]);
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-    opacity: interpolate(Math.abs(translateX.value), [0, 100], [1, 0]),
-  }));
-
-  const tabs: { key: TabType; label: string }[] = mode === 'solo'
-    ? [{ key: 'compare', label: 'compare' }, { key: 'rankings', label: 'rankings' }, { key: 'discover', label: 'discover' }]
-    : [{ key: 'vs', label: 'vs' }, { key: 'daily', label: 'daily' }, { key: 'decide', label: 'decide' }];
+  const modes = [
+    { label: 'VS', sub: 'head to head.', onPress: onVs },
+    { label: 'DAILY', sub: "today's crew play.", onPress: onDaily },
+    { label: 'DECIDE', sub: 'settle it.', onPress: onDecide },
+    { label: 'DISCOVER', sub: 'compare & explore.', onPress: onDiscover },
+  ];
 
   return (
-    <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
-      <Animated.View style={[{ flexDirection: 'row' as const, flex: 1 }, animStyle]}>
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.key;
-          const isLocked = lockedTabs[tab.key];
-          return (
-            <Pressable
-              key={tab.key}
-              style={styles.tabItem}
-              onPress={() => isLocked ? onLockedTabPress(tab.key) : onTabPress(tab.key)}
-            >
-              <View style={isLocked ? styles.lockedIconWrapper : undefined}>
-                <TabIcon name={tab.key} active={isActive && !isLocked} size={24} />
-              </View>
-              <Text style={[
-                styles.tabLabel,
-                isActive && !isLocked && styles.tabLabelActive,
-                isLocked && styles.tabLabelLocked,
-              ]}>
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </Animated.View>
+    <View style={playMenuStyles.container}>
+      <View style={[playMenuStyles.topBar, { paddingTop: insets.top + spacing.sm }]}>
+        <Pressable onPress={onBack} style={playMenuStyles.backButton}>
+          <Text style={playMenuStyles.backText}>{'<'} BACK</Text>
+        </Pressable>
+      </View>
+
+      <View style={playMenuStyles.center}>
+        {modes.map((mode) => (
+          <Pressable key={mode.label} style={playMenuStyles.modeButton} onPress={mode.onPress}>
+            <Text style={playMenuStyles.modeLabel}>{mode.label}</Text>
+            <Text style={playMenuStyles.modeSub}>{mode.sub}</Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 }
 
-// Desktop Sidebar — two grouped sections with mode-aware navigation
-interface DesktopSidebarProps {
-  activeTab: TabType;
-  mode: AppMode;
-  onModeChange: (mode: AppMode) => void;
-  onTabPress: (tab: TabType) => void;
-  lockedTabs: Record<TabType, boolean>;
-  onLockedTabPress: (tab: TabType) => void;
+const playMenuStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  topBar: {
+    paddingHorizontal: spacing.lg,
+  },
+  backButton: {
+    paddingVertical: spacing.sm,
+  },
+  backText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+  },
+  modeButton: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.xxl,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.xxl,
+  },
+  modeLabel: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  modeSub: {
+    fontSize: 11,
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+    marginTop: spacing.xs,
+  },
+});
+
+// Desktop Sidebar — flat list with same nav structure
+function DesktopSidebar({ phase, onNavigate, onSearchPress, onProfilePress }: {
+  phase: NavPhase;
+  onNavigate: (phase: NavPhase) => void;
   onSearchPress: () => void;
   onProfilePress: () => void;
-}
-
-function DesktopSidebar({
-  activeTab,
-  mode,
-  onModeChange,
-  onTabPress,
-  lockedTabs,
-  onLockedTabPress,
-  onSearchPress,
-  onProfilePress,
-}: DesktopSidebarProps) {
-  const soloTabs: { key: SoloTab; label: string }[] = [
-    { key: 'compare', label: 'compare' },
-    { key: 'rankings', label: 'rankings' },
-    { key: 'discover', label: 'discover' },
+}) {
+  const playModes: { key: NavPhase; label: string }[] = [
+    { key: 'vs', label: 'VS' },
+    { key: 'daily', label: 'DAILY' },
+    { key: 'decide', label: 'DECIDE' },
+    { key: 'discover', label: 'DISCOVER' },
   ];
-
-  const socialTabs: { key: SocialTab; label: string }[] = [
-    { key: 'vs', label: 'vs' },
-    { key: 'daily', label: 'daily' },
-    { key: 'decide', label: 'decide' },
-  ];
-
-  const shortcuts: { label: string; onPress: () => void }[] = [
-    { label: 'search', onPress: onSearchPress },
-    { label: 'profile', onPress: onProfilePress },
-  ];
-
-  const handleSoloTabPress = (tab: SoloTab) => {
-    if (mode !== 'solo') onModeChange('solo');
-    onTabPress(tab);
-  };
-
-  const handleSocialTabPress = (tab: SocialTab) => {
-    if (mode !== 'social') onModeChange('social');
-    onTabPress(tab);
-  };
 
   return (
     <View style={sidebarStyles.container}>
-      <Text style={sidebarStyles.logo}>aaybee</Text>
+      <Pressable onPress={() => onNavigate('landing')}>
+        <Text style={sidebarStyles.logo}>AAYBEE</Text>
+      </Pressable>
 
-      {/* PLAY section (social) */}
-      <Text style={sidebarStyles.sectionHeader}>▶ PLAY</Text>
+      <Text style={sidebarStyles.sectionHeader}>PLAY</Text>
       <View style={sidebarStyles.navSection}>
-        {socialTabs.map((tab) => {
-          const isActive = activeTab === tab.key && mode === 'social';
-          const isLocked = lockedTabs[tab.key];
-          return (
-            <Pressable
-              key={tab.key}
-              style={[
-                sidebarStyles.navItem,
-                isActive && sidebarStyles.navItemActive,
-                isLocked && sidebarStyles.navItemLocked,
-              ]}
-              onPress={() => isLocked ? onLockedTabPress(tab.key) : handleSocialTabPress(tab.key)}
-            >
-              <TabIcon name={tab.key} active={isActive && !isLocked} size={20} />
-              <Text style={[
-                sidebarStyles.navLabel,
-                isActive && !isLocked && sidebarStyles.navLabelActive,
-                isLocked && sidebarStyles.navLabelLocked,
-              ]}>
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <View style={sidebarStyles.divider} />
-
-      {/* FOR YOU section (solo) */}
-      <Text style={sidebarStyles.sectionHeader}>✦ FOR YOU</Text>
-      <View style={sidebarStyles.navSection}>
-        {soloTabs.map((tab) => {
-          const isActive = activeTab === tab.key && mode === 'solo';
-          const isLocked = lockedTabs[tab.key];
-          return (
-            <Pressable
-              key={tab.key}
-              style={[
-                sidebarStyles.navItem,
-                isActive && sidebarStyles.navItemActive,
-                isLocked && sidebarStyles.navItemLocked,
-              ]}
-              onPress={() => isLocked ? onLockedTabPress(tab.key) : handleSoloTabPress(tab.key)}
-            >
-              <TabIcon name={tab.key} active={isActive && !isLocked} size={20} />
-              <Text style={[
-                sidebarStyles.navLabel,
-                isActive && !isLocked && sidebarStyles.navLabelActive,
-                isLocked && sidebarStyles.navLabelLocked,
-              ]}>
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <View style={sidebarStyles.divider} />
-
-      <View style={sidebarStyles.navSection}>
-        {shortcuts.map((item) => (
+        {playModes.map((mode) => (
           <Pressable
-            key={item.label}
-            style={sidebarStyles.navItem}
-            onPress={item.onPress}
+            key={mode.key}
+            style={[sidebarStyles.navItem, phase === mode.key && sidebarStyles.navItemActive]}
+            onPress={() => onNavigate(mode.key)}
           >
-            <Text style={sidebarStyles.shortcutLabel}>{item.label}</Text>
+            <Text style={[sidebarStyles.navLabel, phase === mode.key && sidebarStyles.navLabelActive]}>
+              {mode.label}
+            </Text>
           </Pressable>
         ))}
       </View>
 
+      <View style={sidebarStyles.divider} />
+
+      <Pressable
+        style={[sidebarStyles.navItem, phase === 'friends' && sidebarStyles.navItemActive]}
+        onPress={() => onNavigate('friends')}
+      >
+        <Text style={[sidebarStyles.navLabel, phase === 'friends' && sidebarStyles.navLabelActive]}>
+          FRIENDS
+        </Text>
+      </Pressable>
+
+      <View style={sidebarStyles.divider} />
+
+      <Pressable style={sidebarStyles.navItem} onPress={onSearchPress}>
+        <Text style={sidebarStyles.shortcutLabel}>SEARCH</Text>
+      </Pressable>
+      <Pressable style={sidebarStyles.navItem} onPress={onProfilePress}>
+        <Text style={sidebarStyles.shortcutLabel}>PROFILE</Text>
+      </Pressable>
+
       <View style={sidebarStyles.keyboardHints}>
-        <Text style={sidebarStyles.hintText}>keyboard shortcuts</Text>
+        <Text style={sidebarStyles.hintText}>KEYBOARD SHORTCUTS</Text>
         <Text style={sidebarStyles.hintDetail}>{'\u2190'} {'\u2192'} or click to choose</Text>
         <Text style={sidebarStyles.hintDetail}>S to skip</Text>
         <Text style={sidebarStyles.hintDetail}>Z to undo</Text>
@@ -313,7 +368,7 @@ const sidebarStyles = StyleSheet.create({
     width: DESKTOP_SIDEBAR_WIDTH,
     backgroundColor: colors.background,
     borderRightWidth: 1,
-    borderRightColor: colors.tabBarBorder,
+    borderRightColor: colors.border,
     paddingTop: spacing.xxxl,
     paddingHorizontal: spacing.lg,
   },
@@ -321,7 +376,8 @@ const sidebarStyles = StyleSheet.create({
     fontSize: 28,
     color: colors.textPrimary,
     fontWeight: '800',
-    letterSpacing: -1.5,
+    letterSpacing: 3,
+    textTransform: 'uppercase',
     marginBottom: spacing.xxxl,
     paddingHorizontal: spacing.sm,
   },
@@ -329,8 +385,7 @@ const sidebarStyles = StyleSheet.create({
     ...typography.tiny,
     color: colors.textMuted,
     fontWeight: '600',
-    opacity: 0.5,
-    letterSpacing: 1,
+    letterSpacing: 2,
     fontSize: 10,
     paddingHorizontal: spacing.sm,
     marginBottom: spacing.xs,
@@ -349,9 +404,6 @@ const sidebarStyles = StyleSheet.create({
   navItemActive: {
     backgroundColor: colors.accentSubtle,
   },
-  navItemLocked: {
-    opacity: 0.4,
-  },
   navLabel: {
     ...typography.captionMedium,
     color: colors.textSecondary,
@@ -360,9 +412,6 @@ const sidebarStyles = StyleSheet.create({
     color: colors.accent,
     fontWeight: '600',
   },
-  navLabelLocked: {
-    color: colors.textMuted,
-  },
   shortcutLabel: {
     ...typography.caption,
     color: colors.textMuted,
@@ -370,7 +419,7 @@ const sidebarStyles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: colors.tabBarBorder,
+    backgroundColor: colors.border,
     marginVertical: spacing.lg,
   },
   keyboardHints: {
@@ -399,14 +448,31 @@ function GuestHeader({ onProfilePress }: { onProfilePress: () => void }) {
   return (
     <View style={{ backgroundColor: colors.background, paddingTop: insets.top + spacing.xs }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, height: 44 }}>
-        <Text style={{ fontSize: 28, color: colors.textPrimary, fontWeight: '800', letterSpacing: -1.5 }}>aaybee</Text>
+        <Text style={{ fontSize: 28, color: colors.textPrimary, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' as const }}>AAYBEE</Text>
         <Pressable onPress={onProfilePress} style={{ padding: 4 }}>
-          <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ fontSize: 14, color: colors.textMuted }}>?</Text>
+          <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ fontSize: 12, color: colors.textMuted, fontWeight: '700' }}>?</Text>
           </View>
         </Pressable>
       </View>
-      <View style={{ height: 1, backgroundColor: colors.tabBarBorder }} />
+      <View style={{ height: 1, backgroundColor: colors.border }} />
+    </View>
+  );
+}
+
+// Screen header with back button — used when navigating into a play mode or friends
+function ScreenHeader({ title, onBack, rightElement }: { title: string; onBack: () => void; rightElement?: React.ReactNode }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={{ backgroundColor: colors.background, paddingTop: insets.top + spacing.xs }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, height: 44 }}>
+        <Pressable onPress={onBack} style={{ paddingVertical: spacing.xs, paddingRight: spacing.md }}>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' as const }}>{'<'} BACK</Text>
+        </Pressable>
+        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary, letterSpacing: 2, textTransform: 'uppercase' as const }}>{title}</Text>
+        <View style={{ minWidth: 60 }}>{rightElement}</View>
+      </View>
+      <View style={{ height: 1, backgroundColor: colors.border }} />
     </View>
   );
 }
@@ -418,14 +484,7 @@ function MainApp() {
   const { isGuest: isAuthGuest, user } = useAuth();
   const [debugVisible, setDebugVisible] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
-  const [mode, setMode] = useState<AppMode>('social');
-  const [soloTab, setSoloTab] = useState<SoloTab>('compare');
-  const [socialTab, setSocialTab] = useState<SocialTab>('vs');
-  const activeTab: TabType = mode === 'solo' ? soloTab : socialTab;
-  const [rankingsInitialTab, setRankingsInitialTab] = useState<'yours' | 'friends' | 'global'>('yours');
-  const [rankingsInitialFilter, setRankingsInitialFilter] = useState<'classic' | 'top25' | 'all'>('classic');
-  const [tabBeforeProfile, setTabBeforeProfile] = useState<TabType>('compare');
+  const [phase, setPhase] = useState<NavPhase>('landing');
   const [showSearch, setShowSearch] = useState(false);
   const [showAaybee100, setShowAaybee100] = useState(false);
   const [showTv, setShowTv] = useState(false);
@@ -434,77 +493,19 @@ function MainApp() {
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const [showMiniOnboarding, setShowMiniOnboarding] = useState(false);
 
-  // Load persisted mode on mount + smart default landing
-  useEffect(() => {
-    (async () => {
-      const saved = await AsyncStorage.getItem('aaybee_mode');
-      if (saved === 'solo' || saved === 'social') {
-        setMode(saved);
-      }
-      // If user has pending social activity, override to social
-      if (user?.id) {
-        const [friendChallenges] = await Promise.all([
-          challengeService.getMyActiveChallenges(user.id),
-        ]);
-        const hasPending = friendChallenges.some(c =>
-          (c.status === 'active' && c.challenger_id === user.id)
-        );
-        if (hasPending) setMode('social');
-      }
-    })();
-  }, [user?.id]);
-
-  // Save mode on change
-  const handleModeChange = useCallback((newMode: AppMode) => {
-    if (newMode === 'solo' && !hasCompletedOnboarding) {
-      // First time tapping FOR YOU — show mini onboarding inline in compare tab
-      setShowMiniOnboarding(true);
-      setMode('solo');
-      setSoloTab('compare');
-      AsyncStorage.setItem('aaybee_mode', 'solo').catch(() => {});
-      return;
-    }
-    setMode(newMode);
-    AsyncStorage.setItem('aaybee_mode', newMode).catch(() => {});
-  }, [hasCompletedOnboarding]);
-
   // Deep link: parse URL on mount
   const [deepLink] = useState<DeepLinkIntent>(() => {
-    captureRefParam(); // fire-and-forget: store ref param for signup attribution
+    captureRefParam();
     return parseDeepLink();
   });
 
-  // Listen for native deep links while app is running (captures ref from warm opens)
+  // Listen for native deep links while app is running
   useEffect(() => listenForNativeRef(), []);
 
   // Guest mode: landed via deep link without an account
   const isGuestMode = !hasCompletedOnboarding && !!deepLink && isAuthGuest;
 
-  // Compute locked tabs
-  // All tabs are always navigable — screens handle their own empty/locked states inline
-  const lockedTabs = useMemo((): Record<TabType, boolean> => ({
-    compare: false, rankings: false, discover: false,
-    vs: false, daily: false, decide: false,
-  }), []);
-
-  const handleLockedTabPress = useCallback((tab: TabType) => {
-    if (isGuestMode) {
-      setShowGuestPrompt(true);
-      return;
-    }
-    const threshold = TAB_UNLOCK_THRESHOLDS[tab] ?? 0;
-    const remaining = threshold - postOnboardingComparisons;
-    showLockedFeature({
-      feature: tab,
-      requirement: `compare ${remaining} more movie${remaining !== 1 ? 's' : ''} to unlock`,
-      progress: {
-        current: postOnboardingComparisons,
-        required: threshold,
-      },
-    });
-  }, [postOnboardingComparisons, showLockedFeature, isGuestMode]);
-
-  // Navigation helpers for unlock milestones — show reveal overlay instead of navigating directly
+  // Navigation helpers for unlock milestones
   const navigateToTop10Search = useCallback(() => {
     setRankingReveal('classic');
   }, []);
@@ -519,88 +520,43 @@ function MainApp() {
 
   // Ranking reveal overlay handlers
   const handleRevealComplete = useCallback(() => {
-    setRankingsInitialTab('yours');
-    if (rankingReveal === 'classic') {
-      setRankingsInitialFilter('classic');
-    } else if (rankingReveal === 'top25') {
-      setRankingsInitialFilter('top25');
-    } else {
-      setRankingsInitialFilter('all');
-    }
-    handleModeChange('solo');
-    setSoloTab('rankings');
+    // Navigate to profile (which now contains rankings)
+    setPhase('profile');
     setRankingReveal(null);
-  }, [rankingReveal, handleModeChange]);
+  }, []);
 
   const handleRevealDismiss = useCallback(() => {
     setRankingReveal(null);
   }, []);
 
-
-  // Toggle debug panel
   const toggleDebug = useCallback(() => {
     setDebugVisible(prev => !prev);
   }, []);
 
-  // Close all header overlays (only one should be open at a time)
   const closeAllOverlays = useCallback(() => {
-    setShowProfile(false);
     setShowSearch(false);
     setShowAaybee100(false);
     setShowTv(false);
   }, []);
 
-  // Handle opening profile - remember current tab
-  const handleOpenProfile = useCallback(() => {
+  const handleNavigate = useCallback((newPhase: NavPhase) => {
     closeAllOverlays();
-    setTabBeforeProfile(activeTab);
-    setShowProfile(true);
-  }, [activeTab, closeAllOverlays]);
+    setPhase(newPhase);
+  }, [closeAllOverlays]);
 
-  // Handle tab press - if profile is open, close it and navigate
-  const handleTabPress = useCallback((tab: TabType) => {
-    if (showProfile) {
-      setShowProfile(false);
-    }
-    // Route to the correct mode-specific setter
-    const soloTabs: TabType[] = ['compare', 'rankings', 'discover'];
-    if (soloTabs.includes(tab)) {
-      setSoloTab(tab as SoloTab);
-    } else {
-      setSocialTab(tab as SocialTab);
-    }
-  }, [showProfile]);
-
-  // Handle profile close via X button - return to previous tab
-  const handleProfileClose = useCallback(() => {
-    setShowProfile(false);
-    // Restore previous tab in the correct mode
-    const soloTabsList: TabType[] = ['compare', 'rankings', 'discover'];
-    if (soloTabsList.includes(tabBeforeProfile)) {
-      handleModeChange('solo');
-      setSoloTab(tabBeforeProfile as SoloTab);
-    } else {
-      handleModeChange('social');
-      setSocialTab(tabBeforeProfile as SocialTab);
-    }
-  }, [tabBeforeProfile, handleModeChange]);
-
-  // Track if onboarding just completed (went from false to true)
+  // Track if onboarding just completed
   const prevOnboardingComplete = useRef(hasCompletedOnboarding);
   useEffect(() => {
-    // Only reset when onboarding JUST completed (false -> true)
     if (hasCompletedOnboarding && !prevOnboardingComplete.current) {
-      setShowProfile(false);
-      // Only switch to solo if coming from mini-onboarding (not if they're already playing)
       if (showMiniOnboarding) {
-        handleModeChange('solo');
-        setSoloTab('compare');
+        setPhase('discover');
+        setShowMiniOnboarding(false);
       }
     }
     prevOnboardingComplete.current = hasCompletedOnboarding;
-  }, [hasCompletedOnboarding, handleModeChange, showMiniOnboarding]);
+  }, [hasCompletedOnboarding, showMiniOnboarding]);
 
-  // Deep link: consume after app is ready (no onboarding required)
+  // Deep link: consume after app is ready
   const deepLinkConsumed = useRef(false);
   useEffect(() => {
     if (!deepLink || deepLinkConsumed.current || isLoading) return;
@@ -608,21 +564,14 @@ function MainApp() {
     clearDeepLink();
 
     if (deepLink.type === 'daily') {
-      handleModeChange('social');
-      setSocialTab('daily');
-    } else if (deepLink.type === 'vs') {
-      handleModeChange('social');
-      setSocialTab('vs');
+      setPhase('daily');
+    } else if (deepLink.type === 'vs' || deepLink.type === 'challenge') {
       setChallengeInitialCode(deepLink.code);
-    } else if (deepLink.type === 'challenge') {
-      handleModeChange('social');
-      setSocialTab('vs');
-      setChallengeInitialCode(deepLink.code);
+      setPhase('vs');
     } else if (deepLink.type === 'share') {
-      handleModeChange('social');
-      setSocialTab('daily');
+      setPhase('daily');
     }
-  }, [deepLink, isLoading, closeAllOverlays, handleModeChange]);
+  }, [deepLink, isLoading]);
 
   // Register for push notifications when user is authenticated
   useEffect(() => {
@@ -631,19 +580,17 @@ function MainApp() {
     }
   }, [user?.id]);
 
-  // Handle notification taps — route to challenge tab
+  // Handle notification taps
   useEffect(() => {
     return notificationService.addNotificationResponseListener((data) => {
       if (data.type === 'daily') {
-        handleModeChange('social');
-        setSocialTab('daily');
+        setPhase('daily');
       } else if (data.type === 'vs' && data.code) {
-        handleModeChange('social');
-        setSocialTab('vs');
         setChallengeInitialCode(data.code as string);
+        setPhase('vs');
       }
     });
-  }, [handleModeChange]);
+  }, []);
 
   // Check for pending notifications (VS challenges + friend requests)
   const [pendingChallengeCount, setPendingChallengeCount] = useState(0);
@@ -662,8 +609,8 @@ function MainApp() {
         (c.status === 'challenger_comparing' && c.challenger_id === user.id)
       );
       const pendingFriendChallenges = friendChallenges.filter(c =>
-        (c.status === 'pending' && c.creator_id === user.id) || // waiting for friend
-        (c.status === 'active' && c.challenger_id === user.id) // friend sent you one
+        (c.status === 'pending' && c.creator_id === user.id) ||
+        (c.status === 'active' && c.challenger_id === user.id)
       );
       if (mounted) setPendingChallengeCount(pendingVs.length + friendRequests.length + pendingFriendChallenges.length);
     };
@@ -685,63 +632,35 @@ function MainApp() {
   const { isDesktop, isWeb } = useAppDimensions();
   const isDesktopWeb = isDesktop && isWeb;
 
-  const stats = getStats();
-
-  // Render active screen content (without header - header is global)
-  // Safety fallback: if active tab is locked, force compare
-  const effectiveTab = lockedTabs[activeTab] ? 'compare' : activeTab;
-  const renderScreenContent = () => {
-    // Profile renders inline, replacing tab content — nav stays visible
-    if (showProfile) {
-      return (
-        <ProfileScreen
-          onOpenDebug={toggleDebug}
-          onClose={handleProfileClose}
-          isGuestMode={isGuestMode}
-          onOpenAuth={() => { setShowProfile(false); setShowAuth(true); }}
-          onOpenTv={() => { setShowProfile(false); closeAllOverlays(); setShowTv(true); }}
-        />
-      );
-    }
-
-    switch (effectiveTab) {
-      case 'compare':
-        if (showMiniOnboarding) {
-          return (
-            <MiniOnboardingScreen
-              onComplete={() => {
-                setShowMiniOnboarding(false);
-              }}
-            />
-          );
-        }
+  // Render the current phase
+  const renderPhaseContent = () => {
+    switch (phase) {
+      case 'landing':
         return (
-          <ComparisonScreen
-            onOpenRanking={() => { handleModeChange('solo'); setSoloTab('rankings'); }}
-            onOpenDiscover={() => { handleModeChange('solo'); setSoloTab('discover'); }}
-            onOpenDecide={() => { handleModeChange('social'); setSocialTab('decide'); }}
-            onOpenAuth={() => setShowAuth(true)}
-            onOpenProfile={handleOpenProfile}
-            onOpenTop10Search={navigateToTop10Search}
-            onOpenTop25={navigateToTop25}
-            onOpenGlobal={navigateToGlobal}
+          <LandingPage
+            onPlay={() => setPhase('playMenu')}
+            onFriends={() => setPhase('friends')}
+            onProfile={() => setPhase('profile')}
+            friendsBadge={pendingChallengeCount}
           />
         );
-      case 'rankings':
+
+      case 'playMenu':
         return (
-          <Suspense fallback={<LoadingScreen />}>
-            <UnifiedRankingsScreen
-              onContinueComparing={() => { handleModeChange('solo'); setSoloTab('compare'); }}
-              onOpenAaybee100={() => { closeAllOverlays(); setShowAaybee100(true); }}
-              initialTab={rankingsInitialTab}
-              initialFilter={rankingsInitialFilter}
-            />
-          </Suspense>
+          <PlayMenu
+            onBack={() => setPhase('landing')}
+            onVs={() => setPhase('vs')}
+            onDaily={() => setPhase('daily')}
+            onDecide={() => setPhase('decide')}
+            onDiscover={() => {
+              if (!hasCompletedOnboarding) {
+                setShowMiniOnboarding(true);
+              }
+              setPhase('discover');
+            }}
+          />
         );
-      case 'daily':
-        return (
-          <DailyScreen />
-        );
+
       case 'vs':
         return (
           <ChallengeScreen
@@ -749,37 +668,77 @@ function MainApp() {
             onOpenAuth={() => setShowAuth(true)}
           />
         );
-      case 'discover':
-        return (
-          <Suspense fallback={<LoadingScreen />}>
-            <DiscoverScreen
-              onNavigateToCompare={() => { handleModeChange('solo'); setSoloTab('compare'); }}
-            />
-          </Suspense>
-        );
+
+      case 'daily':
+        return <DailyScreen />;
+
       case 'decide':
         return (
-          <DecideScreen onNavigateToCompare={() => { handleModeChange('solo'); setSoloTab('compare'); }} />
+          <DecideScreen onNavigateToCompare={() => setPhase('discover')} />
         );
-      default:
+
+      case 'discover':
+        if (showMiniOnboarding) {
+          return (
+            <MiniOnboardingScreen
+              onComplete={() => setShowMiniOnboarding(false)}
+            />
+          );
+        }
         return (
           <ComparisonScreen
-            onOpenRanking={() => { handleModeChange('solo'); setSoloTab('rankings'); }}
-            onOpenDiscover={() => { handleModeChange('solo'); setSoloTab('discover'); }}
-            onOpenDecide={() => { handleModeChange('social'); setSocialTab('decide'); }}
+            onOpenRanking={() => setPhase('profile')}
+            onOpenDiscover={() => {}}
+            onOpenDecide={() => setPhase('decide')}
             onOpenAuth={() => setShowAuth(true)}
-            onOpenProfile={handleOpenProfile}
+            onOpenProfile={() => setPhase('profile')}
             onOpenTop10Search={navigateToTop10Search}
             onOpenTop25={navigateToTop25}
             onOpenGlobal={navigateToGlobal}
           />
         );
+
+      case 'friends':
+        return (
+          <ChallengeScreen
+            onOpenAuth={() => setShowAuth(true)}
+          />
+        );
+
+      case 'profile':
+        return (
+          <ProfileScreen
+            onOpenDebug={toggleDebug}
+            onClose={() => setPhase('landing')}
+            isGuestMode={isGuestMode}
+            onOpenAuth={() => { setShowAuth(true); }}
+            onOpenTv={() => { closeAllOverlays(); setShowTv(true); }}
+            onOpenAaybee100={() => { closeAllOverlays(); setShowAaybee100(true); }}
+          />
+        );
+
+      default:
+        return (
+          <LandingPage
+            onPlay={() => setPhase('playMenu')}
+            onFriends={() => setPhase('friends')}
+            onProfile={() => setPhase('profile')}
+            friendsBadge={pendingChallengeCount}
+          />
+        );
     }
+  };
+
+  // Determine if we should show back-nav header (not on landing/playMenu which have their own nav)
+  const showScreenHeader = !['landing', 'playMenu'].includes(phase);
+  const screenTitles: Record<NavPhase, string> = {
+    landing: '', playMenu: '', vs: 'VS', daily: 'DAILY',
+    decide: 'DECIDE', discover: 'DISCOVER', friends: 'FRIENDS', profile: 'PROFILE',
   };
 
   const screenContent = (
     <View style={styles.screenContainer}>
-      {renderScreenContent()}
+      {renderPhaseContent()}
 
       {/* Aaybee 100 overlay */}
       {showAaybee100 && (
@@ -810,63 +769,46 @@ function MainApp() {
 
   return (
     <View style={styles.mainContainer}>
-      {/* Desktop: sidebar layout; Mobile/Tablet: header + bottom tabs */}
       {isDesktopWeb ? (
         <View style={styles.desktopLayout}>
-          {!isGuestMode ? (
-            <DesktopSidebar
-              activeTab={activeTab}
-              mode={mode}
-              onModeChange={handleModeChange}
-              onTabPress={handleTabPress}
-              lockedTabs={lockedTabs}
-              onLockedTabPress={handleLockedTabPress}
-              onSearchPress={() => { closeAllOverlays(); setShowSearch(true); }}
-              onProfilePress={handleOpenProfile}
-            />
-          ) : (
-            <View style={[sidebarStyles.container, { justifyContent: 'space-between' }]}>
-              <Text style={sidebarStyles.logo}>aaybee</Text>
-              <Pressable
-                style={{ paddingHorizontal: spacing.sm, paddingVertical: spacing.md }}
-                onPress={handleOpenProfile}
-              >
-                <Text style={sidebarStyles.shortcutLabel}>profile</Text>
-              </Pressable>
-            </View>
-          )}
+          <DesktopSidebar
+            phase={phase}
+            onNavigate={handleNavigate}
+            onSearchPress={() => { closeAllOverlays(); setShowSearch(true); }}
+            onProfilePress={() => setPhase('profile')}
+          />
           <View style={styles.desktopContent}>
             {screenContent}
           </View>
         </View>
       ) : (
         <>
-          {/* Global Header (mobile/tablet only) — minimal for guest deep link users */}
-          {isGuestMode ? (
-            <GuestHeader onProfilePress={handleOpenProfile} />
-          ) : (
-            <GlobalHeader
-              onProfilePress={handleOpenProfile}
-              onSearchPress={() => { closeAllOverlays(); setShowSearch(true); }}
-              notificationCount={pendingChallengeCount}
+          {/* Show header with back button on screen phases (not landing/playMenu which have their own) */}
+          {showScreenHeader && !isGuestMode && (
+            <ScreenHeader
+              title={screenTitles[phase]}
+              onBack={() => {
+                // VS/Daily/Decide/Discover go back to play menu; Friends/Profile go to landing
+                if (['vs', 'daily', 'decide', 'discover'].includes(phase)) {
+                  setPhase('playMenu');
+                } else {
+                  setPhase('landing');
+                }
+              }}
+              rightElement={
+                <Pressable onPress={() => { closeAllOverlays(); setShowSearch(true); }} style={{ padding: 6 }}>
+                  <SearchIcon size={20} color={colors.textMuted} />
+                </Pressable>
+              }
             />
+          )}
+          {showScreenHeader && isGuestMode && (
+            <GuestHeader onProfilePress={() => setPhase('profile')} />
           )}
 
           {screenContent}
 
-          {/* Bottom navigation: pill toggle + tabs in distinct bar */}
-          <View style={styles.bottomNav}>
-            {!isGuestMode && (
-              <ModeTogglePill mode={mode} onModeChange={handleModeChange} socialBadge={pendingChallengeCount > 0} />
-            )}
-            <TabBar
-              mode={mode}
-              activeTab={activeTab}
-              onTabPress={handleTabPress}
-              lockedTabs={lockedTabs}
-              onLockedTabPress={handleLockedTabPress}
-            />
-          </View>
+          {/* No bottom nav — navigation is through landing page buttons */}
         </>
       )}
 
@@ -893,29 +835,26 @@ function MainApp() {
         <View style={styles.overlay}>
           <Pressable style={styles.guestPromptBackdrop} onPress={() => setShowGuestPrompt(false)}>
             <Pressable style={styles.guestPromptCard} onPress={(e) => e.stopPropagation()}>
-              <Text style={styles.guestPromptTitle}>sign in required</Text>
+              <Text style={styles.guestPromptTitle}>SIGN IN REQUIRED</Text>
               <Text style={styles.guestPromptText}>
-                create an account to unlock all features — compare movies, build your rankings, discover new films, and challenge friends
+                CREATE AN ACCOUNT TO UNLOCK ALL FEATURES — COMPARE MOVIES, BUILD YOUR RANKINGS, DISCOVER NEW FILMS, AND CHALLENGE FRIENDS
               </Text>
               <Pressable
                 style={styles.guestPromptButton}
                 onPress={() => { setShowGuestPrompt(false); setShowAuth(true); }}
               >
-                <Text style={styles.guestPromptButtonText}>create account</Text>
+                <Text style={styles.guestPromptButtonText}>CREATE ACCOUNT</Text>
               </Pressable>
               <Pressable
                 style={styles.guestPromptSkip}
                 onPress={() => setShowGuestPrompt(false)}
               >
-                <Text style={styles.guestPromptSkipText}>skip</Text>
+                <Text style={styles.guestPromptSkipText}>SKIP</Text>
               </Pressable>
             </Pressable>
           </Pressable>
         </View>
       )}
-
-      {/* Mini onboarding now renders inline in compare tab — no overlay needed */}
-
     </View>
   );
 }
@@ -990,101 +929,17 @@ const styles = StyleSheet.create({
     ...typography.h1,
     color: colors.textPrimary,
     marginBottom: spacing.sm,
+    letterSpacing: 4,
   },
   loadingSubtitle: {
-    ...typography.body,
+    ...typography.caption,
     color: colors.textMuted,
     marginBottom: spacing.xxxl,
   },
   loadingSpinner: {
     marginTop: spacing.sm,
   },
-  // Bottom navigation container — distinct background
-  bottomNav: {
-    backgroundColor: colors.card,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  // Mode toggle pill — small, centered
-  modePill: {
-    alignItems: 'center',
-    paddingTop: spacing.sm,
-    paddingBottom: 2,
-  },
-  modePillInner: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    position: 'relative',
-    width: '45%',
-    maxWidth: 180,
-  } as any,
-  modePillItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 5,
-    zIndex: 1,
-  },
-  modePillText: {
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    fontSize: 9,
-    fontWeight: '600',
-  } as any,
-  modePillTextActive: {
-    color: colors.textPrimary,
-  },
-  modePillIndicator: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: '50%',
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-  } as any,
-  modePillBadge: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.accent,
-    position: 'absolute',
-    top: 3,
-    right: '12%',
-  } as any,
-  // Tab Bar - 3 contextual tabs
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: colors.card,
-    paddingTop: spacing.xs,
-    // paddingBottom is set dynamically via safe area insets in the component
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 2,
-  },
-  tabLabel: {
-    ...typography.tiny,
-    color: colors.tabBarInactive,
-    fontWeight: '500',
-    marginTop: 2,
-    fontSize: 10,
-  },
-  tabLabelActive: {
-    color: colors.textPrimary,
-    fontWeight: '600',
-  },
-  tabLabelLocked: {
-    color: colors.textMuted,
-    opacity: 0.4,
-  },
-  lockedIconWrapper: {
-    opacity: 0.4,
-  },
+  // Bottom nav removed — navigation is through landing page
   overlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 50,
@@ -1115,17 +970,18 @@ const styles = StyleSheet.create({
     ...typography.h3,
     color: colors.textPrimary,
     marginBottom: spacing.md,
+    letterSpacing: 2,
   },
   guestPromptText: {
-    ...typography.body,
+    ...typography.caption,
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: spacing.xl,
-    lineHeight: 20,
+    lineHeight: 18,
   },
   guestPromptButton: {
-    backgroundColor: colors.accent,
-    borderRadius: borderRadius.lg,
+    backgroundColor: colors.textPrimary,
+    borderRadius: borderRadius.xxl,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xxl,
     width: '100%' as any,
@@ -1136,6 +992,7 @@ const styles = StyleSheet.create({
     ...typography.captionMedium,
     color: colors.background,
     fontWeight: '700',
+    letterSpacing: 1,
   },
   guestPromptSkip: {
     paddingVertical: spacing.sm,

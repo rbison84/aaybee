@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   ScrollView,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
@@ -18,6 +19,8 @@ import { CinematicButton } from '../components/cinematic';
 import { SettingsScreen } from './SettingsScreen';
 import { TasteProfileScreen } from './TasteProfileScreen';
 
+const UnifiedRankingsScreen = React.lazy(() => import('./UnifiedRankingsScreen').then(m => ({ default: m.UnifiedRankingsScreen })));
+
 const MIN_COMPARISONS_FOR_TASTE_PROFILE = 0;
 
 interface ProfileScreenProps {
@@ -26,15 +29,19 @@ interface ProfileScreenProps {
   isGuestMode?: boolean;
   onOpenAuth?: () => void;
   onOpenTv?: () => void;
+  onOpenAaybee100?: () => void;
 }
 
-export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, onOpenTv }: ProfileScreenProps) {
+export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, onOpenTv, onOpenAaybee100 }: ProfileScreenProps) {
   const { postOnboardingComparisons } = useAppStore();
   const { showLockedFeature } = useLockedFeature();
   const { unlockAllFeatures } = useDevSettings();
   const haptics = useHaptics();
   const [showSettings, setShowSettings] = useState(false);
   const [showTasteProfile, setShowTasteProfile] = useState(false);
+  const [showRankings, setShowRankings] = useState(false);
+  const [rankingsInitialTab, setRankingsInitialTab] = useState<'yours' | 'friends' | 'global'>('yours');
+  const [rankingsInitialFilter, setRankingsInitialFilter] = useState<'classic' | 'top25' | 'all'>('classic');
 
   const isTasteProfileLocked = isGuestMode || (unlockAllFeatures ? false : postOnboardingComparisons < MIN_COMPARISONS_FOR_TASTE_PROFILE);
   const tasteProfileRemaining = MIN_COMPARISONS_FOR_TASTE_PROFILE - postOnboardingComparisons;
@@ -80,13 +87,44 @@ export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, o
     );
   }
 
+  if (showRankings) {
+    return (
+      <Suspense fallback={
+        <View style={styles.container}>
+          <ActivityIndicator size="small" color={colors.textMuted} />
+        </View>
+      }>
+        <UnifiedRankingsScreen
+          onContinueComparing={() => setShowRankings(false)}
+          onOpenAaybee100={onOpenAaybee100}
+          initialTab={rankingsInitialTab}
+          initialFilter={rankingsInitialFilter}
+        />
+      </Suspense>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <HeaderBar title="profile" onClose={onClose} />
+      <HeaderBar title="PROFILE" onClose={onClose} />
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {/* TASTE PROFILE BUTTON */}
+          {/* RANKINGS BUTTON */}
           <Animated.View entering={FadeInDown.delay(50)} style={styles.settingsSection}>
+            <Pressable
+              style={styles.settingsButton}
+              onPress={() => setShowRankings(true)}
+            >
+              <View style={styles.settingsLeft}>
+                <Text style={{ fontSize: 16, color: colors.textSecondary }}>&#9776;</Text>
+                <Text style={styles.settingsText}>RANKINGS</Text>
+              </View>
+              <ChevronRightIcon />
+            </Pressable>
+          </Animated.View>
+
+          {/* TASTE PROFILE BUTTON */}
+          <Animated.View entering={FadeInDown.delay(100)} style={styles.settingsSection}>
             <Pressable
               style={[styles.settingsButton, isTasteProfileLocked && styles.settingsButtonLocked]}
               onPress={handleTasteProfilePress}
@@ -95,7 +133,7 @@ export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, o
                 <StarIcon />
                 <View>
                   <Text style={[styles.settingsText, isTasteProfileLocked && styles.settingsTextLocked]}>
-                    taste profile
+                    TASTE PROFILE
                   </Text>
                 </View>
               </View>
@@ -105,14 +143,14 @@ export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, o
 
           {/* TRAILERS BUTTON */}
           {onOpenTv && (
-            <Animated.View entering={FadeInDown.delay(140)} style={styles.settingsSection}>
+            <Animated.View entering={FadeInDown.delay(150)} style={styles.settingsSection}>
               <Pressable
                 style={styles.settingsButton}
                 onPress={onOpenTv}
               >
                 <View style={styles.settingsLeft}>
                   <SettingsIcon />
-                  <Text style={styles.settingsText}>trailers</Text>
+                  <Text style={styles.settingsText}>TRAILERS</Text>
                 </View>
                 <ChevronRightIcon />
               </Pressable>
@@ -120,14 +158,14 @@ export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, o
           )}
 
           {/* SETTINGS BUTTON */}
-          <Animated.View entering={FadeInDown.delay(150)} style={styles.settingsSection}>
+          <Animated.View entering={FadeInDown.delay(200)} style={styles.settingsSection}>
             <Pressable
               style={styles.settingsButton}
               onPress={() => setShowSettings(true)}
             >
               <View style={styles.settingsLeft}>
                 <SettingsIcon />
-                <Text style={styles.settingsText}>settings</Text>
+                <Text style={styles.settingsText}>SETTINGS</Text>
               </View>
               <ChevronRightIcon />
             </Pressable>
@@ -135,8 +173,8 @@ export function ProfileScreen({ onOpenDebug, onClose, isGuestMode, onOpenAuth, o
 
           {/* SIGN UP / SIGN IN BUTTON (guest mode) */}
           {isGuestMode && onOpenAuth && (
-            <Animated.View entering={FadeInDown.delay(200)} style={styles.settingsSection}>
-              <CinematicButton label="sign up / sign in" variant="primary" onPress={onOpenAuth} fullWidth />
+            <Animated.View entering={FadeInDown.delay(250)} style={styles.settingsSection}>
+              <CinematicButton label="SIGN UP / SIGN IN" variant="primary" onPress={onOpenAuth} fullWidth />
             </Animated.View>
           )}
 

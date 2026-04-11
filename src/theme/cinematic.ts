@@ -1,14 +1,14 @@
 // ============================================
-// Cinematic Dark Mode Theme - Warm Lavender
-// "Letterboxd meets Bumble, built for Gen Z"
+// Brutalist Dark Theme — SameGoat-inspired
+// Pure black, neon lime, flat, uppercase, mono
 // ============================================
 
 // DESIGN PHILOSOPHY:
-// - Posters are the art — UI frames them, doesn't compete
-// - Dark mode lets colors pop
-// - Soft lavender accents for a calming, modern feel
-// - Tactile, satisfying interactions
-// - Confident but not corporate
+// - Stark brutalist minimalism with one neon accent
+// - Pure black background, high contrast
+// - Uppercase text, monospace + display fonts
+// - No shadows, no gradients, completely flat
+// - Posters are the only rich visual — UI is stark frame
 
 import { Platform } from 'react-native';
 
@@ -26,7 +26,6 @@ function webSafeShadow(shadow: {
 }) {
   if (Platform.OS !== 'web') return shadow;
   const { shadowColor, shadowOffset, shadowOpacity, shadowRadius } = shadow;
-  // Parse hex color to rgba
   const hex = shadowColor.replace('#', '');
   const r = parseInt(hex.substring(0, 2), 16) || 0;
   const g = parseInt(hex.substring(2, 4), 16) || 0;
@@ -54,66 +53,65 @@ export function webSafeTextShadow(color: string, offset: { width: number; height
 
 export const cinematic = {
   colors: {
-    // Backgrounds - True dark, neutral
-    background: '#0A0A0A',        // Near-black
-    card: '#141414',              // Elevated dark gray
-    surface: '#1A1A1A',           // Secondary surfaces
-    overlay: 'rgba(10, 10, 10, 0.85)', // For modals
+    // Backgrounds — pure black
+    background: '#000000',
+    card: '#1A1A1A',
+    surface: '#1A1A1A',
+    overlay: 'rgba(0, 0, 0, 0.85)',
 
-    // Accent (electric orange)
-    // Only for: Primary CTA, selected states, #1 badge, win indicators
-    accent: '#FF6B2B',            // Electric orange
-    accentHover: '#FF5500',       // Hover state
-    accentSubtle: 'rgba(255, 107, 43, 0.12)', // Background tint
-    accentGlow: 'rgba(255, 107, 43, 0.25)',   // Special moments
+    // Accent — neon lime
+    accent: '#C8FF00',
+    accentHover: '#B8EE00',
+    accentSubtle: 'rgba(200, 255, 0, 0.12)',
+    accentGlow: 'rgba(200, 255, 0, 0.25)',
 
-    // Neutrals - clean grays
-    textPrimary: '#F5F5F5',       // Near-white
-    textSecondary: '#999999',     // Medium gray
-    textMuted: '#666666',         // Dark gray
-    border: '#222222',            // Subtle border
-    divider: '#1A1A1A',           // Subtle divider
+    // Neutrals — stark contrast
+    textPrimary: '#FFFFFF',
+    textSecondary: '#888888',
+    textMuted: '#888888',
+    border: '#333333',
+    divider: '#333333',
 
     // Semantic
-    success: '#4ADE80',           // Bold green
+    success: '#4ADE80',
     successSubtle: 'rgba(74, 222, 128, 0.12)',
-    error: '#EF4444',             // Red (distinct from accent)
-    errorSubtle: 'rgba(239, 68, 68, 0.12)',
-    warning: '#FCD34D',           // Amber (unchanged)
+    error: '#F87171',
+    errorSubtle: 'rgba(248, 113, 113, 0.12)',
+    warning: '#FCD34D',
     warningSubtle: 'rgba(252, 211, 77, 0.12)',
 
     // Ranking badges
-    gold: '#E5A84B',              // Warm gold
-    silver: '#A0A0A0',            // Neutral silver
-    bronze: '#B8956E',            // Warm bronze
+    gold: '#E5A84B',
+    silver: '#A0A0A0',
+    bronze: '#B8956E',
 
-    // Special accents (use sparingly)
-    purple: '#FF6B2B',            // Maps to accent
-    purpleSubtle: 'rgba(255, 107, 43, 0.08)',
+    // Special accents (map to accent)
+    purple: '#C8FF00',
+    purpleSubtle: 'rgba(200, 255, 0, 0.08)',
 
     // Tournament / decide labels
-    tournamentA: '#E5A84B',       // Amber
-    tournamentB: '#4ABFED',       // Blue
+    tournamentA: '#E5A84B',
+    tournamentB: '#4ABFED',
 
-    // Tab bar
-    tabBarBackground: '#0A0A0A',
-    tabBarBorder: '#1A1A1A',
-    tabBarActive: '#FF6B2B',
-    tabBarInactive: '#666666',
+    // Tab bar / nav
+    tabBarBackground: '#000000',
+    tabBarBorder: '#333333',
+    tabBarActive: '#C8FF00',
+    tabBarInactive: '#888888',
 
-    // Glassmorphism (use sparingly - modals/overlays only)
-    glass: 'rgba(20, 20, 20, 0.85)',
-    glassBorder: 'rgba(255, 107, 43, 0.12)',
+    // Glass (flat — minimal transparency)
+    glass: 'rgba(0, 0, 0, 0.90)',
+    glassBorder: 'rgba(200, 255, 0, 0.12)',
 
     // Legacy color aliases (for compatibility)
     black: '#000000',
     white: '#FFFFFF',
-    yellow: '#FFD700',
-    orange: '#FF8C00',
+    yellow: '#C8FF00',
+    orange: '#C8FF00',
     cyan: '#00D9FF',
     magenta: '#FF00E5',
     cream: '#F5F1E8',
-    green: '#22C55E',
+    green: '#4ADE80',
   },
 
   spacing: {
@@ -135,160 +133,162 @@ export const cinematic = {
     round: 9999,
   },
 
-  // Typography
-  // Headers: lowercase for native feel
-  // "rankings" not "Rankings"
+  // Typography — uppercase, monospace body, display headers
+  // Fonts: System bold for display, monospace for body
   typography: {
-    // Headers - personality font
-    // Font: Cabinet Grotesk / General Sans / Clash Display (fallback: system-ui)
     h1: {
       fontSize: 32,
       fontWeight: '800' as const,
-      letterSpacing: -0.64, // -0.02em
+      letterSpacing: 1.5,
       lineHeight: 40,
+      textTransform: 'uppercase' as const,
     },
     h2: {
       fontSize: 24,
       fontWeight: '700' as const,
-      letterSpacing: -0.48,
+      letterSpacing: 1,
       lineHeight: 32,
+      textTransform: 'uppercase' as const,
     },
     h3: {
       fontSize: 18,
       fontWeight: '700' as const,
-      letterSpacing: -0.36,
+      letterSpacing: 0.8,
       lineHeight: 24,
+      textTransform: 'uppercase' as const,
     },
-    // Body - Inter or system default
     body: {
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: '400' as const,
-      lineHeight: 24,
+      lineHeight: 20,
+      letterSpacing: 0.5,
     },
     bodyMedium: {
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: '500' as const,
-      lineHeight: 24,
+      lineHeight: 20,
+      letterSpacing: 0.5,
     },
     caption: {
-      fontSize: 14,
-      fontWeight: '400' as const,
-      lineHeight: 20,
-    },
-    captionMedium: {
-      fontSize: 14,
-      fontWeight: '500' as const,
-      lineHeight: 20,
-    },
-    tiny: {
       fontSize: 12,
       fontWeight: '400' as const,
       lineHeight: 16,
+      letterSpacing: 0.8,
+      textTransform: 'uppercase' as const,
     },
-    // Stats/numbers - bold, tabular
+    captionMedium: {
+      fontSize: 12,
+      fontWeight: '500' as const,
+      lineHeight: 16,
+      letterSpacing: 0.8,
+      textTransform: 'uppercase' as const,
+    },
+    tiny: {
+      fontSize: 10,
+      fontWeight: '400' as const,
+      lineHeight: 14,
+      letterSpacing: 1,
+      textTransform: 'uppercase' as const,
+    },
     stat: {
       fontSize: 20,
       fontWeight: '700' as const,
       letterSpacing: -0.4,
       fontVariant: ['tabular-nums'] as ('tabular-nums')[],
     },
-    // Large display numbers (rankings, scores)
     display: {
       fontSize: 48,
       fontWeight: '800' as const,
-      letterSpacing: -1,
+      letterSpacing: 2,
       lineHeight: 56,
+      textTransform: 'uppercase' as const,
     },
     displayMedium: {
       fontSize: 36,
       fontWeight: '700' as const,
-      letterSpacing: -0.72,
+      letterSpacing: 1.5,
       lineHeight: 44,
+      textTransform: 'uppercase' as const,
     },
   },
 
+  // Shadows — flat design, no shadows by default
+  // Keep the structure for compatibility but use zero values
   shadows: {
     sm: webSafeShadow({
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 4,
-      elevation: 2,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      elevation: 0,
     }),
     md: webSafeShadow({
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.3,
-      shadowRadius: 8,
-      elevation: 4,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      elevation: 0,
     }),
     lg: webSafeShadow({
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.4,
-      shadowRadius: 16,
-      elevation: 8,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      elevation: 0,
     }),
     card: webSafeShadow({
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.4,
-      shadowRadius: 24,
-      elevation: 8,
-    }),
-    // Special glow for winners/accents
-    accentGlow: webSafeShadow({
-      shadowColor: '#A78BFA',
       shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0.4,
-      shadowRadius: 16,
-      elevation: 8,
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      elevation: 0,
+    }),
+    accentGlow: webSafeShadow({
+      shadowColor: '#C8FF00',
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      elevation: 0,
     }),
     posterLift: webSafeShadow({
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.5,
-      shadowRadius: 20,
-      elevation: 10,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      elevation: 0,
     }),
   },
 
   animation: {
-    // Durations
     fast: 150,
-    normal: 300,
-    slow: 500,
+    normal: 250,
+    slow: 400,
 
-    // Spring configs
     spring: {
-      damping: 15,
-      stiffness: 150,
+      damping: 20,
+      stiffness: 300,
     },
     springSnappy: {
       damping: 20,
       stiffness: 400,
     },
     springBouncy: {
-      damping: 12,
-      stiffness: 180,
+      damping: 15,
+      stiffness: 200,
     },
 
-    // Screen transitions
     screenTransition: 250,
 
-    // Button press
     buttonPress: {
       scale: 0.97,
       duration: 100,
     },
 
-    // Winner animation
     winner: {
       scale: 1.05,
       duration: 300,
     },
 
-    // Loser animation
     loser: {
       opacity: 0.4,
       scale: 0.95,
@@ -296,11 +296,11 @@ export const cinematic = {
     },
   },
 
-  // Glassmorphism preset (use sparingly - modals only)
+  // Glass — flat, near-opaque
   glass: {
-    background: 'rgba(30, 26, 46, 0.85)',
-    backdropBlur: 20,
-    border: '1px solid rgba(167, 139, 250, 0.15)',
+    background: 'rgba(0, 0, 0, 0.90)',
+    backdropBlur: 0,
+    border: '1px solid rgba(200, 255, 0, 0.12)',
   },
 };
 

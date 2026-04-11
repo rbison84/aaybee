@@ -100,8 +100,7 @@ function getVariantStyles(variant: ButtonVariant) {
     case 'primary':
       return {
         button: {
-          backgroundColor: colors.accent,
-          ...shadows.sm,
+          backgroundColor: colors.textPrimary,
         },
         text: {
           color: colors.background,
@@ -110,7 +109,7 @@ function getVariantStyles(variant: ButtonVariant) {
     case 'secondary':
       return {
         button: {
-          backgroundColor: 'transparent',
+          backgroundColor: colors.card,
           borderWidth: 1,
           borderColor: colors.border,
         },
@@ -182,14 +181,14 @@ function getSizeStyles(size: 'small' | 'medium' | 'large') {
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.xxl,
     alignItems: 'center',
     justifyContent: 'center',
-    ...(Platform.OS === 'web' ? { transition: 'opacity 0.15s ease, box-shadow 0.2s ease' } as any : {}),
+    ...(Platform.OS === 'web' ? { transition: 'opacity 0.15s ease, transform 0.1s ease' } as any : {}),
   },
   hovered: {
     ...(Platform.OS === 'web' ? {
-      boxShadow: '0 0 12px rgba(167, 139, 250, 0.25)',
+      borderColor: colors.accent,
     } as any : {}),
     opacity: 0.9,
   },
@@ -197,10 +196,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   disabled: {
-    opacity: 0.5,
+    opacity: 0.3,
   },
   text: {
-    fontWeight: '600',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   disabledText: {
     opacity: 0.7,
