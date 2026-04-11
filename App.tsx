@@ -22,6 +22,7 @@ import { AuthScreen } from './src/screens/AuthScreen';
 import { DailyScreen } from './src/screens/DailyScreen';
 import { DecideScreen } from './src/screens/DecideScreen';
 import { ChallengeScreen } from './src/screens/ChallengeScreen';
+import { FriendsScreen } from './src/screens/FriendsScreen';
 
 // Lazy-load screens that are locked behind comparison thresholds or shown as overlays
 const DiscoverScreen = React.lazy(() => import('./src/screens/DiscoverScreen').then(m => ({ default: m.DiscoverScreen })));
@@ -69,15 +70,17 @@ function LoadingScreen() {
 }
 
 // Landing Page — two big buttons: PLAY + FRIENDS (SameGoat-style)
-function LandingPage({ onPlay, onFriends, onProfile, friendsBadge }: {
+function LandingPage({ onPlay, onFriends, onSignIn, onProfile, friendsBadge }: {
   onPlay: () => void;
   onFriends: () => void;
+  onSignIn: () => void;
   onProfile: () => void;
   friendsBadge?: number;
 }) {
   const insets = useSafeAreaInsets();
   const { user, isGuest } = useAuth();
   const userInitial = user?.email?.charAt(0).toUpperCase() || '?';
+  const isSignedIn = !!user?.id && !isGuest;
 
   return (
     <View style={landingStyles.container}>
@@ -104,15 +107,22 @@ function LandingPage({ onPlay, onFriends, onProfile, friendsBadge }: {
             <Text style={landingStyles.bigButtonLabel}>PLAY</Text>
             <Text style={landingStyles.bigButtonSub}>(pick a mode.)</Text>
           </Pressable>
-          <Pressable style={landingStyles.bigButton} onPress={onFriends}>
-            <Text style={landingStyles.bigButtonLabel}>FRIENDS</Text>
-            <Text style={landingStyles.bigButtonSub}>(your people.)</Text>
-            {!!friendsBadge && friendsBadge > 0 && (
-              <View style={landingStyles.badge}>
-                <Text style={landingStyles.badgeText}>{friendsBadge > 9 ? '9+' : friendsBadge}</Text>
-              </View>
-            )}
-          </Pressable>
+          {isSignedIn ? (
+            <Pressable style={landingStyles.bigButton} onPress={onFriends}>
+              <Text style={landingStyles.bigButtonLabel}>FRIENDS</Text>
+              <Text style={landingStyles.bigButtonSub}>(your people.)</Text>
+              {!!friendsBadge && friendsBadge > 0 && (
+                <View style={landingStyles.badge}>
+                  <Text style={landingStyles.badgeText}>{friendsBadge > 9 ? '9+' : friendsBadge}</Text>
+                </View>
+              )}
+            </Pressable>
+          ) : (
+            <Pressable style={landingStyles.bigButton} onPress={onSignIn}>
+              <Text style={landingStyles.bigButtonLabel}>SIGN IN</Text>
+              <Text style={landingStyles.bigButtonSub}>(save your games.)</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </View>
@@ -442,6 +452,59 @@ const sidebarStyles = StyleSheet.create({
   },
 });
 
+// Discover tab wrapper — Compare | Recommend tabs at top
+function DiscoverWrapper({ discoverTab, onTabChange, onOpenRanking, onOpenDecide, onOpenAuth, onOpenProfile, onOpenTop10Search, onOpenTop25, onOpenGlobal }: {
+  discoverTab: 'compare' | 'recommend';
+  onTabChange: (tab: 'compare' | 'recommend') => void;
+  onOpenRanking: () => void;
+  onOpenDecide: () => void;
+  onOpenAuth: () => void;
+  onOpenProfile: () => void;
+  onOpenTop10Search: () => void;
+  onOpenTop25: () => void;
+  onOpenGlobal: () => void;
+}) {
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Tab bar */}
+      <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        <Pressable
+          style={{ flex: 1, paddingVertical: spacing.md, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: discoverTab === 'compare' ? colors.accent : 'transparent' }}
+          onPress={() => onTabChange('compare')}
+        >
+          <Text style={{ fontSize: 14, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' as const, color: discoverTab === 'compare' ? colors.textPrimary : colors.textMuted }}>COMPARE</Text>
+        </Pressable>
+        <Pressable
+          style={{ flex: 1, paddingVertical: spacing.md, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: discoverTab === 'recommend' ? colors.accent : 'transparent' }}
+          onPress={() => onTabChange('recommend')}
+        >
+          <Text style={{ fontSize: 14, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' as const, color: discoverTab === 'recommend' ? colors.textPrimary : colors.textMuted }}>RECOMMEND</Text>
+        </Pressable>
+      </View>
+
+      {/* Content */}
+      {discoverTab === 'compare' ? (
+        <ComparisonScreen
+          onOpenRanking={onOpenRanking}
+          onOpenDiscover={() => onTabChange('recommend')}
+          onOpenDecide={onOpenDecide}
+          onOpenAuth={onOpenAuth}
+          onOpenProfile={onOpenProfile}
+          onOpenTop10Search={onOpenTop10Search}
+          onOpenTop25={onOpenTop25}
+          onOpenGlobal={onOpenGlobal}
+        />
+      ) : (
+        <Suspense fallback={<LoadingScreen />}>
+          <DiscoverScreen
+            onNavigateToCompare={() => onTabChange('compare')}
+          />
+        </Suspense>
+      )}
+    </View>
+  );
+}
+
 // Minimal header for guest deep link users — just logo + profile
 function GuestHeader({ onProfilePress }: { onProfilePress: () => void }) {
   const insets = useSafeAreaInsets();
@@ -492,6 +555,7 @@ function MainApp() {
   const [rankingReveal, setRankingReveal] = useState<'classic' | 'top25' | 'all' | null>(null);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const [showMiniOnboarding, setShowMiniOnboarding] = useState(false);
+  const [discoverTab, setDiscoverTab] = useState<'compare' | 'recommend'>('compare');
 
   // Deep link: parse URL on mount
   const [deepLink] = useState<DeepLinkIntent>(() => {
@@ -640,6 +704,7 @@ function MainApp() {
           <LandingPage
             onPlay={() => setPhase('playMenu')}
             onFriends={() => setPhase('friends')}
+            onSignIn={() => setShowAuth(true)}
             onProfile={() => setPhase('profile')}
             friendsBadge={pendingChallengeCount}
           />
@@ -686,9 +751,10 @@ function MainApp() {
           );
         }
         return (
-          <ComparisonScreen
+          <DiscoverWrapper
+            discoverTab={discoverTab}
+            onTabChange={setDiscoverTab}
             onOpenRanking={() => setPhase('profile')}
-            onOpenDiscover={() => {}}
             onOpenDecide={() => setPhase('decide')}
             onOpenAuth={() => setShowAuth(true)}
             onOpenProfile={() => setPhase('profile')}
@@ -700,8 +766,10 @@ function MainApp() {
 
       case 'friends':
         return (
-          <ChallengeScreen
-            onOpenAuth={() => setShowAuth(true)}
+          <FriendsScreen
+            onChallenge={(friendId, friendName) => {
+              setPhase('vs');
+            }}
           />
         );
 
@@ -722,6 +790,7 @@ function MainApp() {
           <LandingPage
             onPlay={() => setPhase('playMenu')}
             onFriends={() => setPhase('friends')}
+            onSignIn={() => setShowAuth(true)}
             onProfile={() => setPhase('profile')}
             friendsBadge={pendingChallengeCount}
           />
