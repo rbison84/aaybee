@@ -29,6 +29,10 @@ import { groupDecideService, DecideRoom, DecideRoomMember, GroupPreferences, Mat
 import { supabase } from '../services/supabase';
 import { getFullMovieDetails, getMovieTrailer, getWatchProviders, formatRuntime, getProviderLogoUrl, getMoviesByIds, tmdbToAppMovie } from '../services/tmdb';
 import { CinematicBackground } from '../components/cinematic';
+import { BracketPlay } from '../components/BracketPlay';
+import { DecideNegotiation } from '../components/DecideNegotiation';
+import { decideSessionService, DecideSession } from '../services/decideSessionService';
+import { BracketMovie, BracketPick, createVsBracket, bracketToRanking } from '../utils/movieBracket';
 import { OnboardingProgressBar } from '../components/onboarding/OnboardingProgressBar';
 import { LockedFeatureCard } from '../components/LockedFeatureCard';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
@@ -45,7 +49,7 @@ type DecideStep =
   | 'pool-building'
   | 'tournament'
   | 'result'
-  // Group mode steps
+  // Group mode steps (legacy)
   | 'group-create'
   | 'group-join'
   | 'group-waiting'
@@ -53,7 +57,12 @@ type DecideStep =
   | 'group-building'
   | 'group-tournament'
   | 'group-recap'
-  | 'group-result';
+  | 'group-result'
+  // Two-person decide steps
+  | 'duo-knockout'     // Playing your 16-movie bracket
+  | 'duo-waiting'      // Waiting for other person
+  | 'duo-negotiate'    // Agree/disagree phase
+  | 'duo-result';      // Winner revealed
 
 interface PreferencePair {
   id: string;
@@ -407,6 +416,14 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
   const membersSubscription = useRef<any>(null);
   const votesSubscription = useRef<any>(null);
   const couplesAdvanceRef = useRef(false);
+
+  // ============================================
+  // TWO-PERSON DECIDE STATE
+  // ============================================
+  const [duoSession, setDuoSession] = useState<DecideSession | null>(null);
+  const [duoBracketMovies, setDuoBracketMovies] = useState<BracketMovie[]>([]);
+  const [duoIsPersonOne, setDuoIsPersonOne] = useState(true);
+  const [duoPolling, setDuoPolling] = useState(false);
 
   // Current preference pair
   const currentPreferencePair = useMemo(() => {
@@ -1496,6 +1513,137 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
   // Personal mode locked for guests or not enough comparisons
   const isPersonalLocked = isGuest || (unlockAllFeatures ? false : postOnboardingComparisons < MIN_COMPARISONS_FOR_DECIDE);
 
+  // ============================================
+  // TWO-PERSON DECIDE HANDLERS
+  // ============================================
+
+  const handleStartDuo = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    // Get 32 random movies (16 for each person, no overlap)
+    const { data: randomMovies } = await supabase
+      .from('movies')
+      .select('id, title, year, poster_url')
+      .lte('tier', 2)
+      .limit(80);
+
+    if (!randomMovies || randomMovies.length < 32) {
+      setErrorMessage('Not enough movies available');
+      setIsLoading(false);
+      return;
+    }
+
+    const shuffled = [...randomMovies].sort(() => Math.random() - 0.5);
+    const p1Pool: BracketMovie[] = shuffled.slice(0, 16).map(m => ({
+      id: m.id, title: m.title, posterUrl: m.poster_url || '', year: m.year,
+    }));
+
+    const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'Person 1';
+    const bracket = createVsBracket(p1Pool);
+
+    const { session, error } = await decideSessionService.createSession(
+      user?.id || null, displayName, bracket,
+    );
+
+    if (session) {
+      setDuoSession(session);
+      setDuoBracketMovies(bracket);
+      setDuoIsPersonOne(true);
+      setStep('duo-knockout');
+    } else {
+      setErrorMessage(error || 'Failed to create session');
+    }
+
+    setIsLoading(false);
+  }, [user]);
+
+  const handleDuoKnockoutComplete = useCallback(async (picks: BracketPick[], winner: BracketMovie) => {
+    if (!duoSession) return;
+
+    // Get the top 4 from the bracket (winner + finalist + semi-final losers)
+    const ranking = bracketToRanking(duoBracketMovies.length, picks);
+    const final4: BracketMovie[] = ranking.slice(0, 4).map(idx => duoBracketMovies[idx]);
+
+    if (duoIsPersonOne) {
+      const { session } = await decideSessionService.submitPerson1Knockout(duoSession.id, picks, final4);
+      if (session) setDuoSession(session);
+      setStep('duo-waiting');
+    } else {
+      const { session } = await decideSessionService.submitPerson2Knockout(
+        duoSession.id, picks, final4, duoSession.person1_final4 || [],
+      );
+      if (session) setDuoSession(session);
+      setStep('duo-negotiate');
+    }
+  }, [duoSession, duoBracketMovies, duoIsPersonOne]);
+
+  const handleJoinDuo = useCallback(async (code: string) => {
+    setIsLoading(true);
+    const session = await decideSessionService.getByCode(code);
+    if (!session) {
+      setErrorMessage('Session not found');
+      setIsLoading(false);
+      return;
+    }
+
+    // Get 16 movies for Person 2 (no overlap with Person 1)
+    const p1Ids = new Set((session.person1_movies || []).map((m: BracketMovie) => m.id));
+
+    const { data: randomMovies } = await supabase
+      .from('movies')
+      .select('id, title, year, poster_url')
+      .lte('tier', 2)
+      .limit(80);
+
+    if (!randomMovies) {
+      setErrorMessage('Failed to load movies');
+      setIsLoading(false);
+      return;
+    }
+
+    const available = randomMovies.filter(m => !p1Ids.has(m.id));
+    const shuffled = [...available].sort(() => Math.random() - 0.5);
+    const p2Pool: BracketMovie[] = shuffled.slice(0, 16).map(m => ({
+      id: m.id, title: m.title, posterUrl: m.poster_url || '', year: m.year,
+    }));
+
+    const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'Person 2';
+    const bracket = createVsBracket(p2Pool);
+
+    const { session: updated } = await decideSessionService.joinSession(
+      session.id, user?.id || null, displayName, bracket,
+    );
+
+    if (updated) {
+      setDuoSession(updated);
+      setDuoBracketMovies(bracket);
+      setDuoIsPersonOne(false);
+      setStep('duo-knockout');
+    }
+
+    setIsLoading(false);
+  }, [user]);
+
+  // Poll for session updates during waiting/negotiation
+  useEffect(() => {
+    if (!duoSession || !['duo-waiting', 'duo-negotiate'].includes(step)) return;
+    const interval = setInterval(async () => {
+      const updated = await decideSessionService.getByCode(duoSession.code);
+      if (updated) {
+        setDuoSession(updated);
+        // Auto-advance if status changed
+        if (updated.status === 'negotiating' && step === 'duo-waiting') {
+          setStep('duo-negotiate');
+        }
+        if (updated.status === 'complete') {
+          setStep('duo-result');
+        }
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [duoSession?.code, step]);
+
   // RENDER: Mode Select
   if (step === 'mode-select') {
     return (
@@ -1541,10 +1689,11 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
 
               {/* Group — B card */}
               <View style={styles.modeCardWrapper}>
-                <Text style={styles.modeCardTopLabel}>Group</Text>
+                <Text style={styles.modeCardTopLabel}>Together</Text>
                 <Pressable
                   style={styles.modeCard}
-                  onPress={() => setStep('group-create')}
+                  onPress={handleStartDuo}
+                  disabled={isLoading}
                 >
                   <Image source={{ uri: MODE_POSTER_GROUP }} style={styles.modeCardPoster} resizeMode="cover" />
                   <View style={styles.modeCardPosterGradient} />
@@ -1552,7 +1701,7 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
                     <Text style={styles.modeCardBadgeText}>B</Text>
                   </View>
                 </Pressable>
-                <Text style={styles.modeCardBottomLabel}>with friends</Text>
+                <Text style={styles.modeCardBottomLabel}>with someone</Text>
               </View>
             </View>
           </Animated.View>
@@ -2240,6 +2389,130 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
               <Text style={styles.decideAgainText}>Decide Again</Text>
             </Pressable>
           </Animated.View>
+        </View>
+      </CinematicBackground>
+    );
+  }
+
+  // RENDER: Two-Person Decide — Knockout
+  if (step === 'duo-knockout') {
+    return (
+      <BracketPlay
+        movies={duoBracketMovies}
+        onComplete={handleDuoKnockoutComplete}
+      />
+    );
+  }
+
+  // RENDER: Two-Person Decide — Waiting
+  if (step === 'duo-waiting') {
+    return (
+      <CinematicBackground>
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl }]}>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: colors.textPrimary, letterSpacing: 2, textTransform: 'uppercase' as const, marginBottom: spacing.md }}>YOUR PICKS ARE IN</Text>
+          <Text style={{ fontSize: 12, color: colors.textMuted, letterSpacing: 0.5, textAlign: 'center' as const, marginBottom: spacing.xxl, textTransform: 'uppercase' as const }}>
+            SEND THE CODE TO YOUR PARTNER
+          </Text>
+          <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.accent, borderRadius: borderRadius.xxl, padding: spacing.xl, alignItems: 'center' as const, width: '100%', maxWidth: 300 }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.accent, letterSpacing: 2, marginBottom: spacing.md }}>SESSION CODE</Text>
+            <Text style={{ fontSize: 32, fontWeight: '800', color: colors.textPrimary, letterSpacing: 6 }}>{duoSession?.code || '...'}</Text>
+          </View>
+          <Pressable
+            style={{ backgroundColor: '#FFFFFF', borderRadius: borderRadius.xxl, paddingVertical: spacing.lg, paddingHorizontal: spacing.xxxl, marginTop: spacing.xl }}
+            onPress={async () => {
+              const msg = `Let's decide what to watch! Join my session on Aaybee\n\nCode: ${duoSession?.code}\n\nhttps://aaybee.netlify.app`;
+              try {
+                if (Platform.OS === 'web' && navigator?.share) {
+                  await navigator.share({ text: msg });
+                } else if (Platform.OS === 'web' && navigator?.clipboard) {
+                  await navigator.clipboard.writeText(msg);
+                } else {
+                  await Share.share({ message: msg });
+                }
+              } catch {}
+            }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '800', color: '#000', letterSpacing: 2 }}>SHARE CODE</Text>
+          </Pressable>
+          <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xxl }} />
+          <Text style={{ fontSize: 10, color: colors.textMuted, letterSpacing: 0.5, marginTop: spacing.sm, textTransform: 'uppercase' as const }}>WAITING FOR PARTNER...</Text>
+        </View>
+      </CinematicBackground>
+    );
+  }
+
+  // RENDER: Two-Person Decide — Negotiation
+  if (step === 'duo-negotiate' && duoSession) {
+    const pairs = duoSession.negotiation_pairs || [];
+    const log = duoSession.negotiation_log || [];
+    const currentPair = pairs[duoSession.current_pair_index];
+    const isMyTurnToPropose = (duoIsPersonOne && duoSession.current_proposer === 1) ||
+                               (!duoIsPersonOne && duoSession.current_proposer === 2);
+
+    // Find pending proposal (last log entry with response='pending')
+    const pendingEntry = log.length > 0 && log[log.length - 1].response === 'pending'
+      ? log[log.length - 1]
+      : undefined;
+
+    const totalRounds = Math.ceil(Math.log2((duoSession.person1_final4?.length || 4) + (duoSession.person2_final4?.length || 4)));
+    const completedPairs = log.filter(e => e.response !== 'pending').length;
+
+    if (!currentPair) {
+      return (
+        <CinematicBackground>
+          <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+            <ActivityIndicator color={colors.accent} />
+            <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: spacing.md, textTransform: 'uppercase' as const, letterSpacing: 1 }}>LOADING...</Text>
+          </View>
+        </CinematicBackground>
+      );
+    }
+
+    return (
+      <DecideNegotiation
+        pair={currentPair}
+        isProposer={isMyTurnToPropose}
+        pendingProposal={pendingEntry}
+        proposerName={duoSession.current_proposer === 1 ? duoSession.person1_name : (duoSession.person2_name || 'Partner')}
+        responderName={duoSession.current_proposer === 1 ? (duoSession.person2_name || 'Partner') : duoSession.person1_name}
+        roundLabel={`PAIR ${completedPairs + 1}`}
+        onPropose={async (movie) => {
+          await decideSessionService.submitProposal(
+            duoSession.id, movie, duoSession.current_pair_index,
+            duoIsPersonOne ? 1 : 2,
+          );
+        }}
+        onRespond={async (response) => {
+          await decideSessionService.submitResponse(duoSession.id, response);
+        }}
+        loading={isLoading}
+      />
+    );
+  }
+
+  // RENDER: Two-Person Decide — Result
+  if (step === 'duo-result' && duoSession?.winner_movie) {
+    const winner = duoSession.winner_movie;
+    return (
+      <CinematicBackground>
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl }]}>
+          <Text style={{ fontSize: 10, fontWeight: '700', color: colors.accent, letterSpacing: 2, marginBottom: spacing.lg }}>TONIGHT'S MOVIE</Text>
+          {winner.posterUrl ? (
+            <Image source={{ uri: winner.posterUrl }} style={{ width: 200, height: 300, borderRadius: borderRadius.xl, borderWidth: 2, borderColor: colors.accent, marginBottom: spacing.md }} />
+          ) : null}
+          <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textPrimary, letterSpacing: 1.5, textAlign: 'center' as const }}>{winner.title.toUpperCase()}</Text>
+          {winner.year && <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: spacing.xs }}>{winner.year}</Text>}
+
+          <Text style={{ fontSize: 10, color: colors.textMuted, letterSpacing: 0.5, marginTop: spacing.xl, textTransform: 'uppercase' as const }}>
+            {duoSession.person1_name.toUpperCase()} & {(duoSession.person2_name || 'PARTNER').toUpperCase()} DECIDED
+          </Text>
+
+          <Pressable
+            style={{ backgroundColor: '#FFFFFF', borderRadius: borderRadius.xxl, paddingVertical: spacing.lg, paddingHorizontal: spacing.xxxl, marginTop: spacing.xxl }}
+            onPress={() => setStep('mode-select')}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '800', color: '#000', letterSpacing: 2 }}>DECIDE AGAIN</Text>
+          </Pressable>
         </View>
       </CinematicBackground>
     );
