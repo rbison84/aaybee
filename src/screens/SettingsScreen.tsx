@@ -78,7 +78,7 @@ export function SettingsScreen({ onClose, onOpenDebug }: SettingsScreenProps) {
 
   return (
     <View style={styles.safeArea}>
-        <HeaderBar title="settings" onBack={onClose} />
+        {/* Header removed — persistent nav handles it */}
 
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           {/* Account Section */}

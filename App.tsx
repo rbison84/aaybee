@@ -60,7 +60,7 @@ import { colors, spacing, borderRadius, typography } from './src/theme/cinematic
 import Svg, { Path, Circle as SvgCircle, Line, Polygon, Polyline } from 'react-native-svg';
 
 // Navigation — SameGoat-style: landing page with PLAY + FRIENDS buttons
-type NavPhase = 'landing' | 'playMenu' | 'vs' | 'daily' | 'decide' | 'discover' | 'friends' | 'profile' | 'myGames' | 'rankings' | 'tasteProfile' | 'settings' | 'trailers';
+type NavPhase = 'landing' | 'playMenu' | 'vs' | 'daily' | 'decide' | 'discover' | 'friends' | 'profile' | 'myGames' | 'rankings' | 'tasteProfile' | 'settings' | 'trailers' | 'aaybee100';
 // Keep TabType for compatibility with components that reference it
 type TabType = 'vs' | 'daily' | 'decide' | 'discover' | 'compare' | 'rankings';
 
@@ -879,6 +879,7 @@ function MainApp() {
             onOpenAuth={() => { setShowAuth(true); }}
             onOpenTv={() => setPhase('trailers')}
             onOpenAaybee100={() => { closeAllOverlays(); setShowAaybee100(true); }}
+            onOpenAaybee100Nav={() => setPhase('aaybee100')}
             onOpenMyGames={() => setPhase('myGames')}
             onOpenRankings={() => setPhase('rankings')}
             onOpenTasteProfile={() => setPhase('tasteProfile')}
@@ -915,6 +916,13 @@ function MainApp() {
           </Suspense>
         );
 
+      case 'aaybee100':
+        return (
+          <Suspense fallback={<LoadingScreen />}>
+            <Aaybee100Screen onClose={() => setPhase('profile')} />
+          </Suspense>
+        );
+
       default:
         return (
           <LandingContent
@@ -942,6 +950,7 @@ function MainApp() {
     tasteProfile: { label: 'TASTE PROFILE', backTo: 'profile' },
     settings: { label: 'SETTINGS', backTo: 'profile' },
     trailers: { label: 'TRAILERS', backTo: 'profile' },
+    aaybee100: { label: 'AAYBEE 100', backTo: 'profile' },
   };
   const currentSubNav = subNavConfig[phase];
 

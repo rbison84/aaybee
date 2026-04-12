@@ -511,17 +511,7 @@ export function TvScreen({ onClose }: TvScreenProps) {
 
       {/* Header + channel bar */}
       <View style={styles.channelBar} onLayout={handleChannelBarLayout}>
-        <View style={styles.headerRow}>
-          <View style={{ flex: 1 }} />
-          <Text style={styles.title}>aaybee teevee</Text>
-          <View style={{ flex: 1, alignItems: 'flex-end' as const }}>
-            <Pressable style={styles.closeButton} onPress={onClose} hitSlop={8}>
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path d="M18 6L6 18M6 6l12 12" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" />
-              </Svg>
-            </Pressable>
-          </View>
-        </View>
+        {/* Title + close removed — persistent nav handles it */}
         <ChannelSelector
           channels={recentChannels}
           activeChannelId={activeChannelId}

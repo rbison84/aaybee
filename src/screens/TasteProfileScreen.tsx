@@ -258,7 +258,7 @@ Find your taste profile at aaybee.netlify.app`;
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <HeaderBar title="taste profile" onClose={onClose} />
+        {/* Header removed — persistent nav handles it */}
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>analyzing your taste...</Text>
@@ -270,7 +270,7 @@ Find your taste profile at aaybee.netlify.app`;
   if (rankedMovies.length < 10) {
     return (
       <View style={styles.container}>
-        <HeaderBar title="taste profile" onClose={onClose} />
+        {/* Header removed — persistent nav handles it */}
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>not enough data yet</Text>
           <Text style={styles.emptyText}>

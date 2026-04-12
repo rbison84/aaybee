@@ -23,6 +23,7 @@ interface ProfileScreenProps {
   onOpenAuth?: () => void;
   onOpenTv?: () => void;
   onOpenAaybee100?: () => void;
+  onOpenAaybee100Nav?: () => void;
   onOpenMyGames?: () => void;
   onOpenRankings?: () => void;
   onOpenTasteProfile?: () => void;
@@ -58,6 +59,14 @@ const IconTv = () => (
     <Line x1={12} y1={18} x2={12} y2={21} stroke="#000" strokeWidth={1.5} strokeLinecap="round" />
   </Svg>
 );
+const IconGrid = () => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Rect x={3} y={3} width={7} height={7} rx={1} stroke="#000" strokeWidth={1.5} />
+    <Rect x={14} y={3} width={7} height={7} rx={1} stroke="#000" strokeWidth={1.5} />
+    <Rect x={3} y={14} width={7} height={7} rx={1} stroke="#000" strokeWidth={1.5} />
+    <Rect x={14} y={14} width={7} height={7} rx={1} stroke="#000" strokeWidth={1.5} />
+  </Svg>
+);
 const IconGear = () => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <SvgCircle cx={12} cy={12} r={3} stroke="#000" strokeWidth={1.5} />
@@ -71,6 +80,7 @@ export function ProfileScreen({
   onOpenAuth,
   onOpenTv,
   onOpenAaybee100,
+  onOpenAaybee100Nav,
   onOpenMyGames,
   onOpenRankings,
   onOpenTasteProfile,
@@ -80,6 +90,7 @@ export function ProfileScreen({
   const buttons: { label: string; sub: string; icon: React.ReactNode; onPress?: () => void; hidden?: boolean }[] = [
     { label: 'MY GAMES', sub: 'current & history.', icon: <IconGamepad />, onPress: onOpenMyGames, hidden: isGuestMode },
     { label: 'RANKINGS', sub: 'your movies, decided.', icon: <IconBars />, onPress: onOpenRankings },
+    { label: 'AAYBEE 100', sub: 'the definitive list.', icon: <IconGrid />, onPress: onOpenAaybee100Nav },
     { label: 'TASTE PROFILE', sub: 'your movie DNA.', icon: <IconStar />, onPress: onOpenTasteProfile },
     { label: 'TRAILERS', sub: 'watch & discover.', icon: <IconTv />, onPress: onOpenTv },
     { label: 'SETTINGS', sub: 'account & preferences.', icon: <IconGear />, onPress: onOpenSettings },
