@@ -9,11 +9,11 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import Animated from 'react-native-reanimated';
 import React, { useState, useCallback, useEffect, useRef, useMemo, Suspense } from 'react';
 import { AppProvider, useAppStore } from './src/store/useAppStore';
-import { useLockedFeature } from './src/contexts/LockedFeatureContext';
+// LockedFeatureContext removed — no gated features
 import { AuthProvider } from './src/contexts/AuthContext';
 import { SyncProvider } from './src/contexts/SyncContext';
 import { DimensionsProvider, useAppDimensions, DESKTOP_SIDEBAR_WIDTH } from './src/contexts/DimensionsContext';
-import { OnboardingScreen } from './src/screens/OnboardingScreen';
+// OnboardingScreen removed — no mandatory onboarding gate
 import { MiniOnboardingScreen } from './src/screens/MiniOnboardingScreen';
 import { ComparisonScreen } from './src/screens/ComparisonScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
@@ -40,14 +40,14 @@ import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { WebContainer } from './src/components/WebContainer';
 import { MovieDetailProvider } from './src/contexts/MovieDetailContext';
 import { AlertProvider } from './src/contexts/AlertContext';
-import { LockedFeatureProvider } from './src/contexts/LockedFeatureContext';
+// LockedFeatureProvider removed — nothing is gated
 import { RecommendationTrackingProvider } from './src/contexts/RecommendationTrackingContext';
 import { MovieDetailModal } from './src/components/MovieDetailModal';
 import { QuickRankProvider } from './src/contexts/QuickRankContext';
 import { QuickRankModal } from './src/components/QuickRankModal';
 import { DevSettingsProvider, useDevSettings } from './src/contexts/DevSettingsContext';
 import { MovieSearchModal } from './src/components/MovieSearchModal';
-import { RankingRevealOverlay } from './src/components/comparison/RankingRevealOverlay';
+// RankingRevealOverlay removed — rankings always accessible
 import { useAuth } from './src/contexts/AuthContext';
 import { parseDeepLink, clearDeepLink, captureRefParam, listenForNativeRef, DeepLinkIntent } from './src/utils/deepLink';
 import { notificationService } from './src/services/notificationService';
@@ -572,16 +572,13 @@ const sidebarStyles = StyleSheet.create({
 });
 
 // Discover tab wrapper — Compare | Recommend tabs at top
-function DiscoverWrapper({ discoverTab, onTabChange, onOpenRanking, onOpenDecide, onOpenAuth, onOpenProfile, onOpenTop10Search, onOpenTop25, onOpenGlobal }: {
+function DiscoverWrapper({ discoverTab, onTabChange, onOpenRanking, onOpenDecide, onOpenAuth, onOpenProfile }: {
   discoverTab: 'compare' | 'recommend';
   onTabChange: (tab: 'compare' | 'recommend') => void;
   onOpenRanking: () => void;
   onOpenDecide: () => void;
   onOpenAuth: () => void;
   onOpenProfile: () => void;
-  onOpenTop10Search: () => void;
-  onOpenTop25: () => void;
-  onOpenGlobal: () => void;
 }) {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -609,9 +606,6 @@ function DiscoverWrapper({ discoverTab, onTabChange, onOpenRanking, onOpenDecide
           onOpenDecide={onOpenDecide}
           onOpenAuth={onOpenAuth}
           onOpenProfile={onOpenProfile}
-          onOpenTop10Search={onOpenTop10Search}
-          onOpenTop25={onOpenTop25}
-          onOpenGlobal={onOpenGlobal}
         />
       ) : (
         <Suspense fallback={<LoadingScreen />}>
@@ -628,7 +622,6 @@ function DiscoverWrapper({ discoverTab, onTabChange, onOpenRanking, onOpenDecide
 
 function MainApp() {
   const { hasCompletedOnboarding, isLoading, totalComparisons, postOnboardingComparisons, getStats } = useAppStore();
-  const { showLockedFeature } = useLockedFeature();
   const { unlockAllFeatures } = useDevSettings();
   const { isGuest: isAuthGuest, user } = useAuth();
   const [debugVisible, setDebugVisible] = useState(false);
@@ -638,7 +631,6 @@ function MainApp() {
   const [showAaybee100, setShowAaybee100] = useState(false);
   const [showTv, setShowTv] = useState(false);
   const [challengeInitialCode, setChallengeInitialCode] = useState<string | undefined>();
-  const [rankingReveal, setRankingReveal] = useState<'classic' | 'top25' | 'all' | null>(null);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const [showMiniOnboarding, setShowMiniOnboarding] = useState(false);
   const [discoverTab, setDiscoverTab] = useState<'compare' | 'recommend'>('compare');
@@ -657,29 +649,7 @@ function MainApp() {
   // Guest mode: landed via deep link without an account
   const isGuestMode = !hasCompletedOnboarding && !!deepLink && isAuthGuest;
 
-  // Navigation helpers for unlock milestones
-  const navigateToTop10Search = useCallback(() => {
-    setRankingReveal('classic');
-  }, []);
-
-  const navigateToTop25 = useCallback(() => {
-    setRankingReveal('top25');
-  }, []);
-
-  const navigateToGlobal = useCallback(() => {
-    setRankingReveal('all');
-  }, []);
-
-  // Ranking reveal overlay handlers
-  const handleRevealComplete = useCallback(() => {
-    // Navigate to profile (which now contains rankings)
-    setPhase('profile');
-    setRankingReveal(null);
-  }, []);
-
-  const handleRevealDismiss = useCallback(() => {
-    setRankingReveal(null);
-  }, []);
+  // Rankings always accessible — no unlock gates
 
   const toggleDebug = useCallback(() => {
     setDebugVisible(prev => !prev);
@@ -849,9 +819,6 @@ function MainApp() {
             onOpenDecide={() => setPhase('decide')}
             onOpenAuth={() => setShowAuth(true)}
             onOpenProfile={() => setPhase('profile')}
-            onOpenTop10Search={navigateToTop10Search}
-            onOpenTop25={navigateToTop25}
-            onOpenGlobal={navigateToGlobal}
           />
         );
 
@@ -1045,13 +1012,7 @@ function MainApp() {
       {/* Debug panel overlay */}
       <DebugPanel visible={debugVisible} onClose={() => setDebugVisible(false)} />
 
-      {/* Ranking reveal overlay */}
-      <RankingRevealOverlay
-        visible={rankingReveal !== null}
-        type={rankingReveal ?? 'classic'}
-        onComplete={handleRevealComplete}
-        onDismiss={handleRevealDismiss}
-      />
+      {/* Ranking reveal removed — rankings always accessible */}
 
       {/* Auth screen overlay */}
       {showAuth && (
@@ -1100,7 +1061,7 @@ export default function App() {
                 <SyncProvider>
                   <AppProvider>
                     <AlertProvider>
-                      <LockedFeatureProvider>
+
                         <DevSettingsProvider>
                           <RecommendationTrackingProvider>
                             <MovieDetailProvider>
@@ -1112,7 +1073,6 @@ export default function App() {
                             </MovieDetailProvider>
                           </RecommendationTrackingProvider>
                         </DevSettingsProvider>
-                      </LockedFeatureProvider>
                     </AlertProvider>
                     <StatusBar style="light" />
                   </AppProvider>

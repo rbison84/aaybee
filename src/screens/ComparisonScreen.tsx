@@ -19,7 +19,7 @@ import { VIBE_GENRE_MAP } from '../utils/genreAffinity';
 import { computeTasteAxes, getArchetype } from '../utils/tasteAxes';
 import { colors, spacing, borderRadius, typography, shadows, animation } from '../theme/cinematic';
 import { CinematicBackground, CinematicCard } from '../components/cinematic';
-import { MicroReward, RewardType, checkUnlockMilestone, checkTopMovieChange } from '../components/comparison/MicroReward';
+// MicroReward removed — no progressive unlock gates
 import { RecommendationRevealOverlay } from '../components/comparison/RecommendationRevealOverlay';
 import { useRecommendationTracking } from '../contexts/RecommendationTrackingContext';
 import { watchlistService } from '../services/watchlistService';
@@ -32,9 +32,6 @@ interface ComparisonScreenProps {
   onOpenDecide?: () => void;
   onOpenAuth?: () => void;
   onOpenProfile?: () => void;
-  onOpenTop10Search?: () => void;
-  onOpenTop25?: () => void;
-  onOpenGlobal?: () => void;
 }
 
 type SelectionState = 'idle' | 'selected' | 'transitioning';
@@ -45,7 +42,7 @@ let cachedPairHistory: Array<{ movieAId: string; movieBId: string }> = [];
 let cachedFutureQueue: Array<{ movieAId: string; movieBId: string }> = [];
 let cachedSwipeHistory: Array<{ movieId: string; position: 'A' | 'B'; replacedWithId: string }> = [];
 
-export function ComparisonScreen({ onOpenRanking, onOpenDiscover, onOpenDecide, onOpenAuth, onOpenProfile, onOpenTop10Search, onOpenTop25, onOpenGlobal }: ComparisonScreenProps) {
+export function ComparisonScreen({ onOpenRanking, onOpenDiscover, onOpenDecide, onOpenAuth, onOpenProfile }: ComparisonScreenProps) {
   const {
     movies,
     totalComparisons,
@@ -149,11 +146,7 @@ export function ComparisonScreen({ onOpenRanking, onOpenDiscover, onOpenDecide, 
   // Track movies added to watchlist during this session (for on-card cue)
   const [watchlistIds, setWatchlistIds] = useState<Set<string>>(new Set());
 
-  // Micro-reward state
-  const [activeReward, setActiveReward] = useState<{
-    type: RewardType;
-    data?: { movieTitle?: string; archetypeName?: string };
-  } | null>(null);
+  // Micro-reward removed — no progressive unlocks
 
   // Recommendation reveal overlay state
   const [showRevealOverlay, setShowRevealOverlay] = useState(false);
@@ -340,39 +333,9 @@ export function ComparisonScreen({ onOpenRanking, onOpenDiscover, onOpenDecide, 
     const newPostOnboarding = postOnboardingComparisons + 1;
     const recTrackResult = newPostOnboarding > 40 ? trackComparison() : { unlocked: false };
 
-    // Compute reward immediately (show after transition)
-    let pendingReward: { type: RewardType; data?: { movieTitle?: string; archetypeName?: string } } | null = null;
-
-    const unlockMilestone = checkUnlockMilestone(newPostOnboarding, postOnboardingComparisons);
-    if (unlockMilestone) {
-      if (unlockMilestone === 'unlock_recommendations') {
-        grantFirstRecommendation();
-      }
-      if (unlockMilestone === 'taste_preview') {
-        const ranked = getRankedMovies();
-        const movieData = ranked.map(m => ({
-          year: m.year,
-          genres: m.genres as string[],
-          userBeta: m.beta,
-        }));
-        const axes = computeTasteAxes(movieData);
-        const archetype = getArchetype(axes);
-        pendingReward = { type: unlockMilestone, data: { archetypeName: archetype.name } };
-      } else {
-        pendingReward = { type: unlockMilestone };
-      }
-    } else if (recTrackResult.unlocked && newPostOnboarding > 40) {
-      // Skip MicroReward, go straight to reveal overlay
+    // Grant first recommendation if threshold crossed
+    if (recTrackResult.unlocked && newPostOnboarding > 40) {
       setShowRevealOverlay(true);
-    } else {
-      const newRanked = getRankedMovies();
-      const newTop = newRanked[0];
-      if (newTop && prevTop && checkTopMovieChange(prevTop, newTop.id)) {
-        pendingReward = {
-          type: 'new_top_movie',
-          data: { movieTitle: newTop.title },
-        };
-      }
     }
 
     // Detect if either movie just crossed the 2-comparison ranking threshold
@@ -392,11 +355,6 @@ export function ComparisonScreen({ onOpenRanking, onOpenDiscover, onOpenDecide, 
     // Single transition after winner/loser animation completes
     // Aaybee 100 collections get extra time so the badge is visible
     setTimeout(() => {
-      // Show reward BEFORE loading next pair so overlay covers the transition
-      if (pendingReward) {
-        setActiveReward(pendingReward);
-      }
-
       // Replay from future queue if available, else generate fresh pair
       if (futureQueueRef.current.length > 0) {
         const [next, ...rest] = futureQueueRef.current;
@@ -725,10 +683,7 @@ export function ComparisonScreen({ onOpenRanking, onOpenDiscover, onOpenDecide, 
     setSwipeHistory(prev => prev.slice(0, -1));
   }, [swipeHistory, currentPair, selectionState, haptics, markMovieAsKnown]);
 
-  // Clear reward
-  const handleRewardComplete = useCallback(() => {
-    setActiveReward(null);
-  }, []);
+  // Reward handling removed — no progressive unlocks
 
   // Handle ranked moment — haptic only, badge pulse does the visual work
   const handleRanked = useCallback(() => {
@@ -944,23 +899,7 @@ export function ComparisonScreen({ onOpenRanking, onOpenDiscover, onOpenDecide, 
         </View>
 
 
-        {/* Micro Reward */}
-        {activeReward && (
-          <MicroReward
-            type={activeReward.type}
-            data={activeReward.data}
-            onComplete={handleRewardComplete}
-            onNavigate={
-              activeReward.type === 'unlock_top10_search' ? onOpenTop10Search :
-              activeReward.type === 'unlock_recommendations' ? onOpenDiscover :
-              activeReward.type === 'unlock_top25' ? onOpenTop25 :
-              activeReward.type === 'unlock_decide' ? onOpenDecide :
-              activeReward.type === 'unlock_all_rankings' ? onOpenGlobal :
-              activeReward.type === 'unlock_taste_profile' ? onOpenProfile :
-              undefined
-            }
-          />
-        )}
+        {/* Micro rewards removed — no progressive unlocks */}
 
         {/* Recommendation Reveal Overlay */}
         <RecommendationRevealOverlay
