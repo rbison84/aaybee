@@ -19,6 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppStore } from '../store/useAppStore';
 import { useAppDimensions } from '../contexts/DimensionsContext';
 import { useHaptics } from '../hooks/useHaptics';
 import { challengeService, getMatchTier, ChallengeMovie, FriendChallenge, ChallengeResults } from '../services/challengeService';
@@ -43,6 +44,7 @@ import {
   BracketMovie,
   BracketPick,
   createVsBracket,
+  extractBracketComparisons,
 } from '../utils/movieBracket';
 import { knockoutService, KnockoutChallenge } from '../services/knockoutService';
 
@@ -86,6 +88,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   const { user } = useAuth();
   const { isDesktop, isWeb } = useAppDimensions();
   const haptics = useHaptics();
+  const { recordComparison, movies: storeMovies, markMovieAsKnown } = useAppStore();
 
   const [step, setStep] = useState<ChallengeStep>(initialCode ? 'name' : 'home');
   const [loading, setLoading] = useState(false);
@@ -446,6 +449,34 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
     setLoading(false);
   }, [user?.id]);
 
+  // Record knockout bracket results into the taste graph
+  const recordBracketInTasteGraph = useCallback((movies: BracketMovie[], picks: BracketPick[]) => {
+    const comparisons = extractBracketComparisons(movies, picks);
+
+    for (const { winnerId, loserId } of comparisons) {
+      // Ensure both movies exist in the store before recording
+      const winnerInStore = storeMovies.get(winnerId);
+      const loserInStore = storeMovies.get(loserId);
+
+      if (winnerInStore && loserInStore) {
+        // Both in store — record the comparison (updates beta scores)
+        recordComparison(winnerId, loserId);
+      }
+      // If movies aren't in the store, we can't record — but they'll be
+      // picked up if the user encounters them in Compare later
+    }
+
+    // Prioritize uncertain/uncompared movies from the bracket in future Compare sessions
+    // by ensuring they're marked as known (triggers lastShownAt reset → freshness boost)
+    for (const movie of movies) {
+      const inStore = storeMovies.get(movie.id);
+      if (inStore && inStore.status !== 'known' && inStore.status !== 'unknown') {
+        // Movie is uncertain or uncompared — it'll get prioritized naturally
+        // via the pair selector's undercompared bonus (low totalComparisons = higher weight)
+      }
+    }
+  }, [storeMovies, recordComparison]);
+
   // Auto-start knockout when entering VS directly
   const autoStarted = useRef(false);
   useEffect(() => {
@@ -471,6 +502,9 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   const handleKnockoutComplete = useCallback(async (picks: BracketPick[], winner: BracketMovie) => {
     setBracketPicks(picks);
     setBracketWinner(winner);
+
+    // Record bracket comparisons into the taste graph (VS only, not Decide)
+    recordBracketInTasteGraph(bracketMovies, picks);
 
     // If this is a challenger completing a shared bracket, submit picks
     if (knockoutChallenge && knockoutChallenge.creator_picks) {
@@ -508,7 +542,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
     } else {
       setStep('knockout-result');
     }
-  }, [knockoutChallenge, bracketMovies, knockoutSeed, user, challengerName, challengedFriendId]);
+  }, [knockoutChallenge, bracketMovies, knockoutSeed, user, challengerName, challengedFriendId, recordBracketInTasteGraph]);
 
   const handleKnockoutPackSelect = useCallback(async (pack: CuratedPack) => {
     setLoading(true);

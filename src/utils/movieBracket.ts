@@ -322,6 +322,52 @@ function kendallTauDistance(rankingA: number[], rankingB: number[]): number {
 }
 
 /**
+ * Extract all pairwise winner/loser comparisons from bracket picks.
+ * Returns array of { winnerId, loserId } for each of the 15 matchups.
+ */
+export function extractBracketComparisons(
+  movies: BracketMovie[],
+  picks: BracketPick[]
+): { winnerId: string; loserId: string }[] {
+  const comparisons: { winnerId: string; loserId: string }[] = [];
+
+  const winners = new Map<string, number>();
+  for (const pick of picks) {
+    winners.set(`${pick.round}-${pick.match}`, pick.winnerIdx);
+  }
+
+  for (const pick of picks) {
+    let idxA: number;
+    let idxB: number;
+
+    if (pick.round === 0) {
+      idxA = pick.match * 2;
+      idxB = pick.match * 2 + 1;
+    } else {
+      const prevMatchA = pick.match * 2;
+      const prevMatchB = pick.match * 2 + 1;
+      const a = winners.get(`${pick.round - 1}-${prevMatchA}`);
+      const b = winners.get(`${pick.round - 1}-${prevMatchB}`);
+      if (a === undefined || b === undefined) continue;
+      idxA = a;
+      idxB = b;
+    }
+
+    const movieA = movies[idxA];
+    const movieB = movies[idxB];
+    if (!movieA || !movieB) continue;
+
+    const winnerIdx = pick.winnerIdx;
+    const winnerId = winnerIdx === idxA ? movieA.id : movieB.id;
+    const loserId = winnerIdx === idxA ? movieB.id : movieA.id;
+
+    comparisons.push({ winnerId, loserId });
+  }
+
+  return comparisons;
+}
+
+/**
  * Compare two bracket results using implicit ranking + Kendall tau.
  * Returns a taste match percentage (0-100, higher = more similar).
  */
