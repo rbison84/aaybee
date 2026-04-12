@@ -179,14 +179,22 @@ export function BracketResults({
           </View>
         </Animated.View>
 
-        {/* Secondary CTAs */}
-        <View style={styles.ctas}>
-          {isGuest && onSignUp && (
-            <Pressable style={styles.ctaSecondary} onPress={onSignUp}>
-              <Text style={styles.ctaSecondaryText}>SIGN UP TO SAVE</Text>
+        {/* Guest sign-up prompt — above share for maximum visibility */}
+        {isGuest && onSignUp && (
+          <Animated.View entering={FadeInDown.delay(500).duration(400)} style={styles.signUpPrompt}>
+            <Text style={styles.signUpPromptTitle}>SAVE YOUR BRACKET</Text>
+            <Text style={styles.signUpPromptSub}>SIGN UP TO TRACK YOUR TASTE, CHALLENGE FRIENDS, AND JOIN CIRCLES</Text>
+            <Pressable style={styles.signUpButton} onPress={onSignUp}>
+              <Text style={styles.signUpButtonText}>SIGN UP</Text>
             </Pressable>
-          )}
+            <Pressable onPress={() => {}}>
+              <Text style={styles.signUpSkip}>SKIP FOR NOW</Text>
+            </Pressable>
+          </Animated.View>
+        )}
 
+        {/* Action CTAs */}
+        <View style={styles.ctas}>
           {onPlayAgain && (
             <Pressable style={styles.ctaSecondary} onPress={onPlayAgain}>
               <Text style={styles.ctaSecondaryText}>PLAY AGAIN</Text>
@@ -392,6 +400,53 @@ const styles = StyleSheet.create({
   bracketItemTextWinner: {
     color: colors.accent,
     fontWeight: '700',
+  },
+
+  // Sign-up prompt for guests
+  signUpPrompt: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: borderRadius.xxl,
+    padding: spacing.xl,
+    alignItems: 'center',
+    marginBottom: spacing.xxl,
+  },
+  signUpPromptTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: 2,
+    marginBottom: spacing.sm,
+  },
+  signUpPromptSub: {
+    fontSize: 10,
+    fontWeight: '400',
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    lineHeight: 16,
+  },
+  signUpButton: {
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.xxl,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xxxl,
+    marginBottom: spacing.sm,
+  },
+  signUpButtonText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.background,
+    letterSpacing: 2,
+  },
+  signUpSkip: {
+    fontSize: 10,
+    fontWeight: '400',
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+    paddingVertical: spacing.xs,
   },
 
   // CTAs

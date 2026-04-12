@@ -34,9 +34,10 @@ interface FriendsScreenProps {
   onChallenge?: (friendId: string, friendName: string) => void;
   onAcceptChallenge?: (code: string) => void;
   onViewCrew?: (crewId: string) => void;
+  onOpenAuth?: () => void;
 }
 
-export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew }: FriendsScreenProps) {
+export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew, onOpenAuth }: FriendsScreenProps) {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<FriendsTabType>('friends');
 
@@ -174,7 +175,22 @@ export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew }: Fr
     setCreatingCrew(false);
   }, [user?.id, joinCrewCode]);
 
-  if (!user?.id) return null;
+  if (!user?.id) {
+    return (
+      <View style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl }}>
+          <Text style={{ fontSize: 24, fontWeight: '800', color: colors.textPrimary, letterSpacing: 2, marginBottom: spacing.md, textTransform: 'uppercase' as const }}>FRIENDS</Text>
+          <Text style={{ fontSize: 12, color: colors.textMuted, letterSpacing: 0.5, textAlign: 'center' as const, marginBottom: spacing.xxl, textTransform: 'uppercase' as const }}>SIGN IN TO CHALLENGE FRIENDS, JOIN CIRCLES, AND TRACK YOUR TASTE MATCH</Text>
+          <Pressable
+            style={{ backgroundColor: colors.accent, borderRadius: borderRadius.xxl, paddingVertical: spacing.lg, paddingHorizontal: spacing.xxxl }}
+            onPress={onOpenAuth}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.background, letterSpacing: 2 }}>SIGN IN</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   const renderFriendsTab = () => (
     <View style={styles.tabContent}>

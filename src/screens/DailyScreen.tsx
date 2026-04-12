@@ -51,6 +51,7 @@ import { QRCode } from '../components/QRCode';
 
 interface DailyScreenProps {
   onNavigateToCompare?: () => void;
+  onOpenAuth?: () => void;
 }
 
 // Simple event for debug reset to trigger data reload
@@ -59,7 +60,7 @@ export function triggerDailyRefresh() {
   _dailyRefreshListeners.forEach(fn => fn());
 }
 
-export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
+export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProps) {
   // Crew navigation
   const [crewView, setCrewView] = useState<'home' | 'detail'>('home');
   const [selectedCrew, setSelectedCrew] = useState<Crew | null>(null);
@@ -98,7 +99,7 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
 
   const { movies, recordComparison, undoLastComparison } = useAppStore();
   const haptics = useHaptics();
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
   const [guestId, setGuestId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1001,6 +1002,20 @@ export function DailyScreen({ onNavigateToCompare }: DailyScreenProps) {
           <Pressable style={[styles.copyButton, { marginTop: spacing.lg, marginBottom: spacing.sm }]} onPress={handleShareResult}>
             <Text style={styles.copyButtonText}>send to a friend</Text>
           </Pressable>
+
+          {/* Guest sign-up prompt */}
+          {(!user?.id || isGuest) && (
+            <View style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.accent, borderRadius: borderRadius.xxl, padding: spacing.xl, alignItems: 'center' as const, marginBottom: spacing.md }}>
+              <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary, letterSpacing: 2, marginBottom: spacing.sm, textTransform: 'uppercase' as const }}>TRACK YOUR STREAK</Text>
+              <Text style={{ fontSize: 10, color: colors.textMuted, letterSpacing: 0.5, textAlign: 'center' as const, marginBottom: spacing.lg }}>SIGN UP TO SAVE YOUR PROGRESS AND JOIN CIRCLES</Text>
+              <Pressable
+                style={{ backgroundColor: colors.accent, borderRadius: borderRadius.xxl, paddingVertical: spacing.md, paddingHorizontal: spacing.xxxl }}
+                onPress={() => onOpenAuth?.()}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.background, letterSpacing: 2 }}>SIGN UP</Text>
+              </Pressable>
+            </View>
+          )}
 
           {/* Stats */}
           <View style={styles.statsContainer}>

@@ -75,8 +75,9 @@ function LoadingScreen() {
 }
 
 // Persistent Top Bar — AAYBEE left, profile right. Always visible.
-function PersistentTopBar({ onProfile, onHome, hasBadge }: {
+function PersistentTopBar({ onProfile, onSignIn, onHome, hasBadge }: {
   onProfile: () => void;
+  onSignIn: () => void;
   onHome: () => void;
   hasBadge?: boolean;
 }) {
@@ -90,14 +91,20 @@ function PersistentTopBar({ onProfile, onHome, hasBadge }: {
         <Pressable onPress={onHome}>
           <Text style={navStyles.topLogo}>AAYBEE</Text>
         </Pressable>
-        <Pressable onPress={onProfile}>
-          <Text style={navStyles.profileLink}>
-            {isSignedIn ? (user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'profile').toLowerCase() : 'sign in'}
-          </Text>
-          {!!hasBadge && isSignedIn && (
-            <View style={navStyles.profileDot} />
-          )}
-        </Pressable>
+        {isSignedIn ? (
+          <Pressable onPress={onProfile}>
+            <Text style={navStyles.profileLink}>
+              {(user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'profile').toLowerCase()}
+            </Text>
+            {!!hasBadge && (
+              <View style={navStyles.profileDot} />
+            )}
+          </Pressable>
+        ) : (
+          <Pressable onPress={onSignIn} style={navStyles.signInPill}>
+            <Text style={navStyles.signInPillText}>SIGN IN</Text>
+          </Pressable>
+        )}
       </View>
       <View style={navStyles.topBarLine} />
     </View>
@@ -154,6 +161,19 @@ const navStyles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: colors.accent,
   } as any,
+  signInPill: {
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: borderRadius.round,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.md,
+  },
+  signInPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.accent,
+    letterSpacing: 1,
+  },
   topBarLine: {
     height: 1,
     backgroundColor: colors.border,
@@ -806,7 +826,7 @@ function MainApp() {
         );
 
       case 'daily':
-        return <DailyScreen />;
+        return <DailyScreen onOpenAuth={() => setShowAuth(true)} />;
 
       case 'decide':
         return (
@@ -838,6 +858,7 @@ function MainApp() {
       case 'friends':
         return (
           <FriendsScreen
+            onOpenAuth={() => setShowAuth(true)}
             onChallenge={(friendId, friendName) => {
               setChallengedFriendId(friendId);
               setChallengedFriendName(friendName);
@@ -1004,6 +1025,7 @@ function MainApp() {
           {/* Persistent top bar — always visible */}
           <PersistentTopBar
             onProfile={() => setPhase('profile')}
+            onSignIn={() => setShowAuth(true)}
             onHome={() => setPhase('landing')}
             hasBadge={pendingChallengeCount > 0}
           />
