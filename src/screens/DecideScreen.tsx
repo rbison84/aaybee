@@ -1493,27 +1493,8 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
 
   // Guest state — guests can join group rooms but not use personal mode
   const isInGroupFlow = step.startsWith('group-');
-  if (isGuest && !isInGroupFlow) {
-    return (
-      <CinematicBackground>
-        <View style={styles.container}>
-          <View style={styles.guestContainer}>
-            <Text style={styles.guestTitle}>sign in required</Text>
-            <Text style={styles.guestText}>create an account to use Personal Decide</Text>
-            <Pressable
-              style={styles.guestJoinButton}
-              onPress={() => setStep('group-create')}
-            >
-              <Text style={styles.guestJoinButtonText}>Join a Group instead</Text>
-            </Pressable>
-          </View>
-        </View>
-      </CinematicBackground>
-    );
-  }
-
-  // Personal mode locked state
-  const isPersonalLocked = unlockAllFeatures ? false : postOnboardingComparisons < MIN_COMPARISONS_FOR_DECIDE;
+  // Personal mode locked for guests or not enough comparisons
+  const isPersonalLocked = isGuest || (unlockAllFeatures ? false : postOnboardingComparisons < MIN_COMPARISONS_FOR_DECIDE);
 
   // RENDER: Mode Select
   if (step === 'mode-select') {
@@ -1521,8 +1502,8 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
       <CinematicBackground>
         <View style={styles.container}>
           <Animated.View style={styles.modeSelectContainer} entering={FadeIn.duration(300)}>
-            <Text style={styles.screenTitle}>decide</Text>
-            <Text style={styles.screenSubtitle}>what to watch tonight?</Text>
+            {/* Title removed — sub-nav handles it */}
+            <Text style={styles.screenSubtitle}>WHAT TO WATCH TONIGHT?</Text>
 
             <View style={styles.modeCardsRow}>
               {/* Personal — A card */}
@@ -1535,8 +1516,10 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
                       haptics.light();
                       showLockedFeature({
                         feature: 'personal decide',
-                        requirement: `compare ${MIN_COMPARISONS_FOR_DECIDE - postOnboardingComparisons} more movie${MIN_COMPARISONS_FOR_DECIDE - postOnboardingComparisons !== 1 ? 's' : ''} to unlock`,
-                        progress: {
+                        requirement: isGuest
+                          ? 'sign in and compare movies to unlock personal decide'
+                          : `compare ${MIN_COMPARISONS_FOR_DECIDE - postOnboardingComparisons} more movie${MIN_COMPARISONS_FOR_DECIDE - postOnboardingComparisons !== 1 ? 's' : ''} to unlock`,
+                        progress: isGuest ? undefined : {
                           current: postOnboardingComparisons,
                           required: MIN_COMPARISONS_FOR_DECIDE,
                         },
@@ -1584,12 +1567,8 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
       <CinematicBackground>
         <View style={styles.container}>
           <Animated.View style={styles.groupContainer} entering={FadeIn.duration(300)}>
-            <Pressable style={styles.backButton} onPress={() => setStep('mode-select')}>
-              <Text style={styles.backButtonText}>← back</Text>
-            </Pressable>
-
-            <Text style={styles.screenTitle}>group decide</Text>
-            <Text style={styles.screenSubtitle}>watch with friends</Text>
+            {/* Back button + title removed — sub-nav handles it */}
+            <Text style={styles.screenSubtitle}>WATCH WITH FRIENDS</Text>
 
             <View style={styles.groupOptions}>
               <Pressable
