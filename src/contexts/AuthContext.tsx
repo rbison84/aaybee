@@ -14,6 +14,7 @@ interface AuthContextType extends AuthState {
   signUp: (email: string, password: string, referredBy?: string) => Promise<authService.AuthResult>;
   signIn: (email: string, password: string) => Promise<authService.AuthResult>;
   signOut: () => Promise<authService.AuthResult>;
+  signInWithGoogle: () => Promise<authService.AuthResult>;
   resetPassword: (email: string) => Promise<authService.AuthResult>;
 }
 
@@ -79,6 +80,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return result;
   }, []);
 
+  const signInWithGoogle = useCallback(async () => {
+    return authService.signInWithGoogle();
+  }, []);
+
   const resetPassword = useCallback(async (email: string) => {
     return authService.resetPassword(email);
   }, []);
@@ -88,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     signIn,
     signOut,
+    signInWithGoogle,
     resetPassword,
   };
 

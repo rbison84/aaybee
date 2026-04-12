@@ -27,7 +27,7 @@ interface AuthScreenProps {
 }
 
 export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthScreenProps) {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const [step, setStep] = useState<AuthStep>(initialMode === 'signin' ? 'signin' : 'options');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -91,17 +91,36 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
     else if (step === 'signin') setStep('options');
   };
 
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    setError(null);
+    const result = await signInWithGoogle();
+    if (!result.success && result.error) {
+      setError(result.error.message);
+    }
+    setLoading(false);
+  };
+
   const renderOptions = () => (
     <Animated.View style={styles.stepContainer} entering={FadeIn.duration(300)}>
-      <Text style={styles.title}>Save your progress</Text>
+      <Text style={styles.title}>SAVE YOUR PROGRESS</Text>
 
       <View style={styles.buttonsContainer}>
+        <Pressable
+          style={[styles.socialButton, styles.googleButton]}
+          onPress={handleGoogleSignIn}
+          disabled={loading}
+        >
+          <Text style={styles.googleIcon}>G</Text>
+          <Text style={styles.googleText}>CONTINUE WITH GOOGLE</Text>
+        </Pressable>
+
         <Pressable
           style={[styles.socialButton, styles.emailButton]}
           onPress={() => setStep('email')}
           disabled={loading}
         >
-          <Text style={styles.emailText}>Sign up with email</Text>
+          <Text style={styles.emailText}>SIGN UP WITH EMAIL</Text>
         </Pressable>
       </View>
 

@@ -84,6 +84,34 @@ export async function signIn(email: string, password: string): Promise<AuthResul
 }
 
 /**
+ * Sign in with Google OAuth
+ */
+export async function signInWithGoogle(): Promise<AuthResult> {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: typeof window !== 'undefined' ? window.location.origin : 'https://aaybee.netlify.app',
+      },
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: { message: error.message, code: error.code },
+      };
+    }
+
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: { message: 'An unexpected error occurred' },
+    };
+  }
+}
+
+/**
  * Sign out the current user
  */
 export async function signOut(): Promise<AuthResult> {
