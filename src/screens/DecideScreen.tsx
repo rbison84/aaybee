@@ -1752,25 +1752,33 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
               <Text style={styles.orText}>or</Text>
 
               <View style={styles.joinSection}>
-                <Text style={styles.joinLabel}>Join with code</Text>
+                <Text style={styles.joinLabel}>JOIN WITH CODE</Text>
                 <TextInput
                   style={styles.codeInput}
                   value={joinCode}
-                  onChangeText={(text) => setJoinCode(text.toUpperCase().slice(0, 4))}
-                  placeholder="ABCD"
+                  onChangeText={(text) => setJoinCode(text.toUpperCase().slice(0, 6))}
+                  placeholder="ENTER CODE"
                   placeholderTextColor={colors.textMuted}
                   autoCapitalize="characters"
-                  maxLength={4}
+                  maxLength={6}
                 />
                 <Pressable
-                  style={[styles.joinButton, joinCode.length !== 4 && styles.joinButtonDisabled]}
-                  onPress={handleJoinRoom}
-                  disabled={isLoading || joinCode.length !== 4}
+                  style={[styles.joinButton, joinCode.length < 4 && styles.joinButtonDisabled]}
+                  onPress={async () => {
+                    if (joinCode.length === 6) {
+                      // Try duo session first
+                      await handleJoinDuo(joinCode);
+                    } else if (joinCode.length === 4) {
+                      // Try group room
+                      handleJoinRoom();
+                    }
+                  }}
+                  disabled={isLoading || joinCode.length < 4}
                 >
                   {isLoading ? (
                     <ActivityIndicator color={colors.background} size="small" />
                   ) : (
-                    <Text style={styles.joinButtonText}>Join</Text>
+                    <Text style={styles.joinButtonText}>JOIN</Text>
                   )}
                 </Pressable>
               </View>
