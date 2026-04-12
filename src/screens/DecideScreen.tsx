@@ -1689,11 +1689,10 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
 
               {/* Group — B card */}
               <View style={styles.modeCardWrapper}>
-                <Text style={styles.modeCardTopLabel}>Together</Text>
+                <Text style={styles.modeCardTopLabel}>Group</Text>
                 <Pressable
                   style={styles.modeCard}
-                  onPress={handleStartDuo}
-                  disabled={isLoading}
+                  onPress={() => setStep('group-create')}
                 >
                   <Image source={{ uri: MODE_POSTER_GROUP }} style={styles.modeCardPoster} resizeMode="cover" />
                   <View style={styles.modeCardPosterGradient} />
@@ -1701,7 +1700,7 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
                     <Text style={styles.modeCardBadgeText}>B</Text>
                   </View>
                 </Pressable>
-                <Text style={styles.modeCardBottomLabel}>with someone</Text>
+                <Text style={styles.modeCardBottomLabel}>with friends</Text>
               </View>
             </View>
           </Animated.View>
@@ -1720,6 +1719,19 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
             <Text style={styles.screenSubtitle}>WATCH WITH FRIENDS</Text>
 
             <View style={styles.groupOptions}>
+              {/* Two-person knockout → negotiation */}
+              <Pressable
+                style={styles.groupOptionCard}
+                onPress={handleStartDuo}
+                disabled={isLoading}
+              >
+                <Text style={styles.groupOptionTitle}>JUST TWO</Text>
+                <Text style={styles.groupOptionDescription}>
+                  knockout + negotiate with one person
+                </Text>
+              </Pressable>
+
+              {/* 3+ person room */}
               <Pressable
                 style={styles.groupOptionCard}
                 onPress={handleCreateRoom}
@@ -1729,9 +1741,9 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
                   <ActivityIndicator color={colors.accent} />
                 ) : (
                   <>
-                    <Text style={styles.groupOptionTitle}>Create Room</Text>
+                    <Text style={styles.groupOptionTitle}>GROUP (3+)</Text>
                     <Text style={styles.groupOptionDescription}>
-                      Start a new session and invite friends
+                      Create a room and invite friends
                     </Text>
                   </>
                 )}

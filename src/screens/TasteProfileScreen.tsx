@@ -286,7 +286,7 @@ Find your taste profile at aaybee.netlify.app`;
 
   return (
     <View style={styles.container}>
-      <HeaderBar title="taste profile" onClose={onClose} />
+      {/* Header removed — persistent nav handles it */}
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* ARCHETYPE + RADAR */}
