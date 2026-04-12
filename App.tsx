@@ -24,10 +24,12 @@ import { DecideScreen } from './src/screens/DecideScreen';
 import { ChallengeScreen } from './src/screens/ChallengeScreen';
 import { FriendsScreen } from './src/screens/FriendsScreen';
 import { MyGamesScreen } from './src/screens/MyGamesScreen';
+import { TasteProfileScreen } from './src/screens/TasteProfileScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
 
 // Lazy-load screens that are locked behind comparison thresholds or shown as overlays
 const DiscoverScreen = React.lazy(() => import('./src/screens/DiscoverScreen').then(m => ({ default: m.DiscoverScreen })));
-// UnifiedRankingsScreen now lazy-loaded inside ProfileScreen
+const UnifiedRankingsScreen = React.lazy(() => import('./src/screens/UnifiedRankingsScreen').then(m => ({ default: m.UnifiedRankingsScreen })));
 const Aaybee100Screen = React.lazy(() => import('./src/screens/Aaybee100Screen').then(m => ({ default: m.Aaybee100Screen })));
 const TvScreen = React.lazy(() => import('./src/screens/TvScreen').then(m => ({ default: m.TvScreen })));
 import { GlobalHeader } from './src/components/GlobalHeader';
@@ -58,7 +60,7 @@ import { colors, spacing, borderRadius, typography } from './src/theme/cinematic
 import Svg, { Path, Circle as SvgCircle, Line, Polygon, Polyline } from 'react-native-svg';
 
 // Navigation — SameGoat-style: landing page with PLAY + FRIENDS buttons
-type NavPhase = 'landing' | 'playMenu' | 'vs' | 'daily' | 'decide' | 'discover' | 'friends' | 'profile' | 'myGames';
+type NavPhase = 'landing' | 'playMenu' | 'vs' | 'daily' | 'decide' | 'discover' | 'friends' | 'profile' | 'myGames' | 'rankings' | 'tasteProfile' | 'settings' | 'trailers';
 // Keep TabType for compatibility with components that reference it
 type TabType = 'vs' | 'daily' | 'decide' | 'discover' | 'compare' | 'rankings';
 
@@ -66,7 +68,7 @@ function LoadingScreen() {
   return (
     <View style={styles.loadingContainer}>
       <Text style={styles.loadingTitle}>AAYBEE</Text>
-      <Text style={styles.loadingSubtitle}>(YOUR MOVIES, RANKED.)</Text>
+      <Text style={styles.loadingSubtitle}>(YOUR MOVIES, DECIDED.)</Text>
       <ActivityIndicator size="small" color={colors.textMuted} style={styles.loadingSpinner} />
     </View>
   );
@@ -247,7 +249,7 @@ function LandingContent({ onPlay, onFriends, onSignIn, friendsBadge }: {
       {/* Logo + tagline — upper area */}
       <View style={landingStyles.logoSection}>
         <Text style={landingStyles.logo}>AAYBEE</Text>
-        <Text style={landingStyles.tagline}>(your movies, ranked.)</Text>
+        <Text style={landingStyles.tagline}>(your movies, decided.)</Text>
       </View>
 
       {/* Stacked buttons */}
@@ -873,13 +875,44 @@ function MainApp() {
         return (
           <ProfileScreen
             onOpenDebug={toggleDebug}
-            onClose={() => setPhase('landing')}
             isGuestMode={isGuestMode}
             onOpenAuth={() => { setShowAuth(true); }}
-            onOpenTv={() => { closeAllOverlays(); setShowTv(true); }}
+            onOpenTv={() => setPhase('trailers')}
             onOpenAaybee100={() => { closeAllOverlays(); setShowAaybee100(true); }}
             onOpenMyGames={() => setPhase('myGames')}
+            onOpenRankings={() => setPhase('rankings')}
+            onOpenTasteProfile={() => setPhase('tasteProfile')}
+            onOpenSettings={() => setPhase('settings')}
           />
+        );
+
+      case 'rankings':
+        return (
+          <Suspense fallback={<LoadingScreen />}>
+            <UnifiedRankingsScreen
+              onContinueComparing={() => setPhase('discover')}
+              onOpenAaybee100={() => { closeAllOverlays(); setShowAaybee100(true); }}
+              initialTab="yours"
+              initialFilter="classic"
+            />
+          </Suspense>
+        );
+
+      case 'tasteProfile':
+        return (
+          <TasteProfileScreen onClose={() => setPhase('profile')} />
+        );
+
+      case 'settings':
+        return (
+          <SettingsScreen onClose={() => setPhase('profile')} onOpenDebug={toggleDebug} />
+        );
+
+      case 'trailers':
+        return (
+          <Suspense fallback={<LoadingScreen />}>
+            <TvScreen onClose={() => setPhase('profile')} />
+          </Suspense>
         );
 
       default:
@@ -905,6 +938,10 @@ function MainApp() {
     friends: { label: 'FRIENDS', backTo: 'landing' },
     profile: { label: 'PROFILE', backTo: 'landing' },
     myGames: { label: 'MY GAMES', backTo: 'profile' },
+    rankings: { label: 'RANKINGS', backTo: 'profile' },
+    tasteProfile: { label: 'TASTE PROFILE', backTo: 'profile' },
+    settings: { label: 'SETTINGS', backTo: 'profile' },
+    trailers: { label: 'TRAILERS', backTo: 'profile' },
   };
   const currentSubNav = subNavConfig[phase];
 
