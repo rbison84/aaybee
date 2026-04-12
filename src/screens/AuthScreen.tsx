@@ -18,7 +18,7 @@ import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
 import { CinematicBackground } from '../components/cinematic';
 import { getStoredRefParam, clearStoredRefParam } from '../utils/deepLink';
 
-type AuthStep = 'options' | 'email' | 'name' | 'password' | 'signin';
+type AuthStep = 'options' | 'email' | 'password-signin' | 'name' | 'password-signup';
 
 interface AuthScreenProps {
   onClose: () => void;
@@ -28,7 +28,8 @@ interface AuthScreenProps {
 
 export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthScreenProps) {
   const { signIn, signUp, signInWithGoogle } = useAuth();
-  const [step, setStep] = useState<AuthStep>(initialMode === 'signin' ? 'signin' : 'options');
+  const [step, setStep] = useState<AuthStep>('options');
+  const [isExistingUser, setIsExistingUser] = useState(false);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -83,12 +84,37 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
     }
   };
 
+  // Check if email exists in Supabase (to auto-detect signin vs signup)
+  const checkEmailExists = async (emailToCheck: string) => {
+    // Try to sign in with a wrong password — if error says "Invalid login credentials"
+    // the user exists. If "Email not confirmed" they exist too.
+    // If no user, Supabase returns a different error.
+    // Simpler approach: just go to password and handle errors there.
+    // For now, attempt OTP to check existence.
+    try {
+      const { error } = await supabase.auth.signInWithOtp({ email: emailToCheck, options: { shouldCreateUser: false } });
+      if (error) {
+        // "Signups not allowed for otp" or user doesn't exist
+        setIsExistingUser(false);
+        setStep('name');
+      } else {
+        // OTP sent means user exists
+        setIsExistingUser(true);
+        setStep('password-signin');
+      }
+    } catch {
+      // Fallback: assume new user
+      setIsExistingUser(false);
+      setStep('name');
+    }
+  };
+
   const handleBack = () => {
     setError(null);
     if (step === 'email') setStep('options');
     else if (step === 'name') setStep('email');
-    else if (step === 'password') setStep('name');
-    else if (step === 'signin') setStep('options');
+    else if (step === 'password-signup') setStep('name');
+    else if (step === 'password-signin') setStep('email');
   };
 
   const handleGoogleSignIn = async () => {
@@ -103,7 +129,7 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
 
   const renderOptions = () => (
     <Animated.View style={styles.stepContainer} entering={FadeIn.duration(300)}>
-      <Text style={styles.title}>SAVE YOUR PROGRESS</Text>
+      <Text style={styles.title}>CONTINUE</Text>
 
       <View style={styles.buttonsContainer}>
         <Pressable
@@ -120,81 +146,26 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
           onPress={() => setStep('email')}
           disabled={loading}
         >
-          <Text style={styles.emailText}>SIGN UP WITH EMAIL</Text>
+          <Text style={styles.emailText}>CONTINUE WITH EMAIL</Text>
         </Pressable>
       </View>
 
       {error && <Text style={styles.errorText}>{error}</Text>}
-
-      <Pressable style={styles.toggleButton} onPress={() => setStep('signin')}>
-        <Text style={styles.toggleText}>Already have an account? Sign in</Text>
-      </Pressable>
-
       {loading && <ActivityIndicator style={styles.loader} color={colors.accent} />}
-    </Animated.View>
-  );
-
-  const renderSignIn = () => (
-    <Animated.View style={styles.stepContainer} entering={FadeIn.duration(300)}>
-      <Text style={styles.title}>Welcome back</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor={colors.textMuted}
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-
-      <View style={styles.passwordContainer}>
-        <TextInput
-          style={styles.passwordInput}
-          placeholder="Password"
-          placeholderTextColor={colors.textMuted}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry={!showPassword}
-          autoCapitalize="none"
-        />
-        <Pressable style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
-          <Text style={styles.eyeIcon}>{showPassword ? '👁' : '👁‍🗨'}</Text>
-        </Pressable>
-      </View>
-
-      {error && <Text style={styles.errorText}>{error}</Text>}
-
-      <Pressable
-        style={[styles.continueButton, (!isValidEmail(email) || !password) && styles.continueButtonDisabled]}
-        onPress={handleSignIn}
-        disabled={!isValidEmail(email) || !password || loading}
-      >
-        {loading ? (
-          <ActivityIndicator color={colors.background} />
-        ) : (
-          <Text style={styles.continueButtonText}>Sign in</Text>
-        )}
-      </Pressable>
-
-      <Pressable style={styles.toggleButton} onPress={() => setStep('options')}>
-        <Text style={styles.toggleText}>Don't have an account? Sign up</Text>
-      </Pressable>
     </Animated.View>
   );
 
   const renderEmailStep = () => (
     <Animated.View style={styles.stepContainer} entering={FadeIn.duration(300)}>
       <Pressable style={styles.backButton} onPress={handleBack}>
-        <Text style={styles.backText}>← Back</Text>
+        <Text style={styles.backText}>{'<'} BACK</Text>
       </Pressable>
 
-      <Text style={styles.title}>What's your email?</Text>
+      <Text style={styles.title}>WHAT'S YOUR EMAIL?</Text>
 
       <TextInput
         style={styles.input}
-        placeholder="email@example.com"
+        placeholder="EMAIL@EXAMPLE.COM"
         placeholderTextColor={colors.textMuted}
         value={email}
         onChangeText={setEmail}
@@ -208,12 +179,60 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
 
       <Pressable
         style={[styles.continueButton, !isValidEmail(email) && styles.continueButtonDisabled]}
-        onPress={() => { setError(null); setStep('name'); }}
-        disabled={!isValidEmail(email)}
+        onPress={() => { setError(null); setLoading(true); checkEmailExists(email).finally(() => setLoading(false)); }}
+        disabled={!isValidEmail(email) || loading}
       >
-        <Text style={[styles.continueButtonText, !isValidEmail(email) && styles.continueButtonTextDisabled]}>
-          Continue
-        </Text>
+        {loading ? (
+          <ActivityIndicator color={colors.background} />
+        ) : (
+          <Text style={[styles.continueButtonText, !isValidEmail(email) && styles.continueButtonTextDisabled]}>
+            CONTINUE
+          </Text>
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+
+  const renderPasswordSignIn = () => (
+    <Animated.View style={styles.stepContainer} entering={FadeIn.duration(300)}>
+      <Pressable style={styles.backButton} onPress={handleBack}>
+        <Text style={styles.backText}>{'<'} BACK</Text>
+      </Pressable>
+
+      <Text style={styles.title}>WELCOME BACK</Text>
+
+      <View style={styles.passwordContainer}>
+        <TextInput
+          style={styles.passwordInput}
+          placeholder="PASSWORD"
+          placeholderTextColor={colors.textMuted}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+          autoCapitalize="none"
+          autoFocus
+        />
+        <Pressable style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
+          <Text style={styles.eyeIcon}>{showPassword ? '👁' : '👁‍🗨'}</Text>
+        </Pressable>
+      </View>
+
+      {error && <Text style={styles.errorText}>{error}</Text>}
+
+      <Pressable
+        style={[styles.continueButton, !password && styles.continueButtonDisabled]}
+        onPress={handleSignIn}
+        disabled={!password || loading}
+      >
+        {loading ? (
+          <ActivityIndicator color={colors.background} />
+        ) : (
+          <Text style={styles.continueButtonText}>SIGN IN</Text>
+        )}
+      </Pressable>
+
+      <Pressable style={styles.toggleButton} onPress={() => { setIsExistingUser(false); setStep('name'); }}>
+        <Text style={styles.toggleText}>NEW ACCOUNT? SIGN UP INSTEAD</Text>
       </Pressable>
     </Animated.View>
   );
@@ -221,14 +240,14 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
   const renderNameStep = () => (
     <Animated.View style={styles.stepContainer} entering={FadeIn.duration(300)}>
       <Pressable style={styles.backButton} onPress={handleBack}>
-        <Text style={styles.backText}>← Back</Text>
+        <Text style={styles.backText}>{'<'} BACK</Text>
       </Pressable>
 
-      <Text style={styles.title}>What's your name?</Text>
+      <Text style={styles.title}>WHAT'S YOUR NAME?</Text>
 
       <TextInput
         style={styles.input}
-        placeholder="Your name"
+        placeholder="YOUR NAME"
         placeholderTextColor={colors.textMuted}
         value={name}
         onChangeText={setName}
@@ -241,11 +260,11 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
 
       <Pressable
         style={[styles.continueButton, !name.trim() && styles.continueButtonDisabled]}
-        onPress={() => { setError(null); setStep('password'); }}
+        onPress={() => { setError(null); setStep('password-signup'); }}
         disabled={!name.trim()}
       >
         <Text style={[styles.continueButtonText, !name.trim() && styles.continueButtonTextDisabled]}>
-          Continue
+          CONTINUE
         </Text>
       </Pressable>
     </Animated.View>
@@ -254,15 +273,15 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
   const renderPasswordStep = () => (
     <Animated.View style={styles.stepContainer} entering={FadeIn.duration(300)}>
       <Pressable style={styles.backButton} onPress={handleBack}>
-        <Text style={styles.backText}>← Back</Text>
+        <Text style={styles.backText}>{'<'} BACK</Text>
       </Pressable>
 
-      <Text style={styles.title}>Create a password</Text>
+      <Text style={styles.title}>CREATE A PASSWORD</Text>
 
       <View style={styles.passwordContainer}>
         <TextInput
           style={styles.passwordInput}
-          placeholder="Password"
+          placeholder="PASSWORD"
           placeholderTextColor={colors.textMuted}
           value={password}
           onChangeText={setPassword}
@@ -289,7 +308,7 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
           <ActivityIndicator color={colors.background} />
         ) : (
           <Text style={[styles.continueButtonText, !isValidPassword && styles.continueButtonTextDisabled]}>
-            Create account
+            CREATE ACCOUNT
           </Text>
         )}
       </Pressable>
@@ -313,10 +332,10 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
           {/* Content */}
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             {step === 'options' && renderOptions()}
-            {step === 'signin' && renderSignIn()}
             {step === 'email' && renderEmailStep()}
+            {step === 'password-signin' && renderPasswordSignIn()}
             {step === 'name' && renderNameStep()}
-            {step === 'password' && renderPasswordStep()}
+            {step === 'password-signup' && renderPasswordStep()}
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
