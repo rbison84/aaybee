@@ -296,6 +296,16 @@ Find your taste profile at aaybee.netlify.app`;
           <TasteRadar axes={tasteAxes} />
         </Animated.View>
 
+        {/* SHARE TASTE PROFILE */}
+        <Animated.View entering={FadeInDown.delay(30)}>
+          <Pressable
+            style={{ backgroundColor: '#FFFFFF', borderRadius: 20, paddingVertical: 16, marginHorizontal: 16, marginBottom: 16, alignItems: 'center' as const, flexDirection: 'row' as const, justifyContent: 'center' as const, gap: 8 }}
+            onPress={handleShare}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '800', color: '#000', letterSpacing: 2, textTransform: 'uppercase' as const }}>SHARE YOUR TASTE</Text>
+          </Pressable>
+        </Animated.View>
+
         {/* TASTE DNA CARD */}
         <Animated.View entering={FadeInDown.delay(50)} style={styles.tasteDNACard}>
           <Text style={styles.sectionTitle}>taste dna</Text>

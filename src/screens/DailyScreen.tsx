@@ -819,7 +819,8 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
                     style={styles.nudgeButton}
                     onPress={async () => {
                       const waiting = members.length - playedCount;
-                      const msg = `${playedCount}/${members.length} have played today's daily on aaybee — waiting for ${waiting} more! join: https://aaybee.netlify.app/daily`;
+                      const crewUrl = `https://aaybee.netlify.app/crew/${selectedCrew.code}`;
+                      const msg = `${playedCount}/${members.length} played today's aaybee daily in "${selectedCrew.name}" — don't be last!\n\n${crewUrl}`;
                       if (Platform.OS === 'web' && navigator?.share) {
                         await navigator.share({ text: msg });
                       } else if (Platform.OS === 'web' && navigator?.clipboard) {

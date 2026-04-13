@@ -59,7 +59,7 @@ function ogHtml({
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${title}" />
   <meta name="twitter:description" content="${description}" />
-  <meta name="theme-color" content="#FF6B2B" />
+  <meta name="theme-color" content="#C8FF00" />
   <!-- Redirect humans who somehow land here -->
   <meta http-equiv="refresh" content="0;url=${url}" />
 </head>
@@ -84,7 +84,7 @@ async function handleDaily(requestUrl: URL): Promise<Response> {
   return ogHtml({
     title: "Aaybee Daily — Rank today's movies",
     description:
-      "How do you rank today's 9 movies? Play the daily movie ranking challenge and compare with the world.",
+      "How do you rank today's 9 movies? Play the daily movie ranking challenge and compare with your circle.",
     url: requestUrl.origin + "/daily",
   });
 }
@@ -94,6 +94,35 @@ async function handleVs(
   code: string
 ): Promise<Response> {
   const supabase = getSupabase();
+
+  // Check knockout_challenges first (new system)
+  const { data: knockout } = await supabase
+    .from("knockout_challenges")
+    .select("code, status, creator_name, challenger_name, match_percent, creator_winner")
+    .eq("code", code.toUpperCase())
+    .maybeSingle();
+
+  if (knockout) {
+    if (knockout.status === "complete" && knockout.match_percent != null) {
+      const winner = knockout.creator_winner as any;
+      return ogHtml({
+        title: `${knockout.creator_name} & ${knockout.challenger_name}: ${knockout.match_percent}% taste match`,
+        description: winner?.title
+          ? `Last movie standing: ${winner.title}. Can you beat their match?`
+          : `${knockout.match_percent}% taste match on a 16-movie knockout. Can you beat it?`,
+        url: requestUrl.origin + `/vs/${code}`,
+      });
+    }
+
+    // Pending challenge
+    return ogHtml({
+      title: `${knockout.creator_name} challenged you on Aaybee`,
+      description: "16 movies. 4 rounds. One last movie standing. Tap to play.",
+      url: requestUrl.origin + `/vs/${code}`,
+    });
+  }
+
+  // Fallback: check old vs_challenges table
   const { data: challenge } = await supabase
     .from("vs_challenges")
     .select("code, status, score, results, challenger_id")
@@ -105,7 +134,7 @@ async function handleVs(
   if (!challenge) {
     return ogHtml({
       title: "Aaybee VS — Movie Taste Challenge",
-      description: "Compare your movie taste with a friend on Aaybee.",
+      description: "16 movies. One standing. Compare your movie taste with a friend.",
       url: requestUrl.origin + `/vs/${code}`,
     });
   }
@@ -121,7 +150,6 @@ async function handleVs(
     });
   }
 
-  // Pending challenge
   let challengerName = "Someone";
   const { data: profile } = await supabase
     .from("user_profiles")
@@ -144,7 +172,6 @@ async function handleShare(
 ): Promise<Response> {
   const supabase = getSupabase();
 
-  // Try daily share codes first
   const { data: share } = await supabase
     .from("share_codes")
     .select("*")
@@ -161,8 +188,8 @@ async function handleShare(
   }
 
   return ogHtml({
-    title: "Aaybee — Your Personal Movie Ranking",
-    description: "Rank movies by comparing pairs. Build your ultimate movie list.",
+    title: "Aaybee — Your Movies, Decided",
+    description: "Rank movies, challenge friends, find your taste match.",
     url: requestUrl.origin + `/share/${code}`,
   });
 }
@@ -181,7 +208,7 @@ async function handleChallenge(
   if (!challenge) {
     return ogHtml({
       title: "Aaybee — Movie Taste Challenge",
-      description: "Rank 10 movies and see how your taste compares with a friend.",
+      description: "Rank movies and see how your taste compares with a friend.",
       url: requestUrl.origin + `/challenge/${code}`,
     });
   }
@@ -190,7 +217,7 @@ async function handleChallenge(
     const pct = Math.round(challenge.match_percent || 0);
     return ogHtml({
       title: `${challenge.creator_name} & ${challenge.challenger_name}: ${pct}% match`,
-      description: `They ranked 10 movies and matched ${pct}%. Can you do better?`,
+      description: `They ranked movies and matched ${pct}%. Can you do better?`,
       imageUrl: `${requestUrl.origin}/.netlify/functions/og-image?type=challenge&code=${code}`,
       url: requestUrl.origin + `/challenge/${code}`,
     });
@@ -205,6 +232,67 @@ async function handleChallenge(
       "Rank the same movies and see if your taste matches. No signup needed.",
     imageUrl: `${requestUrl.origin}/.netlify/functions/og-image?type=challenge&code=${code}`,
     url: requestUrl.origin + `/challenge/${code}`,
+  });
+}
+
+async function handleCrew(
+  requestUrl: URL,
+  code: string
+): Promise<Response> {
+  const supabase = getSupabase();
+  const { data: crew } = await supabase
+    .from("crews")
+    .select("name, code")
+    .eq("code", code.toUpperCase())
+    .maybeSingle();
+
+  if (crew) {
+    return ogHtml({
+      title: `Join "${crew.name}" on Aaybee`,
+      description: "Join this circle, play the daily, and see who has the hottest takes.",
+      url: requestUrl.origin + `/crew/${code}`,
+    });
+  }
+
+  return ogHtml({
+    title: "Join a Circle on Aaybee",
+    description: "Join a circle, play the daily movie ranking, and compare with friends.",
+    url: requestUrl.origin + `/crew/${code}`,
+  });
+}
+
+async function handleDecide(
+  requestUrl: URL,
+  code: string
+): Promise<Response> {
+  const supabase = getSupabase();
+  const { data: session } = await supabase
+    .from("decide_sessions")
+    .select("person1_name, status, winner_movie")
+    .eq("code", code.toUpperCase())
+    .maybeSingle();
+
+  if (session?.status === "complete" && session.winner_movie) {
+    const winner = session.winner_movie as any;
+    return ogHtml({
+      title: `Tonight's movie: ${winner.title}`,
+      description: `${session.person1_name} decided on Aaybee. Start your own session.`,
+      url: requestUrl.origin + `/decide/${code}`,
+    });
+  }
+
+  if (session) {
+    return ogHtml({
+      title: `${session.person1_name} wants to decide what to watch`,
+      description: "Join their session — 16 movies each, then negotiate until one is left.",
+      url: requestUrl.origin + `/decide/${code}`,
+    });
+  }
+
+  return ogHtml({
+    title: "Decide what to watch — Aaybee",
+    description: "Can't pick a movie? Knockout + negotiate with a friend until one is left.",
+    url: requestUrl.origin + `/decide/${code}`,
   });
 }
 
@@ -248,6 +336,18 @@ export default async function handler(
     const challengeMatch = path.match(/^\/challenge\/([a-z0-9]{4,8})$/);
     if (challengeMatch) {
       return await handleChallenge(url, challengeMatch[1]);
+    }
+
+    // /crew/CODE
+    const crewMatch = path.match(/^\/crew\/([a-z0-9]{4,8})$/);
+    if (crewMatch) {
+      return await handleCrew(url, crewMatch[1]);
+    }
+
+    // /decide/CODE
+    const decideMatch = path.match(/^\/decide\/([a-z0-9]{4,8})$/);
+    if (decideMatch) {
+      return await handleDecide(url, decideMatch[1]);
     }
   } catch (err) {
     console.error("[og-handler] Error:", err);
