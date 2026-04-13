@@ -248,6 +248,25 @@ export const notificationService = {
   },
 
   /**
+   * Notify a user that someone they invited just joined.
+   */
+  async notifyNewReferral(referrerId: string, newUserName: string): Promise<void> {
+    try {
+      const token = await getUserPushToken(referrerId);
+      if (token) {
+        await sendPushNotification(
+          token,
+          'Your friend joined!',
+          `${newUserName} just joined Aaybee — challenge them to see who has better taste`,
+          { type: 'referral' },
+        );
+      }
+    } catch (err) {
+      console.error('[NotificationService] notifyNewReferral error:', err);
+    }
+  },
+
+  /**
    * Listen for notification taps. Returns a cleanup function.
    */
   addNotificationResponseListener(

@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import type { User, Session } from '@supabase/supabase-js';
 import { activityService } from './activityService';
+import { friendService } from './friendService';
+import { notificationService } from './notificationService';
 
 export interface AuthError {
   message: string;
@@ -38,6 +40,15 @@ export async function signUp(email: string, password: string, referredBy?: strin
       const profileUpdate: Record<string, string> = { email };
       if (referredBy) profileUpdate.referred_by = referredBy;
       supabase.from('user_profiles').update(profileUpdate).eq('id', data.user.id).then();
+
+      // Close the referral loop: auto-connect with the person who invited them
+      if (referredBy) {
+        // Auto-send friend request to referrer
+        friendService.sendFriendRequest(referredBy).catch(() => {});
+
+        // Notify referrer that their invite worked
+        notificationService.notifyNewReferral(referredBy, email.split('@')[0] || 'Someone').catch(() => {});
+      }
     }
 
     return {

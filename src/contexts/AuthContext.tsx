@@ -1,6 +1,10 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import * as authService from '../services/authService';
+import { friendService } from '../services/friendService';
+import { notificationService } from '../services/notificationService';
+import { activityService } from '../services/activityService';
+import { getStoredRefParam, clearStoredRefParam } from '../utils/deepLink';
 import type { User, Session } from '@supabase/supabase-js';
 
 interface AuthState {
@@ -40,15 +44,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     });
 
-    // Listen for auth changes
+    // Listen for auth changes (including OAuth redirects)
+    const referralProcessed = new Set<string>();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      async (event, session) => {
         setState(prev => ({
           ...prev,
           user: session?.user ?? null,
           session,
           isGuest: !session,
         }));
+
+        // Handle referral loop for OAuth signups (Google, etc.)
+        if (event === 'SIGNED_IN' && session?.user?.id && !referralProcessed.has(session.user.id)) {
+          referralProcessed.add(session.user.id);
+          try {
+            const ref = await getStoredRefParam();
+            if (ref && ref !== session.user.id) {
+              // Update profile with referral
+              const email = session.user.email || '';
+              await supabase.from('user_profiles').update({
+                referred_by: ref,
+                email,
+              }).eq('id', session.user.id);
+
+              // Auto-connect with referrer
+              await friendService.sendFriendRequest(ref).catch(() => {});
+
+              // Notify referrer
+              const displayName = session.user.user_metadata?.display_name || email.split('@')[0] || 'Someone';
+              await notificationService.notifyNewReferral(ref, displayName).catch(() => {});
+
+              // Log joined activity
+              await activityService.logJoined(session.user.id).catch(() => {});
+
+              clearStoredRefParam();
+            }
+          } catch {}
+        }
       }
     );
 
