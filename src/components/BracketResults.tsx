@@ -23,7 +23,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, borderRadius } from '../theme/cinematic';
 import { QRCode } from './QRCode';
 import { friendService, FriendWithProfile } from '../services/friendService';
-import { knockoutService } from '../services/knockoutService';
+import { knockoutService, KnockoutChallenge } from '../services/knockoutService';
 import {
   BracketMovie,
   BracketPick,
@@ -40,8 +40,7 @@ interface BracketResultsProps {
   sameWinner?: boolean;
   creatorName?: string;
   challengerName?: string;
-  challengeId?: string;
-  challengeCode?: string;
+  knockoutChallenge?: KnockoutChallenge | null;
   isGuest?: boolean;
   onSignUp?: () => void;
   onPlayAgain?: () => void;
@@ -59,8 +58,7 @@ export function BracketResults({
   sameWinner,
   creatorName,
   challengerName,
-  challengeId,
-  challengeCode,
+  knockoutChallenge: knockoutChallengeData,
   isGuest,
   onSignUp,
   onPlayAgain,
@@ -178,9 +176,9 @@ export function BracketResults({
                   style={styles.friendRow}
                   onPress={async () => {
                     haptics.light();
-                    if (challengeId && challengeCode) {
+                    if (knockoutChallengeData) {
                       await knockoutService.directChallengeToFriend(
-                        challengeId, challengeCode, friend.friend_id, displayName,
+                        knockoutChallengeData, friend.friend_id, displayName,
                       );
                       setChallengedFriends(prev => new Set(prev).add(friend.friend_id));
                     } else {

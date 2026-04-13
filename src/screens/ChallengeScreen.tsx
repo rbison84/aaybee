@@ -1606,8 +1606,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
               sameWinner={knockoutChallenge?.same_winner ?? undefined}
               creatorName={knockoutChallenge?.creator_name}
               challengerName={knockoutChallenge?.challenger_name ?? undefined}
-              challengeId={knockoutChallenge?.id}
-              challengeCode={knockoutChallenge?.code}
+              knockoutChallenge={knockoutChallenge}
               isGuest={!user?.id}
               onSignUp={onOpenAuth}
               onPlayAgain={handleStartKnockout}

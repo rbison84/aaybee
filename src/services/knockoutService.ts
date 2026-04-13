@@ -166,28 +166,41 @@ export const knockoutService = {
 
   /**
    * Direct an existing challenge to a specific friend.
-   * Sets challenged_user_id and sends push notification.
+   * Creates a new knockout_challenges row with the same movies/seed/picks
+   * so each friend gets their own challenge to respond to.
    */
   async directChallengeToFriend(
-    challengeId: string,
-    challengeCode: string,
+    sourceChallenge: KnockoutChallenge,
     friendId: string,
     creatorName: string,
-  ): Promise<{ success: boolean }> {
-    const { error } = await supabase
+  ): Promise<{ success: boolean; code?: string }> {
+    const code = generateCode();
+
+    const { data, error } = await supabase
       .from('knockout_challenges')
-      .update({ challenged_user_id: friendId })
-      .eq('id', challengeId);
+      .insert({
+        code,
+        movies: sourceChallenge.movies,
+        seed: sourceChallenge.seed,
+        creator_id: sourceChallenge.creator_id,
+        creator_name: sourceChallenge.creator_name,
+        creator_picks: sourceChallenge.creator_picks,
+        creator_winner: sourceChallenge.creator_winner,
+        challenged_user_id: friendId,
+        status: 'waiting',
+      })
+      .select()
+      .single();
 
     if (error) {
       console.error('[Knockout] directChallengeToFriend failed:', error);
       return { success: false };
     }
 
-    // Send push notification
-    notificationService.notifyKnockoutChallenge(friendId, creatorName, challengeCode).catch(() => {});
+    // Send push notification with the new code
+    notificationService.notifyKnockoutChallenge(friendId, creatorName, code).catch(() => {});
 
-    return { success: true };
+    return { success: true, code };
   },
 
   /**
