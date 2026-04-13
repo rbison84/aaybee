@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { BracketMovie, BracketPick, compareBrackets } from '../utils/movieBracket';
 import { challengeService } from './challengeService';
+import { notificationService } from './notificationService';
 
 // ============================================
 // TYPES
@@ -82,7 +83,13 @@ export const knockoutService = {
       return { challenge: null, error: error.message };
     }
 
-    return { challenge: data as KnockoutChallenge };
+    // Push notify the challenged user
+    const result = data as KnockoutChallenge;
+    if (challengedUserId) {
+      notificationService.notifyKnockoutChallenge(challengedUserId, creatorName, code).catch(() => {});
+    }
+
+    return { challenge: result };
   },
 
   /**
@@ -141,6 +148,16 @@ export const knockoutService = {
         result.creator_id,
         challengerId,
         comparison.matchPercent,
+      ).catch(() => {});
+    }
+
+    // Notify creator that challenge was completed
+    if (result.creator_id) {
+      notificationService.notifyKnockoutCompleted(
+        result.creator_id,
+        challengerName,
+        comparison.matchPercent,
+        result.code,
       ).catch(() => {});
     }
 

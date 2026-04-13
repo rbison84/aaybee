@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { calculateSmartCorrelation } from '../utils/correlationUtils';
 import { getMovies } from './movieCache';
+import { notificationService } from './notificationService';
 
 // ============================================
 // TYPES
@@ -115,6 +116,10 @@ export const friendService = {
         console.error('[FriendService] Send request error:', error);
         return { success: false, error: 'Failed to send request' };
       }
+
+      // Notify the target user
+      const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Someone';
+      notificationService.notifyFriendRequest(friendId, displayName).catch(() => {});
 
       return { success: true };
     } catch (error) {

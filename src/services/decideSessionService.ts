@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { BracketMovie, BracketPick, createVsBracket } from '../utils/movieBracket';
+import { notificationService } from './notificationService';
 
 // ============================================
 // TYPES
@@ -229,7 +230,18 @@ export const decideSessionService = {
       .single();
 
     if (error) return { session: null, error: error.message };
-    return { session: data as DecideSession };
+
+    // Notify the responder it's their turn
+    const session = data as DecideSession;
+    const responderId = proposer === 1 ? session.person2_id : session.person1_id;
+    const proposerName = proposer === 1 ? session.person1_name : (session.person2_name || 'Partner');
+    if (responderId) {
+      notificationService.notifyDecideTurn(
+        responderId, proposerName, proposedMovie.title, session.code,
+      ).catch(() => {});
+    }
+
+    return { session };
   },
 
   /**

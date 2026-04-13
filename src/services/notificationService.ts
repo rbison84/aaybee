@@ -180,6 +180,99 @@ export const notificationService = {
   },
 
   /**
+   * Notify a user that someone sent them a knockout challenge.
+   */
+  async notifyKnockoutChallenge(
+    challengedUserId: string,
+    challengerName: string,
+    challengeCode: string,
+  ): Promise<void> {
+    try {
+      const token = await getUserPushToken(challengedUserId);
+      if (token) {
+        await sendPushNotification(
+          token,
+          `${challengerName} challenged you!`,
+          '16 movies. One standing. Tap to play.',
+          { type: 'vs', code: challengeCode },
+        );
+      }
+    } catch (err) {
+      console.error('[NotificationService] notifyKnockoutChallenge error:', err);
+    }
+  },
+
+  /**
+   * Notify the creator that their knockout challenge was completed.
+   */
+  async notifyKnockoutCompleted(
+    creatorId: string,
+    challengerName: string,
+    matchPercent: number,
+    challengeCode: string,
+  ): Promise<void> {
+    try {
+      const token = await getUserPushToken(creatorId);
+      if (token) {
+        await sendPushNotification(
+          token,
+          `${challengerName} played your challenge!`,
+          `${matchPercent}% taste match — see the results`,
+          { type: 'vs', code: challengeCode },
+        );
+      }
+    } catch (err) {
+      console.error('[NotificationService] notifyKnockoutCompleted error:', err);
+    }
+  },
+
+  /**
+   * Notify a user that they received a friend request.
+   */
+  async notifyFriendRequest(
+    targetUserId: string,
+    fromUserName: string,
+  ): Promise<void> {
+    try {
+      const token = await getUserPushToken(targetUserId);
+      if (token) {
+        await sendPushNotification(
+          token,
+          'New friend request',
+          `${fromUserName} wants to connect on Aaybee`,
+          { type: 'friend_request' },
+        );
+      }
+    } catch (err) {
+      console.error('[NotificationService] notifyFriendRequest error:', err);
+    }
+  },
+
+  /**
+   * Notify a user it's their turn in a Decide negotiation.
+   */
+  async notifyDecideTurn(
+    targetUserId: string,
+    proposerName: string,
+    movieTitle: string,
+    sessionCode: string,
+  ): Promise<void> {
+    try {
+      const token = await getUserPushToken(targetUserId);
+      if (token) {
+        await sendPushNotification(
+          token,
+          `${proposerName} picked ${movieTitle}`,
+          'Agree or disagree?',
+          { type: 'decide', code: sessionCode },
+        );
+      }
+    } catch (err) {
+      console.error('[NotificationService] notifyDecideTurn error:', err);
+    }
+  },
+
+  /**
    * Notify circle members who haven't played today that others have.
    */
   async notifyCircleDaily(crewId: string, crewName: string, playedCount: number, totalCount: number): Promise<void> {

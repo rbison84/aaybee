@@ -55,6 +55,7 @@ import { vsService } from './src/services/vsService';
 import { friendService } from './src/services/friendService';
 import { challengeService } from './src/services/challengeService';
 import { knockoutService } from './src/services/knockoutService';
+import { crewService } from './src/services/crewService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius, typography } from './src/theme/cinematic';
 import Svg, { Path, Circle as SvgCircle, Line, Polygon, Polyline } from 'react-native-svg';
@@ -692,6 +693,15 @@ function MainApp() {
       setPhase('vs');
     } else if (deepLink.type === 'share') {
       setPhase('daily');
+    } else if (deepLink.type === 'crew' && deepLink.code) {
+      // Auto-join circle and go to daily
+      if (user?.id) {
+        crewService.joinCrew(user.id, deepLink.code).catch(() => {});
+      }
+      setPhase('daily');
+    } else if (deepLink.type === 'decide' && deepLink.code) {
+      // Route to decide with session code
+      setPhase('decide');
     }
   }, [deepLink, isLoading]);
 
