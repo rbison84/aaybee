@@ -802,6 +802,7 @@ function MainApp() {
             autoStartKnockout={!challengeInitialCode}
             challengedFriendId={challengedFriendId}
             challengedFriendName={challengedFriendName}
+            onGoHome={() => setPhase('landing')}
           />
         );
 

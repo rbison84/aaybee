@@ -124,7 +124,10 @@ export function BracketPlay({
         <View style={[styles.progressBarFill, { width: `${(picks.length / 15) * 100}%` as any }]} />
       </View>
 
-      {/* Cards — side by side like Compare */}
+      {/* Prompt — matching Compare screen */}
+      <Text style={styles.prompt}>WHICH MOVIE DO YOU PREFER?</Text>
+
+      {/* Cards — side by side like Compare with A/B labels */}
       {showContent ? (
         <Animated.View style={styles.cardsContainer} entering={FadeIn.duration(150)}>
           {/* Movie A */}
@@ -144,13 +147,18 @@ export function BracketPlay({
                   <Text style={styles.posterPlaceholderText}>{matchup.movieA.title.charAt(0)}</Text>
                 </View>
               )}
+              <View style={[styles.labelBadge, { backgroundColor: '#E5A84B' }]}>
+                <Text style={styles.labelText}>A</Text>
+              </View>
             </View>
-            <Text style={styles.movieTitle} numberOfLines={2}>
-              {matchup.movieA.title.toUpperCase()}
-            </Text>
-            {matchup.movieA.year && (
-              <Text style={styles.movieYear}>{matchup.movieA.year}</Text>
-            )}
+            <View style={styles.movieInfo}>
+              <Text style={styles.movieTitle} numberOfLines={2}>
+                {matchup.movieA.title.toUpperCase()}
+              </Text>
+              {matchup.movieA.year && (
+                <Text style={styles.movieYear}>{matchup.movieA.year}</Text>
+              )}
+            </View>
           </Pressable>
 
           {/* Movie B */}
@@ -170,13 +178,18 @@ export function BracketPlay({
                   <Text style={styles.posterPlaceholderText}>{matchup.movieB.title.charAt(0)}</Text>
                 </View>
               )}
+              <View style={[styles.labelBadge, { backgroundColor: '#4ABFED' }]}>
+                <Text style={styles.labelText}>B</Text>
+              </View>
             </View>
-            <Text style={styles.movieTitle} numberOfLines={2}>
-              {matchup.movieB.title.toUpperCase()}
-            </Text>
-            {matchup.movieB.year && (
-              <Text style={styles.movieYear}>{matchup.movieB.year}</Text>
-            )}
+            <View style={styles.movieInfo}>
+              <Text style={styles.movieTitle} numberOfLines={2}>
+                {matchup.movieB.title.toUpperCase()}
+              </Text>
+              {matchup.movieB.year && (
+                <Text style={styles.movieYear}>{matchup.movieB.year}</Text>
+              )}
+            </View>
           </Pressable>
         </Animated.View>
       ) : (
@@ -236,12 +249,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     borderRadius: 1,
   },
+  prompt: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    letterSpacing: 0.5,
+  },
   cardsContainer: {
     flex: 1,
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
     gap: spacing.md,
+    justifyContent: 'center',
   },
   movieCard: {
     flex: 1,
@@ -271,16 +293,34 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textTransform: 'uppercase',
   },
+  labelBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  labelText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.background,
+  },
+  movieInfo: {
+    paddingTop: spacing.sm,
+    paddingHorizontal: 2,
+    alignItems: 'center',
+  },
   movieTitle: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: colors.textPrimary,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     textAlign: 'center',
-    paddingHorizontal: spacing.xs,
-    paddingTop: spacing.sm,
-    lineHeight: 16,
+    lineHeight: 18,
   },
   movieYear: {
     fontSize: 10,
