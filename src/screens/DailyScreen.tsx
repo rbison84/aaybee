@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { StyleSheet, Text, View, Pressable, Image, Share, ScrollView, Platform, TextInput } from 'react-native';
+import { StyleSheet, Text, View, Pressable, Image, Share, ScrollView, Platform, TextInput, ActivityIndicator } from 'react-native';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -1263,10 +1263,37 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
     );
   }
 
-  // Crews home
+  // Default: show today's category info or a "completed" message
+  // (circles management is now in the Friends screen)
   return (
     <View style={styles.container}>
-      {renderCrewsHome()}
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl }}>
+        {featuredCategory && completedCategoryIds.includes(featuredCategory.id) ? (
+          <>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.textPrimary, letterSpacing: 2, textTransform: 'uppercase' as const, marginBottom: spacing.md }}>
+              DAILY COMPLETE
+            </Text>
+            <Text style={{ fontSize: 12, color: colors.textMuted, letterSpacing: 0.5, textAlign: 'center' as const, marginBottom: spacing.xxl, textTransform: 'uppercase' as const }}>
+              COME BACK TOMORROW FOR A NEW CATEGORY
+            </Text>
+            {streakData && streakData.currentStreak > 0 && (
+              <Text style={{ fontSize: 14, color: colors.accent, fontWeight: '700', letterSpacing: 1 }}>
+                {streakData.currentStreak} DAY STREAK
+              </Text>
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.textPrimary, letterSpacing: 2, textTransform: 'uppercase' as const, marginBottom: spacing.md }}>
+              DAILY
+            </Text>
+            <Text style={{ fontSize: 12, color: colors.textMuted, letterSpacing: 0.5, textAlign: 'center' as const, textTransform: 'uppercase' as const }}>
+              LOADING TODAY'S CATEGORY...
+            </Text>
+            <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.lg }} />
+          </>
+        )}
+      </View>
     </View>
   );
 }

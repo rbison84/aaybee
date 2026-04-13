@@ -124,6 +124,8 @@ export function BracketPlay({
         <View style={[styles.progressBarFill, { width: `${(picks.length / 15) * 100}%` as any }]} />
       </View>
 
+      {/* Main comparison area — vertically centered like Compare */}
+      <View style={styles.comparisonArea}>
       {/* Prompt — matching Compare screen */}
       <Text style={styles.prompt}>WHICH MOVIE DO YOU PREFER?</Text>
 
@@ -195,6 +197,7 @@ export function BracketPlay({
       ) : (
         <View style={styles.cardsContainer} />
       )}
+      </View>
     </View>
   );
 }
@@ -249,19 +252,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     borderRadius: 1,
   },
+  comparisonArea: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
   prompt: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',
-    marginBottom: spacing.lg,
-    letterSpacing: 0.5,
+    marginBottom: spacing.xl,
+    letterSpacing: -0.36,
   },
   cardsContainer: {
-    flex: 1,
     flexDirection: 'row',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
     gap: spacing.md,
     justifyContent: 'center',
   },

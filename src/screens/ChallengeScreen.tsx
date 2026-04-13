@@ -451,9 +451,13 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   }, [user?.id]);
 
   // Record knockout bracket results into the taste graph
-  const recordBracketInTasteGraph = useCallback((bracketMovies: BracketMovie[], picks: BracketPick[]) => {
-    // First, ensure all bracket movies exist in the store
-    for (const movie of bracketMovies) {
+  // Uses a ref to track pending recordings, and a delayed execution
+  // to ensure markMovieAsKnown state updates have propagated
+  const pendingBracketRef = useRef<{ movies: BracketMovie[]; picks: BracketPick[] } | null>(null);
+
+  const recordBracketInTasteGraph = useCallback((bMovies: BracketMovie[], picks: BracketPick[]) => {
+    // Add all bracket movies to the store first
+    for (const movie of bMovies) {
       if (!storeMovies.has(movie.id)) {
         markMovieAsKnown(movie.id, {
           title: movie.title,
@@ -462,13 +466,25 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
         });
       }
     }
+    // Store pending — will be recorded on next render when store has updated
+    pendingBracketRef.current = { movies: bMovies, picks };
+  }, [storeMovies, markMovieAsKnown]);
 
-    // Now record all 15 pairwise comparisons
-    const comparisons = extractBracketComparisons(bracketMovies, picks);
+  // Process pending bracket comparisons after store updates
+  useEffect(() => {
+    if (!pendingBracketRef.current) return;
+    const { movies: bMovies, picks } = pendingBracketRef.current;
+
+    // Check if movies are now in store
+    const allInStore = bMovies.every(m => storeMovies.has(m.id));
+    if (!allInStore) return; // Wait for next render
+
+    const comparisons = extractBracketComparisons(bMovies, picks);
     for (const { winnerId, loserId } of comparisons) {
       recordComparison(winnerId, loserId);
     }
-  }, [storeMovies, recordComparison, markMovieAsKnown]);
+    pendingBracketRef.current = null;
+  }, [storeMovies, recordComparison]);
 
   // Auto-start knockout when entering VS directly
   const autoStarted = useRef(false);

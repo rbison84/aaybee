@@ -12,7 +12,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useAppStore } from '../../store/useAppStore';
 import { useMovieDetail } from '../../contexts/MovieDetailContext';
-import { useLockedFeature } from '../../contexts/LockedFeatureContext';
+// LockedFeatureContext removed
 import { useHaptics } from '../../hooks/useHaptics';
 import { globalRankingsService, GlobalRanking } from '../../services/globalRankingsService';
 import { colors, spacing, borderRadius, typography } from '../../theme/cinematic';
@@ -125,7 +125,7 @@ export function GlobalTab() {
   const { user, isGuest } = useAuth();
   const { getRankedMovies, movies, postOnboardingComparisons } = useAppStore();
   const { openMovieDetail } = useMovieDetail();
-  const { showLockedFeature } = useLockedFeature();
+  // showLockedFeature removed
   const haptics = useHaptics();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -230,17 +230,7 @@ export function GlobalTab() {
             key={filter.key}
             style={[styles.filterPill, activeFilter === filter.key && !filter.locked && styles.filterPillActive]}
             onPress={() => {
-              if (filter.locked && filter.unlockAt) {
-                haptics.light();
-                showLockedFeature({
-                  feature: filter.label,
-                  requirement: `compare ${filter.unlockAt - postOnboardingComparisons} more movie${filter.unlockAt - postOnboardingComparisons !== 1 ? 's' : ''} to unlock`,
-                  progress: {
-                    current: postOnboardingComparisons,
-                    required: filter.unlockAt,
-                  },
-                });
-              } else {
+              {
                 setActiveFilter(filter.key);
               }
             }}

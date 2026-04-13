@@ -17,7 +17,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { useHaptics } from '../../hooks/useHaptics';
 import { useMovieDetail } from '../../contexts/MovieDetailContext';
 import { useAlert } from '../../contexts/AlertContext';
-import { useLockedFeature } from '../../contexts/LockedFeatureContext';
+// LockedFeatureContext removed — no gated features
 import { Movie } from '../../types';
 import { colors, spacing, borderRadius, typography } from '../../theme/cinematic';
 import { EmptyState } from '../EmptyState';
@@ -74,7 +74,7 @@ export function YourRankingTab({ onContinueComparing, initialFilter = 'classic' 
   const haptics = useHaptics();
   const { openMovieDetail } = useMovieDetail();
   const { showAlert } = useAlert();
-  const { showLockedFeature } = useLockedFeature();
+  // No locked features
 
   const [activeFilter, setActiveFilter] = useState<FilterType>(initialFilter);
   const [refreshing, setRefreshing] = useState(false);
@@ -267,19 +267,7 @@ export function YourRankingTab({ onContinueComparing, initialFilter = 'classic' 
               key={filter.key}
               style={[styles.filterPill, activeFilter === filter.key && !filter.locked && styles.filterPillActive]}
               onPress={() => {
-                if (filter.locked && filter.unlockAt) {
-                  haptics.light();
-                  showLockedFeature({
-                    feature: filter.label,
-                    requirement: `compare ${filter.unlockAt - postOnboardingComparisons} more movie${filter.unlockAt - postOnboardingComparisons !== 1 ? 's' : ''} to unlock`,
-                    progress: {
-                      current: postOnboardingComparisons,
-                      required: filter.unlockAt,
-                    },
-                  });
-                } else {
-                  setActiveFilter(filter.key);
-                }
+                setActiveFilter(filter.key);
               }}
             >
               <Text style={[
