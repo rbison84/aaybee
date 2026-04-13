@@ -165,6 +165,32 @@ export const knockoutService = {
   },
 
   /**
+   * Direct an existing challenge to a specific friend.
+   * Sets challenged_user_id and sends push notification.
+   */
+  async directChallengeToFriend(
+    challengeId: string,
+    challengeCode: string,
+    friendId: string,
+    creatorName: string,
+  ): Promise<{ success: boolean }> {
+    const { error } = await supabase
+      .from('knockout_challenges')
+      .update({ challenged_user_id: friendId })
+      .eq('id', challengeId);
+
+    if (error) {
+      console.error('[Knockout] directChallengeToFriend failed:', error);
+      return { success: false };
+    }
+
+    // Send push notification
+    notificationService.notifyKnockoutChallenge(friendId, creatorName, challengeCode).catch(() => {});
+
+    return { success: true };
+  },
+
+  /**
    * Get user's knockout challenges (as creator, challenger, or challenged target).
    */
   async getMyChallenges(userId: string): Promise<KnockoutChallenge[]> {

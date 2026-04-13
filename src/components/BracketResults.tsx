@@ -23,6 +23,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, borderRadius } from '../theme/cinematic';
 import { QRCode } from './QRCode';
 import { friendService, FriendWithProfile } from '../services/friendService';
+import { knockoutService } from '../services/knockoutService';
 import {
   BracketMovie,
   BracketPick,
@@ -39,6 +40,8 @@ interface BracketResultsProps {
   sameWinner?: boolean;
   creatorName?: string;
   challengerName?: string;
+  challengeId?: string;
+  challengeCode?: string;
   isGuest?: boolean;
   onSignUp?: () => void;
   onPlayAgain?: () => void;
@@ -56,6 +59,8 @@ export function BracketResults({
   sameWinner,
   creatorName,
   challengerName,
+  challengeId,
+  challengeCode,
   isGuest,
   onSignUp,
   onPlayAgain,
@@ -69,6 +74,7 @@ export function BracketResults({
   const [friends, setFriends] = useState<FriendWithProfile[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [friendSearch, setFriendSearch] = useState('');
+  const [challengedFriends, setChallengedFriends] = useState<Set<string>>(new Set());
 
   const path = buildBracketPath(movies, picks);
   const hasMatch = matchPercent !== undefined && matchPercent !== null;
@@ -170,10 +176,18 @@ export function BracketResults({
                 <Pressable
                   key={friend.friend_id}
                   style={styles.friendRow}
-                  onPress={() => {
+                  onPress={async () => {
                     haptics.light();
-                    onChallengeFriend(friend.friend_id, friend.friend.display_name);
+                    if (challengeId && challengeCode) {
+                      await knockoutService.directChallengeToFriend(
+                        challengeId, challengeCode, friend.friend_id, displayName,
+                      );
+                      setChallengedFriends(prev => new Set(prev).add(friend.friend_id));
+                    } else {
+                      onChallengeFriend?.(friend.friend_id, friend.friend.display_name);
+                    }
                   }}
+                  disabled={challengedFriends.has(friend.friend_id)}
                 >
                   <View style={styles.friendInfo}>
                     <Text style={styles.friendName}>{friend.friend.display_name.toUpperCase()}</Text>
@@ -181,7 +195,9 @@ export function BracketResults({
                       <Text style={styles.friendMatch}>{friend.taste_match}% MATCH</Text>
                     ) : null}
                   </View>
-                  <Text style={styles.friendChallengeText}>CHALLENGE</Text>
+                  <Text style={styles.friendChallengeText}>
+                    {challengedFriends.has(friend.friend_id) ? 'SENT' : 'CHALLENGE'}
+                  </Text>
                 </Pressable>
               ))}
             </>

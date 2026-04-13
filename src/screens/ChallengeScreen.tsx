@@ -14,7 +14,6 @@ import {
 import Animated, {
   FadeIn,
   FadeInDown,
-  FadeInUp,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
@@ -22,7 +21,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useAppDimensions } from '../contexts/DimensionsContext';
 import { useHaptics } from '../hooks/useHaptics';
 import { challengeService, ChallengeMovie, FriendChallenge } from '../services/challengeService';
-import { shareService, storeLastDisagreement } from '../services/shareService';
+import { shareService } from '../services/shareService';
 import { vsService, VsChallenge, VsMovie, VsPair, VsResults } from '../services/vsService';
 import { friendService, FriendWithProfile, FriendRequest, UserSearchResult } from '../services/friendService';
 import { ContactInvite } from '../components/ContactInvite';
@@ -52,7 +51,7 @@ import { knockoutService, KnockoutChallenge } from '../services/knockoutService'
 
 type ChallengeStep =
   | 'home'
-  | 'select' | 'name' | 'rank' | 'results'
+  | 'select'
   | 'share'
   | 'vs-name'
   | 'vs-selecting'
@@ -1607,6 +1606,8 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
               sameWinner={knockoutChallenge?.same_winner ?? undefined}
               creatorName={knockoutChallenge?.creator_name}
               challengerName={knockoutChallenge?.challenger_name ?? undefined}
+              challengeId={knockoutChallenge?.id}
+              challengeCode={knockoutChallenge?.code}
               isGuest={!user?.id}
               onSignUp={onOpenAuth}
               onPlayAgain={handleStartKnockout}
