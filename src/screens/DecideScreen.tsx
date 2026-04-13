@@ -17,7 +17,7 @@ import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated'
 import { useAuth } from '../contexts/AuthContext';
 import { useAppStore } from '../store/useAppStore';
 import { useMovieDetail } from '../contexts/MovieDetailContext';
-import { useLockedFeature } from '../contexts/LockedFeatureContext';
+// LockedFeatureContext removed — no gated features
 import { useDevSettings } from '../contexts/DevSettingsContext';
 import { useHaptics } from '../hooks/useHaptics';
 import { decideService, DecideWeights, PoolCandidate } from '../services/decideService';
@@ -335,7 +335,7 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
   const { user, isGuest } = useAuth();
   const { getRankedMovies, getMoviesByStatus, userSession, movies, postOnboardingComparisons, getRevealedMovieIds } = useAppStore();
   const { openMovieDetail } = useMovieDetail();
-  const { showLockedFeature } = useLockedFeature();
+  // Locked feature removed — all features accessible
   const { unlockAllFeatures } = useDevSettings();
   const haptics = useHaptics();
 
@@ -1510,8 +1510,8 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
 
   // Guest state — guests can join group rooms but not use personal mode
   const isInGroupFlow = step.startsWith('group-');
-  // Personal mode locked for guests or not enough comparisons
-  const isPersonalLocked = isGuest || (unlockAllFeatures ? false : postOnboardingComparisons < MIN_COMPARISONS_FOR_DECIDE);
+  // Personal mode: locked for guests only (no comparison threshold)
+  const isPersonalLocked = isGuest;
 
   // ============================================
   // TWO-PERSON DECIDE HANDLERS
@@ -1662,16 +1662,7 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
                   onPress={() => {
                     if (isPersonalLocked) {
                       haptics.light();
-                      showLockedFeature({
-                        feature: 'personal decide',
-                        requirement: isGuest
-                          ? 'sign in and compare movies to unlock personal decide'
-                          : `compare ${MIN_COMPARISONS_FOR_DECIDE - postOnboardingComparisons} more movie${MIN_COMPARISONS_FOR_DECIDE - postOnboardingComparisons !== 1 ? 's' : ''} to unlock`,
-                        progress: isGuest ? undefined : {
-                          current: postOnboardingComparisons,
-                          required: MIN_COMPARISONS_FOR_DECIDE,
-                        },
-                      });
+                      // Guest — can't use personal decide
                     } else {
                       setStep('preferences');
                       setPreferenceIndex(0);
