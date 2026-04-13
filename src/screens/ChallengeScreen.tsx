@@ -78,13 +78,14 @@ interface ChallengeScreenProps {
   challengedFriendId?: string;
   challengedFriendName?: string;
   onGoHome?: () => void;
+  onChallengeFriend?: (friendId: string, friendName: string) => void;
 }
 
 // ============================================
 // COMPONENT
 // ============================================
 
-export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, challengedFriendId, challengedFriendName, onGoHome }: ChallengeScreenProps) {
+export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, challengedFriendId, challengedFriendName, onGoHome, onChallengeFriend }: ChallengeScreenProps) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { isDesktop, isWeb } = useAppDimensions();
@@ -2171,6 +2172,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
               isGuest={!user?.id}
               onSignUp={onOpenAuth}
               onPlayAgain={handleStartKnockout}
+              onChallengeFriend={onChallengeFriend}
               onHome={() => onGoHome ? onGoHome() : setStep('home')}
             />
           )}

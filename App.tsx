@@ -803,6 +803,12 @@ function MainApp() {
             challengedFriendId={challengedFriendId}
             challengedFriendName={challengedFriendName}
             onGoHome={() => setPhase('landing')}
+            onChallengeFriend={(friendId, friendName) => {
+              setChallengedFriendId(friendId);
+              setChallengedFriendName(friendName);
+              setChallengeInitialCode(undefined);
+              setPhase('vs');
+            }}
           />
         );
 
