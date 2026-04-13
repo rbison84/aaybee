@@ -637,6 +637,7 @@ function MainApp() {
   const [discoverTab, setDiscoverTab] = useState<'compare' | 'recommend'>('compare');
   const [challengedFriendId, setChallengedFriendId] = useState<string | undefined>();
   const [challengedFriendName, setChallengedFriendName] = useState<string | undefined>();
+  const [vsKey, setVsKey] = useState(0); // Force remount of ChallengeScreen
 
   // Deep link: parse URL on mount
   const [deepLink] = useState<DeepLinkIntent>(() => {
@@ -797,6 +798,7 @@ function MainApp() {
       case 'vs':
         return (
           <ChallengeScreen
+            key={vsKey}
             initialCode={challengeInitialCode}
             onOpenAuth={() => setShowAuth(true)}
             autoStartKnockout={!challengeInitialCode}
@@ -807,6 +809,7 @@ function MainApp() {
               setChallengedFriendId(friendId);
               setChallengedFriendName(friendName);
               setChallengeInitialCode(undefined);
+              setVsKey(k => k + 1); // Force remount
               setPhase('vs');
             }}
           />

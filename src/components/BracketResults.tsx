@@ -14,6 +14,7 @@ import {
   Platform,
   Share,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -67,6 +68,7 @@ export function BracketResults({
   const [copied, setCopied] = useState(false);
   const [friends, setFriends] = useState<FriendWithProfile[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  const [friendSearch, setFriendSearch] = useState('');
 
   const path = buildBracketPath(movies, picks);
   const hasMatch = matchPercent !== undefined && matchPercent !== null;
@@ -149,7 +151,20 @@ export function BracketResults({
         {!isGuest && friends.length > 0 && onChallengeFriend && (
           <Animated.View entering={FadeInDown.delay(300).duration(400)} style={styles.friendPickerSection}>
             <Text style={styles.friendPickerTitle}>CHALLENGE A FRIEND'S TASTE</Text>
-            {friends.slice(0, 5).map((friend) => (
+            {friends.length > 5 && (
+              <TextInput
+                style={styles.friendSearchInput}
+                placeholder="SEARCH FRIENDS..."
+                placeholderTextColor={colors.textMuted}
+                value={friendSearch}
+                onChangeText={setFriendSearch}
+                autoCapitalize="none"
+              />
+            )}
+            {friends
+              .filter(f => !friendSearch || f.friend.display_name.toLowerCase().includes(friendSearch.toLowerCase()))
+              .slice(0, 5)
+              .map((friend) => (
               <Pressable
                 key={friend.friend_id}
                 style={styles.friendRow}
@@ -280,6 +295,7 @@ const styles = StyleSheet.create({
   friendName: { fontSize: 12, fontWeight: '600', color: colors.textPrimary, letterSpacing: 0.5 },
   friendMatch: { fontSize: 9, fontWeight: '400', color: colors.textMuted, letterSpacing: 0.5, marginTop: 2 },
   friendChallengeText: { fontSize: 10, fontWeight: '700', color: colors.accent, letterSpacing: 1 },
+  friendSearchInput: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.xl, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, fontSize: 11, color: colors.textPrimary, letterSpacing: 0.5, marginBottom: spacing.sm },
 
   // External share
   shareSection: { alignItems: 'center', marginBottom: spacing.xxl },

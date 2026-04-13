@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import ViewShot from 'react-native-view-shot';
 import {
   StyleSheet,
   Text,
@@ -22,12 +21,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAppStore } from '../store/useAppStore';
 import { useAppDimensions } from '../contexts/DimensionsContext';
 import { useHaptics } from '../hooks/useHaptics';
-import { challengeService, getMatchTier, ChallengeMovie, FriendChallenge, ChallengeResults } from '../services/challengeService';
+import { challengeService, ChallengeMovie, FriendChallenge } from '../services/challengeService';
 import { shareService, storeLastDisagreement } from '../services/shareService';
 import { vsService, VsChallenge, VsMovie, VsPair, VsResults } from '../services/vsService';
 import { friendService, FriendWithProfile, FriendRequest, UserSearchResult } from '../services/friendService';
 import { ContactInvite } from '../components/ContactInvite';
-import { ShareableChallengeResult } from '../components/ShareableImages';
 import { TasteRadar } from '../components/TasteRadar';
 import { CinematicCard } from '../components/cinematic/CinematicCard';
 import { OnboardingProgressBar } from '../components/onboarding/OnboardingProgressBar';
@@ -53,23 +51,18 @@ import { knockoutService, KnockoutChallenge } from '../services/knockoutService'
 // ============================================
 
 type ChallengeStep =
-  | 'home'       // Create or join
-  | 'select'     // Pick 9 movies from your list
-  | 'share'      // Show link to share
-  | 'name'       // Challenger enters their name
-  | 'rank'       // Rank the 9 movies via pairwise comparison
-  | 'results'    // Match results (friend challenge)
-  // VS flow (pool-based, for non-users)
-  | 'vs-name'       // Guest enters name before selecting
-  | 'vs-selecting'  // Pick 4-10 movies from pool
-  | 'vs-comparing'  // A/B pair picks
-  | 'vs-waiting'    // Waiting for other player
-  | 'vs-result'     // Score/N result
-  // Knockout bracket flow
-  | 'knockout-name'    // Guest name entry before knockout
-  | 'knockout'         // Playing bracket
-  | 'knockout-sent'    // Challenge sent confirmation (directed challenge)
-  | 'knockout-result'; // Bracket results
+  | 'home'
+  | 'select' | 'name' | 'rank' | 'results'
+  | 'share'
+  | 'vs-name'
+  | 'vs-selecting'
+  | 'vs-comparing'
+  | 'vs-waiting'
+  | 'vs-result'
+  | 'knockout-name'
+  | 'knockout'
+  | 'knockout-sent'
+  | 'knockout-result';
 
 interface ChallengeScreenProps {
   initialCode?: string;
@@ -92,7 +85,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   const haptics = useHaptics();
   const { recordComparison, movies: storeMovies, markMovieAsKnown } = useAppStore();
 
-  const [step, setStep] = useState<ChallengeStep>(initialCode ? 'name' : 'home');
+  const [step, setStep] = useState<ChallengeStep>('home');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,14 +99,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   // Challenger name
   const [challengerName, setChallengerName] = useState('');
 
-  // Ranking flow (Swiss pairwise)
-  const [rankingPairs, setRankingPairs] = useState<[ChallengeMovie, ChallengeMovie][]>([]);
-  const [currentPairIndex, setCurrentPairIndex] = useState(0);
-  const [scores, setScores] = useState<Map<string, number>>(new Map());
-  const [rankSelected, setRankSelected] = useState<'a' | 'b' | null>(null);
-
-  // Results
-  const [results, setResults] = useState<ChallengeResults | null>(null);
 
   // Copied feedback
   const [copied, setCopied] = useState(false);
@@ -123,9 +108,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
 
   // Active/pending challenges
   const [activeChallenges, setActiveChallenges] = useState<FriendChallenge[]>([]);
-
-  // Prevent double tap
-  const pickingRef = useRef(false);
 
   // Friends
   const [friends, setFriends] = useState<FriendWithProfile[]>([]);
@@ -140,8 +122,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   const [showContacts, setShowContacts] = useState(false);
   const [showPacks, setShowPacks] = useState(false);
   const [friendTopMovies, setFriendTopMovies] = useState<Map<string, { title: string }[]>>(new Map());
-
-  const shareCardRef = useRef<ViewShot>(null);
 
   // VS challenge state (pool-based flow)
   const [activeVsChallenges, setActiveVsChallenges] = useState<VsChallenge[]>([]);
@@ -171,40 +151,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
     if (!initialCode) return;
     (async () => {
       setLoading(true);
-
-      // Try friend challenge first
-      const c = await challengeService.getChallengeByCode(initialCode);
-      if (c) {
-        setChallenge(c);
-        if (c.status === 'complete' && c.results) {
-          setResults(c.results as ChallengeResults);
-          setStep('results');
-        } else if (user?.id) {
-          const autoName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
-          setChallengerName(autoName);
-          const { challenge: updated, error: err } = await challengeService.joinChallenge(c.code, autoName, user.id);
-          if (err) {
-            setError(err);
-            setStep('home');
-          } else if (updated?.status === 'complete' && updated.results) {
-            setChallenge(updated);
-            setResults(updated.results as ChallengeResults);
-            setStep('results');
-          } else {
-            if (updated) setChallenge(updated);
-            const movies = (updated || c).movies;
-            const pairs = generateSwissPairs(movies);
-            setRankingPairs(pairs);
-            setCurrentPairIndex(0);
-            setScores(new Map(movies.map(m => [m.id, 0])));
-            setStep('rank');
-          }
-        } else {
-          setStep('name');
-        }
-        setLoading(false);
-        return;
-      }
 
       // Try VS challenge
       const vc = await vsService.getChallengeByCode(initialCode);
@@ -584,32 +530,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   }, []);
 
   // ============================================
-  // REMATCH
-  // ============================================
-
-  const handleRematch = useCallback(async () => {
-    if (!challenge || !user?.id) return;
-    setLoading(true);
-    const movies = await challengeService.getTopMoviesForChallenge(user.id, 9);
-    if (movies.length >= 9) {
-      const selectedMovies = movies.slice(0, 9);
-      const creatorRanking = selectedMovies.map(m => m.id);
-      const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
-      const { challenge: c } = await challengeService.createChallenge(user.id, displayName, selectedMovies, creatorRanking);
-      if (c) {
-        setChallenge(c);
-        setResults(null);
-        setStep('share');
-      }
-    } else {
-      setShowPacks(true);
-      setResults(null);
-      setStep('home');
-    }
-    setLoading(false);
-  }, [challenge, user]);
-
-  // ============================================
   // JOIN CODE FROM HOME SCREEN INPUT
   // ============================================
 
@@ -618,38 +538,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
     setJoinCodeInput(cleaned);
     if (cleaned.length === 6) {
       setLoading(true);
-
-      // Try friend challenge first
-      const c = await challengeService.getChallengeByCode(cleaned);
-      if (c) {
-        setChallenge(c);
-        if (c.status === 'complete' && c.results) {
-          setResults(c.results as ChallengeResults);
-          setStep('results');
-        } else if (user?.id) {
-          const autoName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
-          setChallengerName(autoName);
-          const { challenge: updated } = await challengeService.joinChallenge(c.code, autoName, user.id);
-          if (updated) {
-            setChallenge(updated);
-            if (updated.status === 'complete' && updated.results) {
-              setResults(updated.results as ChallengeResults);
-              setStep('results');
-            } else {
-              const pairs = generateSwissPairs((updated || c).movies);
-              setRankingPairs(pairs);
-              setCurrentPairIndex(0);
-              setScores(new Map((updated || c).movies.map(m => [m.id, 0])));
-              setStep('rank');
-            }
-          }
-        } else {
-          setStep('name');
-        }
-        setLoading(false);
-        setJoinCodeInput('');
-        return;
-      }
 
       // Try VS challenge
       const vc = await vsService.getChallengeByCode(cleaned);
@@ -677,182 +565,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
       setJoinCodeInput('');
     }
   }, [user]);
-
-  // ============================================
-  // JOIN + RANK FLOW
-  // ============================================
-
-  const joinChallenge = useCallback(async () => {
-    const autoName = user?.id
-      ? (user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan')
-      : challengerName.trim();
-    if (!challenge || !autoName) return;
-    setLoading(true);
-    setError(null);
-
-    const { challenge: updated, error: err } = await challengeService.joinChallenge(
-      challenge.code,
-      autoName,
-      user?.id,
-    );
-
-    if (err && err !== undefined) {
-      setError(err);
-      setLoading(false);
-      return;
-    }
-
-    if (updated) setChallenge(updated);
-
-    // If already complete, show results
-    if (updated?.status === 'complete' && updated.results) {
-      setResults(updated.results as ChallengeResults);
-      setStep('results');
-      setLoading(false);
-      return;
-    }
-
-    // Generate Swiss pairwise comparisons for the movies
-    const movies = (updated || challenge).movies;
-    const pairs = generateSwissPairs(movies);
-    setRankingPairs(pairs);
-    setCurrentPairIndex(0);
-    setScores(new Map(movies.map(m => [m.id, 0])));
-    setStep('rank');
-    setLoading(false);
-  }, [challenge, challengerName, user?.id]);
-
-  const handlePick = useCallback(async (winnerId: string) => {
-    if (pickingRef.current) return;
-    pickingRef.current = true;
-    haptics.light();
-
-    const pair = rankingPairs[currentPairIndex];
-    const loserId = pair[0].id === winnerId ? pair[1].id : pair[0].id;
-
-    setScores(prev => {
-      const next = new Map(prev);
-      next.set(winnerId, (next.get(winnerId) || 0) + 1);
-      return next;
-    });
-
-    const nextIndex = currentPairIndex + 1;
-
-    if (nextIndex >= rankingPairs.length) {
-      // Done — compute ranking from scores
-      const finalScores = new Map(scores);
-      finalScores.set(winnerId, (finalScores.get(winnerId) || 0) + 1);
-
-      const challengerRanking = challenge!.movies
-        .map(m => ({ id: m.id, score: finalScores.get(m.id) || 0 }))
-        .sort((a, b) => b.score - a.score)
-        .map(m => m.id);
-
-      setLoading(true);
-      const { results: r, error: err } = await challengeService.submitRanking(
-        challenge!.code,
-        challengerRanking,
-      );
-
-      if (r) {
-        setResults(r);
-        setStep('results');
-        haptics.success();
-      } else {
-        setError(err || 'Failed to submit ranking');
-      }
-      setLoading(false);
-    } else {
-      setCurrentPairIndex(nextIndex);
-    }
-
-    setTimeout(() => { pickingRef.current = false; }, 300);
-  }, [currentPairIndex, rankingPairs, scores, challenge, haptics]);
-
-  // ============================================
-  // SHARE
-  // ============================================
-
-  const handleShareLink = useCallback(async () => {
-    if (!challenge) return;
-    const url = shareService.getChallengeShareUrl(challenge.code, user?.id);
-
-    // Social proof from last game
-    let proofText = 'I ranked 9 movies on aaybee — can you match my taste?';
-    if (leaderboard.length > 0) {
-      const lastGame = leaderboard[0];
-      const tier = getMatchTier(lastGame.matchPercent);
-      proofText = `I got ${lastGame.matchPercent}% with ${lastGame.name} — ${tier.name}. can you beat that?`;
-    }
-
-    const message = `${proofText}\n\n${url}`;
-
-    try {
-      if (Platform.OS === 'web' && navigator?.share) {
-        await navigator.share({ text: message });
-      } else if (Platform.OS === 'web' && navigator?.clipboard) {
-        await navigator.clipboard.writeText(message);
-      } else {
-        await Share.share({ message });
-      }
-      haptics.success();
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      if ((err as any)?.name !== 'AbortError') {
-        console.error('Share failed:', err);
-      }
-    }
-  }, [challenge, leaderboard, haptics]);
-
-  const handleShareResults = useCallback(async () => {
-    if (!challenge || !results) return;
-    const url = shareService.getChallengeShareUrl(challenge.code, user?.id);
-    const tier = getMatchTier(results.matchPercent);
-    let message: string;
-
-    if (results.biggestDisagreement) {
-      const d = results.biggestDisagreement;
-      const isCreator = user?.id === challenge.creator_id;
-      const myRank = isCreator ? d.creatorRank : d.challengerRank;
-      const theirRank = isCreator ? d.challengerRank : d.creatorRank;
-      const otherName = isCreator ? challenge.challenger_name : challenge.creator_name;
-      message = `i ranked ${d.movie.title} #${myRank}. ${otherName} put it at #${theirRank}. whose taste is better?\n\n${url}`;
-      storeLastDisagreement(`i ranked ${d.movie.title} #${myRank}. my friend put it at #${theirRank}. whose taste is better?`);
-    } else {
-      message = `${challenge.creator_name} & ${challenge.challenger_name}: ${results.matchPercent}% — ${tier.name}\n"${tier.subtitle}"\n\n${url}`;
-    }
-
-    try {
-      // Try to share as image on native
-      if (Platform.OS !== 'web' && shareCardRef.current) {
-        try {
-          const uri = await (shareCardRef.current as any).capture();
-          if (uri) {
-            await Share.share(Platform.OS === 'ios' ? { url: uri, message } : { message });
-            haptics.success();
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-            return;
-          }
-        } catch {}
-      }
-      if (Platform.OS === 'web' && navigator?.share) {
-        await navigator.share({ text: message });
-      } else if (Platform.OS === 'web' && navigator?.clipboard) {
-        await navigator.clipboard.writeText(message);
-      } else {
-        await Share.share({ message });
-      }
-      haptics.success();
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      if ((err as any)?.name !== 'AbortError') {
-        console.error('Share failed:', err);
-      }
-    }
-  }, [challenge, results, haptics, user?.id]);
 
   // ============================================
   // FRIEND SEARCH + ACTIONS
@@ -984,53 +696,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
       ));
     }
   }, [expandedFriendId, friendTopMovies, user?.id]);
-
-  // ============================================
-  // SWISS PAIR GENERATION
-  // ============================================
-
-  /**
-   * Generate pairwise comparisons for n movies.
-   * For 9 movies: ~18 comparisons (2x movie count).
-   * Uses round-robin-style pairing ensuring each movie appears ~4 times.
-   */
-  function generateSwissPairs(movies: ChallengeMovie[]): [ChallengeMovie, ChallengeMovie][] {
-    const n = movies.length;
-    const targetComparisons = n * 2;
-    const allPairs: [ChallengeMovie, ChallengeMovie][] = [];
-
-    // Generate all possible pairs
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        allPairs.push([movies[i], movies[j]]);
-      }
-    }
-
-    // Shuffle
-    for (let i = allPairs.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [allPairs[i], allPairs[j]] = [allPairs[j], allPairs[i]];
-    }
-
-    // Greedily select pairs, balancing movie appearances
-    const selected: [ChallengeMovie, ChallengeMovie][] = [];
-    const count = new Map<string, number>();
-
-    const maxAppearances = Math.ceil((targetComparisons * 2) / n) + 1;
-
-    for (const pair of allPairs) {
-      if (selected.length >= targetComparisons) break;
-      const cA = count.get(pair[0].id) || 0;
-      const cB = count.get(pair[1].id) || 0;
-      if (cA >= maxAppearances || cB >= maxAppearances) continue;
-
-      selected.push(pair);
-      count.set(pair[0].id, cA + 1);
-      count.set(pair[1].id, cB + 1);
-    }
-
-    return selected;
-  }
 
   // ============================================
   // RENDER HELPERS
@@ -1341,47 +1006,10 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
         </Pressable>
       )}
 
-      {/* ACTIVE - in-progress challenges */}
-      {activeChallenges.filter(c => c.status !== 'complete').length > 0 && (
-        <Animated.View entering={FadeInDown.delay(200)} style={styles.sectionBlock}>
-          <Text style={styles.sectionLabel}>active</Text>
-          {activeChallenges.filter(c => c.status !== 'complete').map(c => {
-            const isCreator = c.creator_id === user?.id;
-            const opponentName = isCreator ? (c.challenger_name || 'waiting...') : c.creator_name;
-            const statusText = c.status === 'pending'
-              ? 'waiting...'
-              : isCreator
-                ? 'waiting...'
-                : 'your turn!';
-            const timeAgo = c.created_at ? getTimeAgo(c.created_at) : '';
-            return (
-              <Pressable key={c.id} style={styles.challengeRow} onPress={() => {
-                setChallenge(c);
-                if (c.status === 'pending' && isCreator) setStep('share');
-                else if (!isCreator && c.status === 'active') {
-                  const pairs = generateSwissPairs(c.movies);
-                  setRankingPairs(pairs);
-                  setCurrentPairIndex(0);
-                  setScores(new Map(c.movies.map(m => [m.id, 0])));
-                  setStep('rank');
-                }
-              }}>
-                <Text style={styles.challengeRowName}>{opponentName}</Text>
-                <Text style={styles.challengeRowStatus}>
-                  {statusText}{timeAgo ? ` · ${timeAgo}` : ''}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </Animated.View>
-      )}
-
       {/* ACTIVE VS - in-progress VS challenges */}
       {activeVsChallenges.filter(vc => vc.status !== 'complete').length > 0 && (
         <Animated.View entering={FadeInDown.delay(250)} style={styles.sectionBlock}>
-          {activeChallenges.filter(c => c.status !== 'complete').length === 0 && (
-            <Text style={styles.sectionLabel}>active</Text>
-          )}
+          <Text style={styles.sectionLabel}>active</Text>
           {activeVsChallenges.filter(vc => vc.status !== 'complete').map(vc => {
             const isChallenger = vc.challenger_id === user?.id;
             const opponentName = isChallenger ? (vc.challenged_name || 'waiting...') : 'someone';
@@ -1562,47 +1190,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
     );
   };
 
-  // NAME: challenger enters name
-  const renderName = () => (
-    <Animated.View entering={FadeIn} style={styles.centeredContent}>
-      <Text style={styles.heroTitle}>
-        {challenge?.creator_name} challenged you
-      </Text>
-      <Text style={styles.heroSubtitle}>
-        rank {challenge?.movies.length || 9} movies and see if your taste matches
-      </Text>
-
-      <TextInput
-        style={[styles.codeInput, { marginTop: spacing.xl, textAlign: 'center' }]}
-        placeholder="your name"
-        placeholderTextColor={colors.textMuted}
-        value={challengerName}
-        onChangeText={setChallengerName}
-        maxLength={20}
-        autoCapitalize="words"
-      />
-
-      <Pressable
-        style={[
-          styles.actionButton,
-          styles.actionButtonPrimary,
-          { marginTop: spacing.lg },
-          !challengerName.trim() && styles.actionButtonDisabled,
-        ]}
-        onPress={joinChallenge}
-        disabled={!challengerName.trim() || loading}
-      >
-        {loading ? (
-          <ActivityIndicator size="small" color={colors.background} />
-        ) : (
-          <Text style={styles.actionButtonTextPrimary}>start ranking</Text>
-        )}
-      </Pressable>
-
-      {error && <Text style={styles.errorText}>{error}</Text>}
-    </Animated.View>
-  );
-
   // Convert ChallengeMovie to Movie for CinematicCard
   const toMovie = useCallback((cm: ChallengeMovie): Movie => ({
     ...cm,
@@ -1616,152 +1203,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
     lastShownAt: 0,
     status: 'uncompared',
   }), []);
-
-  // Handle rank card selection with winner/loser animation delay
-  const handleRankSelect = useCallback((choice: 'a' | 'b', winnerId: string) => {
-    if (rankSelected) return;
-    setRankSelected(choice);
-    setTimeout(() => {
-      handlePick(winnerId);
-      setRankSelected(null);
-    }, 300);
-  }, [rankSelected, handlePick]);
-
-  // RANK: pairwise comparisons
-  const renderRank = () => {
-    if (currentPairIndex >= rankingPairs.length) return null;
-    const [movieA, movieB] = rankingPairs[currentPairIndex];
-    const progress = rankingPairs.length > 0
-      ? currentPairIndex / rankingPairs.length
-      : 0;
-
-    return (
-      <ScrollView contentContainerStyle={styles.rankContainer}>
-        <View style={styles.comparisonContent}>
-          <Text style={styles.rankPrompt}>Which do you prefer?</Text>
-          <View style={styles.cardsRow}>
-            <CinematicCard
-              movie={toMovie(movieA)}
-              onSelect={() => handleRankSelect('a', movieA.id)}
-              disabled={rankSelected !== null}
-              isWinner={rankSelected === 'a'}
-              isLoser={rankSelected === 'b'}
-            />
-            <CinematicCard
-              movie={toMovie(movieB)}
-              onSelect={() => handleRankSelect('b', movieB.id)}
-              disabled={rankSelected !== null}
-              isWinner={rankSelected === 'b'}
-              isLoser={rankSelected === 'a'}
-            />
-          </View>
-        </View>
-        <OnboardingProgressBar
-          progress={progress}
-          current={currentPairIndex}
-          total={rankingPairs.length}
-          label=""
-        />
-      </ScrollView>
-    );
-  };
-
-  // RESULTS: updated layout with new CTAs
-  const renderResults = () => {
-    if (!results || !challenge) return null;
-    const tier = getMatchTier(results.matchPercent);
-    const isGuest = !user?.id;
-
-    return (
-      <Animated.View entering={FadeIn} style={styles.fullContent}>
-        <ScrollView contentContainerStyle={styles.resultsContent}>
-          <Animated.Text entering={FadeInDown.delay(200)} style={styles.matchPercent}>
-            {results.matchPercent}%
-          </Animated.Text>
-          <Text style={styles.matchTierName}>{tier.name}</Text>
-          <Text style={styles.matchTierSubtitle}>"{tier.subtitle}"</Text>
-          <Text style={styles.matchNames}>
-            {challenge.creator_name} & {challenge.challenger_name}
-          </Text>
-
-          {/* CTAs at emotional peak */}
-          <Animated.View entering={FadeInUp.delay(300)} style={{ width: '100%', maxWidth: 320, alignSelf: 'center', marginTop: spacing.lg, gap: spacing.sm }}>
-            {!isGuest && (
-              <Pressable
-                style={[styles.primaryCta, { width: '100%' }]}
-                onPress={handleCreateChallenge}
-              >
-                <Text style={styles.primaryCtaText}>challenge someone else</Text>
-              </Pressable>
-            )}
-            <Pressable
-              style={[styles.primaryCta, { width: '100%', backgroundColor: colors.surface }]}
-              onPress={handleShareResults}
-            >
-              <Text style={[styles.primaryCtaText, { color: colors.textPrimary }]}>
-                {copied ? 'copied!' : 'share result'}
-              </Text>
-            </Pressable>
-          </Animated.View>
-
-          {results.agreements.length > 0 && (
-            <Animated.View entering={FadeInUp.delay(400)} style={styles.resultsSection}>
-              <Text style={styles.resultsSectionTitle}>agreed on</Text>
-              {results.agreements.map((a, i) => (
-                <View key={i} style={styles.resultRow}>
-                  <Text style={styles.resultRank}>#{a.rank}</Text>
-                  <Text style={styles.resultMovie}>{a.movie.title}</Text>
-                </View>
-              ))}
-            </Animated.View>
-          )}
-
-          {results.disagreements.length > 0 && (
-            <Animated.View entering={FadeInUp.delay(600)} style={styles.resultsSection}>
-              <Text style={styles.resultsSectionTitle}>biggest disagreements</Text>
-              {results.disagreements.slice(0, 5).map((d, i) => (
-                <View key={i} style={styles.resultRow}>
-                  <Text style={styles.resultMovie}>{d.movie.title}</Text>
-                  <Text style={styles.resultDisagreement}>
-                    #{d.creatorRank} vs #{d.challengerRank}
-                  </Text>
-                </View>
-              ))}
-            </Animated.View>
-          )}
-        </ScrollView>
-
-        {/* Rematch */}
-        {user?.id && (
-          <Pressable
-            style={[styles.actionButton, { marginTop: spacing.sm, backgroundColor: colors.card }]}
-            onPress={handleRematch}
-          >
-            <Text style={styles.actionButtonText}>rematch</Text>
-          </Pressable>
-        )}
-
-        {/* Guest signup prompt */}
-        {isGuest && onOpenAuth && (
-          <Pressable
-            style={[styles.actionButton, { backgroundColor: colors.surface, marginTop: spacing.xs }]}
-            onPress={onOpenAuth}
-          >
-            <Text style={styles.actionButtonText}>sign up to keep your rankings</Text>
-          </Pressable>
-        )}
-
-        {/* Back */}
-        <Pressable
-          style={[styles.actionButton, { marginTop: spacing.xs, backgroundColor: 'transparent' }]}
-          onPress={() => { setStep('home'); setChallenge(null); setResults(null); }}
-        >
-          <Text style={[styles.actionButtonText, { color: colors.textMuted }]}>back</Text>
-        </Pressable>
-
-      </Animated.View>
-    );
-  };
 
   // ============================================
   // VS FLOW: NAME (guest)
@@ -2084,9 +1525,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
           {step === 'home' && renderHome()}
           {step === 'select' && renderSelect()}
           {step === 'share' && renderShare()}
-          {step === 'name' && renderName()}
-          {step === 'rank' && renderRank()}
-          {step === 'results' && renderResults()}
           {step === 'vs-name' && renderVsName()}
           {step === 'vs-selecting' && renderVsSelecting()}
           {step === 'vs-comparing' && renderVsComparing()}
@@ -2179,24 +1617,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
         </>
       )}
 
-      {/* Offscreen share card for image capture */}
-      {step === 'results' && results && challenge && (
-        <ViewShot ref={shareCardRef} options={{ format: 'png', quality: 1 }} style={{ position: 'absolute', left: -9999 }}>
-          <ShareableChallengeResult
-            matchPercent={results.matchPercent}
-            tierName={getMatchTier(results.matchPercent).name}
-            tierSubtitle={getMatchTier(results.matchPercent).subtitle}
-            creatorName={challenge.creator_name}
-            challengerName={challenge.challenger_name || ''}
-            agreements={results.agreements.map(a => ({ rank: a.rank, title: a.movie.title }))}
-            disagreements={results.disagreements.map(d => ({
-              title: d.movie.title,
-              creatorRank: d.creatorRank,
-              challengerRank: d.challengerRank,
-            }))}
-          />
-        </ViewShot>
-      )}
     </View>
   );
 }

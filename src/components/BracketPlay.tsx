@@ -195,7 +195,15 @@ export function BracketPlay({
           </Pressable>
         </Animated.View>
       ) : (
-        <View style={styles.cardsContainer} />
+        <View style={[styles.cardsContainer, { opacity: 0 }]}>
+          {/* Invisible placeholder to maintain height during transition */}
+          <View style={styles.movieCard}>
+            <View style={styles.posterContainer} />
+          </View>
+          <View style={styles.movieCard}>
+            <View style={styles.posterContainer} />
+          </View>
+        </View>
       )}
       </View>
     </View>
