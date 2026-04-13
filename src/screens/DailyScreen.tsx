@@ -999,10 +999,103 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
             ))}
           </View>
 
-          {/* Share — primary CTA right after grid */}
-          <Pressable style={[styles.copyButton, { marginTop: spacing.lg, marginBottom: spacing.sm }]} onPress={handleShareResult}>
-            <Text style={styles.copyButtonText}>send to a friend</Text>
-          </Pressable>
+          {/* Context-driven primary CTA */}
+          {(() => {
+            // Determine circle state
+            const userCircle = crews.length > 0 ? crews[0] : null;
+            const circleMembers = userCircle ? (crewMembers.get(userCircle.id) || []) : [];
+            const playedCount = circleMembers.filter(m => m.played_today).length;
+            const notPlayed = circleMembers.filter(m => !m.played_today);
+            const everyonePlayed = circleMembers.length > 0 && notPlayed.length === 0;
+            const circleUrl = userCircle ? `https://aaybee.netlify.app/crew/${userCircle.code}` : '';
+
+            if (userCircle && notPlayed.length > 0) {
+              // Circle exists, not everyone played → named nudge
+              const names = notPlayed.slice(0, 3).map(m => m.display_name || 'Someone');
+              const nameText = names.length <= 2 ? names.join(' AND ') : `${names.slice(0, 2).join(', ')} AND ${notPlayed.length - 2} MORE`;
+              return (
+                <View style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary, letterSpacing: 2, textAlign: 'center' as const, textTransform: 'uppercase' as const, marginBottom: spacing.sm }}>
+                    NUDGE YOUR CIRCLE
+                  </Text>
+                  <Text style={{ fontSize: 11, color: colors.textMuted, letterSpacing: 0.5, textAlign: 'center' as const, marginBottom: spacing.md, textTransform: 'uppercase' as const }}>
+                    {nameText.toUpperCase()} HAVEN'T PLAYED YET
+                  </Text>
+                  <Pressable
+                    style={{ backgroundColor: '#FFFFFF', borderRadius: 20, paddingVertical: 16, alignItems: 'center' as const }}
+                    onPress={async () => {
+                      const msg = `${names.join(' and ')} — we're waiting for you on today's aaybee daily in "${userCircle.name}"! ${playedCount}/${circleMembers.length} played\n\n${circleUrl}`;
+                      try {
+                        if (Platform.OS === 'web' && navigator?.share) await navigator.share({ text: msg });
+                        else if (Platform.OS === 'web' && navigator?.clipboard) await navigator.clipboard.writeText(msg);
+                        else await Share.share({ message: msg });
+                      } catch {}
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: '#000', letterSpacing: 2 }}>SEND NUDGE</Text>
+                  </Pressable>
+                </View>
+              );
+            }
+
+            if (userCircle && everyonePlayed) {
+              // Everyone played → share your take
+              return (
+                <View style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>
+                  <Pressable
+                    style={{ backgroundColor: '#FFFFFF', borderRadius: 20, paddingVertical: 16, alignItems: 'center' as const }}
+                    onPress={handleShareResult}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: '#000', letterSpacing: 2 }}>SHARE YOUR TAKE</Text>
+                  </Pressable>
+                </View>
+              );
+            }
+
+            if (!userCircle && !isGuest) {
+              // No circle → hot-take-driven circle creation
+              const hotTakeMovie = topMovie?.title || 'your #1';
+              const globalRank = activeCategory ? activeCategory.movieIds.indexOf(topMovie?.id || '') + 1 : 0;
+              const hasDisagreement = globalRank > 0 && globalRank !== 1;
+              return (
+                <View style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>
+                  <Text style={{ fontSize: 12, color: colors.textMuted, letterSpacing: 0.5, textAlign: 'center' as const, marginBottom: spacing.md, textTransform: 'uppercase' as const }}>
+                    {hasDisagreement
+                      ? `YOU RANKED ${hotTakeMovie.toUpperCase()} #1. THE WORLD RANKED IT #${globalRank}.`
+                      : `YOU AND THE WORLD AGREE: ${hotTakeMovie.toUpperCase()} IS #1.`}
+                  </Text>
+                  <Pressable
+                    style={{ backgroundColor: '#FFFFFF', borderRadius: 20, paddingVertical: 16, alignItems: 'center' as const }}
+                    onPress={() => setCrewCreateMode(true)}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: '#000', letterSpacing: 2 }}>SEE IF YOUR FRIENDS AGREE</Text>
+                  </Pressable>
+                </View>
+              );
+            }
+
+            // Fallback: generic share (guests or no context)
+            return (
+              <View style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>
+                <Pressable
+                  style={{ backgroundColor: '#FFFFFF', borderRadius: 20, paddingVertical: 16, alignItems: 'center' as const }}
+                  onPress={handleShareResult}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: '#000', letterSpacing: 2 }}>SHARE YOUR RESULTS</Text>
+                </Pressable>
+              </View>
+            );
+          })()}
+
+          {/* Generic share — always available as secondary */}
+          {crews.length > 0 && (
+            <Pressable
+              style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingVertical: 14, alignItems: 'center' as const, marginBottom: spacing.sm }}
+              onPress={handleShareResult}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textPrimary, letterSpacing: 1 }}>SHARE RESULTS</Text>
+            </Pressable>
+          )}
 
           {/* Guest sign-up prompt */}
           {(!user?.id || isGuest) && (
@@ -1122,65 +1215,7 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
             </View>
           )}
 
-          <View style={styles.resultsButtons}>
-            {/* Circle growth */}
-            {crews.length === 0 ? (
-              <Pressable
-                style={[styles.copyButton, { backgroundColor: colors.card }]}
-                onPress={() => setCrewCreateMode(true)}
-              >
-                <Text style={[styles.copyButtonText, { color: colors.textPrimary }]}>start a circle</Text>
-              </Pressable>
-            ) : (() => {
-              // Find smallest circle
-              const smallestCrew = crews.reduce((smallest, crew) => {
-                const count = crewMembers.get(crew.id)?.length || 0;
-                const smallestCount = crewMembers.get(smallest.id)?.length || 0;
-                return count < smallestCount ? crew : smallest;
-              }, crews[0]);
-              const memberCount = crewMembers.get(smallestCrew.id)?.length || 0;
-              if (memberCount < 5) {
-                // Contextual nudge based on crew alignment
-                const result = crewResults.get(smallestCrew.id);
-                const myResult = result?.memberResults.find(m => m.userId === user?.id);
-                const nudgeText = myResult && myResult.alignmentPercent >= 70
-                  ? 'your circle vibed on this one — imagine that with more friends'
-                  : 'your circle needs more hot takes — invite someone who gets you';
-
-                return (
-                  <>
-                    {result && (
-                      <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: spacing.sm }}>
-                        {nudgeText}
-                      </Text>
-                    )}
-                    <Pressable
-                      style={[styles.copyButton, { backgroundColor: colors.card }]}
-                      onPress={async () => {
-                        const crewUrl = user?.id ? `https://aaybee.netlify.app/crew/${smallestCrew.code}?ref=${user.id}` : `https://aaybee.netlify.app/crew/${smallestCrew.code}`;
-                        const msg = `join my circle "${smallestCrew.name}" on aaybee: ${crewUrl}`;
-                        if (Platform.OS === 'web' && navigator?.share) {
-                          await navigator.share({ text: msg });
-                        } else if (Platform.OS === 'web' && navigator?.clipboard) {
-                          await navigator.clipboard.writeText(msg);
-                        } else {
-                          await Share.share({ message: msg });
-                        }
-                      }}
-                    >
-                      <Text style={[styles.copyButtonText, { color: colors.textPrimary }]}>invite more</Text>
-                    </Pressable>
-                  </>
-                );
-              }
-              return null;
-            })()}
-
-            {/* Back */}
-            <Pressable style={styles.backToTodayButton} onPress={handleBackToIntro}>
-              <Text style={styles.backToTodayText}>back</Text>
-            </Pressable>
-          </View>
+          {/* Back button removed — sub-nav handles navigation */}
 
           {/* Crew Results */}
           {crews.length > 0 && (
