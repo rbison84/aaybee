@@ -147,11 +147,14 @@ export function BracketResults({
           </Animated.View>
         )}
 
-        {/* 3. Friend picker — highest conversion path */}
-        {!isGuest && friends.length > 0 && onChallengeFriend && (
-          <Animated.View entering={FadeInDown.delay(300).duration(400)} style={styles.friendPickerSection}>
-            <Text style={styles.friendPickerTitle}>CHALLENGE A FRIEND'S TASTE</Text>
-            {friends.length > 5 && (
+        {/* 3. SEE HOW YOUR TASTE COMPARES — unified section */}
+        <Animated.View entering={FadeInDown.delay(300).duration(400)} style={styles.friendPickerSection}>
+          <Text style={styles.friendPickerTitle}>SEE HOW YOUR TASTE COMPARES</Text>
+
+          {/* Existing friends */}
+          {!isGuest && friends.length > 0 && onChallengeFriend && (
+            <>
+              <Text style={styles.sectionSubLabel}>EXISTING FRIENDS</Text>
               <TextInput
                 style={styles.friendSearchInput}
                 placeholder="SEARCH FRIENDS..."
@@ -160,37 +163,35 @@ export function BracketResults({
                 onChangeText={setFriendSearch}
                 autoCapitalize="none"
               />
-            )}
-            {friends
-              .filter(f => !friendSearch || f.friend.display_name.toLowerCase().includes(friendSearch.toLowerCase()))
-              .slice(0, 5)
-              .map((friend) => (
-              <Pressable
-                key={friend.friend_id}
-                style={styles.friendRow}
-                onPress={() => {
-                  haptics.light();
-                  onChallengeFriend(friend.friend_id, friend.friend.display_name);
-                }}
-              >
-                <View style={styles.friendInfo}>
-                  <Text style={styles.friendName}>{friend.friend.display_name.toUpperCase()}</Text>
-                  {friend.taste_match ? (
-                    <Text style={styles.friendMatch}>{friend.taste_match}% MATCH</Text>
-                  ) : null}
-                </View>
-                <Text style={styles.friendChallengeText}>CHALLENGE</Text>
-              </Pressable>
-            ))}
-          </Animated.View>
-        )}
-        {!isGuest && loadingFriends && (
-          <ActivityIndicator color={colors.accent} style={{ marginBottom: spacing.xl }} />
-        )}
+              {friends
+                .filter(f => !friendSearch || f.friend.display_name.toLowerCase().includes(friendSearch.toLowerCase()))
+                .slice(0, 5)
+                .map((friend) => (
+                <Pressable
+                  key={friend.friend_id}
+                  style={styles.friendRow}
+                  onPress={() => {
+                    haptics.light();
+                    onChallengeFriend(friend.friend_id, friend.friend.display_name);
+                  }}
+                >
+                  <View style={styles.friendInfo}>
+                    <Text style={styles.friendName}>{friend.friend.display_name.toUpperCase()}</Text>
+                    {friend.taste_match ? (
+                      <Text style={styles.friendMatch}>{friend.taste_match}% MATCH</Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.friendChallengeText}>CHALLENGE</Text>
+                </Pressable>
+              ))}
+            </>
+          )}
+          {!isGuest && loadingFriends && (
+            <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.md }} />
+          )}
 
-        {/* 4. External share — growth path */}
-        <Animated.View entering={FadeInDown.delay(400).duration(400)} style={styles.shareSection}>
-          <Text style={styles.sendTitle}>SEE HOW YOUR TASTE COMPARES</Text>
+          {/* New friends — external share */}
+          <Text style={[styles.sectionSubLabel, { marginTop: spacing.lg }]}>NEW FRIENDS</Text>
 
           <View style={styles.qrCard}>
             <Text style={styles.qrLabel}>SCAN OR SHARE</Text>
@@ -285,7 +286,8 @@ const styles = StyleSheet.create({
 
   // Friend picker
   friendPickerSection: { marginBottom: spacing.xxl },
-  friendPickerTitle: { fontSize: 14, fontWeight: '800', color: colors.textPrimary, letterSpacing: 2, marginBottom: spacing.md },
+  friendPickerTitle: { fontSize: 16, fontWeight: '800', color: colors.textPrimary, letterSpacing: 2, marginBottom: spacing.lg },
+  sectionSubLabel: { fontSize: 10, fontWeight: '700', color: colors.accent, letterSpacing: 2, marginBottom: spacing.sm },
   friendRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.xl,
