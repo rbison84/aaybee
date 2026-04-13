@@ -451,32 +451,24 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   }, [user?.id]);
 
   // Record knockout bracket results into the taste graph
-  const recordBracketInTasteGraph = useCallback((movies: BracketMovie[], picks: BracketPick[]) => {
-    const comparisons = extractBracketComparisons(movies, picks);
+  const recordBracketInTasteGraph = useCallback((bracketMovies: BracketMovie[], picks: BracketPick[]) => {
+    // First, ensure all bracket movies exist in the store
+    for (const movie of bracketMovies) {
+      if (!storeMovies.has(movie.id)) {
+        markMovieAsKnown(movie.id, {
+          title: movie.title,
+          year: movie.year || 2000,
+          posterUrl: movie.posterUrl,
+        });
+      }
+    }
 
+    // Now record all 15 pairwise comparisons
+    const comparisons = extractBracketComparisons(bracketMovies, picks);
     for (const { winnerId, loserId } of comparisons) {
-      // Ensure both movies exist in the store before recording
-      const winnerInStore = storeMovies.get(winnerId);
-      const loserInStore = storeMovies.get(loserId);
-
-      if (winnerInStore && loserInStore) {
-        // Both in store — record the comparison (updates beta scores)
-        recordComparison(winnerId, loserId);
-      }
-      // If movies aren't in the store, we can't record — but they'll be
-      // picked up if the user encounters them in Compare later
+      recordComparison(winnerId, loserId);
     }
-
-    // Prioritize uncertain/uncompared movies from the bracket in future Compare sessions
-    // by ensuring they're marked as known (triggers lastShownAt reset → freshness boost)
-    for (const movie of movies) {
-      const inStore = storeMovies.get(movie.id);
-      if (inStore && inStore.status !== 'known' && inStore.status !== 'unknown') {
-        // Movie is uncertain or uncompared — it'll get prioritized naturally
-        // via the pair selector's undercompared bonus (low totalComparisons = higher weight)
-      }
-    }
-  }, [storeMovies, recordComparison]);
+  }, [storeMovies, recordComparison, markMovieAsKnown]);
 
   // Auto-start knockout when entering VS directly
   const autoStarted = useRef(false);
