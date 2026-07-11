@@ -28,6 +28,17 @@ function getSupabase() {
   return createClient(url, key);
 }
 
+// Title/description/names come from user-writable tables — escape everything
+// interpolated into the HTML to prevent stored XSS on the OG pages.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function ogHtml({
   title,
   description,
@@ -39,32 +50,37 @@ function ogHtml({
   imageUrl?: string;
   url: string;
 }): Response {
-  const imgTag = imageUrl
-    ? `<meta property="og:image" content="${imageUrl}" />
+  const safeTitle = escapeHtml(title.slice(0, 200));
+  const safeDescription = escapeHtml(description.slice(0, 300));
+  const safeUrl = escapeHtml(url);
+  const safeImageUrl = imageUrl ? escapeHtml(imageUrl) : undefined;
+
+  const imgTag = safeImageUrl
+    ? `<meta property="og:image" content="${safeImageUrl}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta name="twitter:image" content="${imageUrl}" />`
+    <meta name="twitter:image" content="${safeImageUrl}" />`
     : "";
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>${title}</title>
-  <meta property="og:title" content="${title}" />
-  <meta property="og:description" content="${description}" />
+  <title>${safeTitle}</title>
+  <meta property="og:title" content="${safeTitle}" />
+  <meta property="og:description" content="${safeDescription}" />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="${url}" />
+  <meta property="og:url" content="${safeUrl}" />
   ${imgTag}
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${title}" />
-  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:title" content="${safeTitle}" />
+  <meta name="twitter:description" content="${safeDescription}" />
   <meta name="theme-color" content="#C8FF00" />
   <!-- Redirect humans who somehow land here -->
-  <meta http-equiv="refresh" content="0;url=${url}" />
+  <meta http-equiv="refresh" content="0;url=${safeUrl}" />
 </head>
 <body>
-  <p>Redirecting to <a href="${url}">Aaybee</a>...</p>
+  <p>Redirecting to <a href="${safeUrl}">Aaybee</a>...</p>
 </body>
 </html>`;
 
@@ -110,6 +126,7 @@ async function handleVs(
         description: winner?.title
           ? `Last movie standing: ${winner.title}. Can you beat their match?`
           : `${knockout.match_percent}% taste match on a 16-movie knockout. Can you beat it?`,
+        imageUrl: `${requestUrl.origin}/.netlify/functions/og-image?type=vs&code=${code}`,
         url: requestUrl.origin + `/vs/${code}`,
       });
     }
@@ -118,50 +135,14 @@ async function handleVs(
     return ogHtml({
       title: `${knockout.creator_name} challenged you on Aaybee`,
       description: "16 movies. 4 rounds. One last movie standing. Tap to play.",
-      url: requestUrl.origin + `/vs/${code}`,
-    });
-  }
-
-  // Fallback: check old vs_challenges table
-  const { data: challenge } = await supabase
-    .from("vs_challenges")
-    .select("code, status, score, results, challenger_id")
-    .eq("code", code.toUpperCase())
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!challenge) {
-    return ogHtml({
-      title: "Aaybee VS — Movie Taste Challenge",
-      description: "16 movies. One standing. Compare your movie taste with a friend.",
-      url: requestUrl.origin + `/vs/${code}`,
-    });
-  }
-
-  if (challenge.status === "complete" && challenge.results) {
-    const r = challenge.results as any;
-    const score = challenge.score || 0;
-    return ogHtml({
-      title: `${r.challengerName} & ${r.challengedName}: ${score}/10 on Aaybee VS`,
-      description: `They agreed on ${score} out of 10 movie matchups. How similar is your taste?`,
       imageUrl: `${requestUrl.origin}/.netlify/functions/og-image?type=vs&code=${code}`,
       url: requestUrl.origin + `/vs/${code}`,
     });
   }
 
-  let challengerName = "Someone";
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("display_name")
-    .eq("id", challenge.challenger_id)
-    .maybeSingle();
-  if (profile?.display_name) challengerName = profile.display_name;
-
   return ogHtml({
-    title: `${challengerName} challenged you on Aaybee VS`,
-    description:
-      "Compare your movie taste — who picks better? Open the link to accept the challenge.",
+    title: "Aaybee VS — Movie Taste Challenge",
+    description: "16 movies. One standing. Compare your movie taste with a friend.",
     url: requestUrl.origin + `/vs/${code}`,
   });
 }
@@ -194,43 +175,15 @@ async function handleShare(
   });
 }
 
+// The 10-movie ranking challenge was retired; old /challenge links get a
+// generic card and land on the app's challenge home.
 async function handleChallenge(
   requestUrl: URL,
   code: string
 ): Promise<Response> {
-  const supabase = getSupabase();
-  const { data: challenge } = await supabase
-    .from("friend_challenges")
-    .select("creator_name, status, match_percent, challenger_name, movies")
-    .eq("code", code.toUpperCase())
-    .maybeSingle();
-
-  if (!challenge) {
-    return ogHtml({
-      title: "Aaybee — Movie Taste Challenge",
-      description: "Rank movies and see how your taste compares with a friend.",
-      url: requestUrl.origin + `/challenge/${code}`,
-    });
-  }
-
-  if (challenge.status === "complete") {
-    const pct = Math.round(challenge.match_percent || 0);
-    return ogHtml({
-      title: `${challenge.creator_name} & ${challenge.challenger_name}: ${pct}% match`,
-      description: `They ranked movies and matched ${pct}%. Can you do better?`,
-      imageUrl: `${requestUrl.origin}/.netlify/functions/og-image?type=challenge&code=${code}`,
-      url: requestUrl.origin + `/challenge/${code}`,
-    });
-  }
-
-  const movieCount = Array.isArray(challenge.movies)
-    ? challenge.movies.length
-    : 10;
   return ogHtml({
-    title: `${challenge.creator_name} challenged you to rank ${movieCount} movies`,
-    description:
-      "Rank the same movies and see if your taste matches. No signup needed.",
-    imageUrl: `${requestUrl.origin}/.netlify/functions/og-image?type=challenge&code=${code}`,
+    title: "Aaybee — Movie Taste Challenge",
+    description: "Rank movies and see how your taste compares with a friend.",
     url: requestUrl.origin + `/challenge/${code}`,
   });
 }

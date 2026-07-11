@@ -42,66 +42,6 @@ async function getFont(): Promise<ArrayBuffer> {
 // IMAGE RENDERERS
 // ============================================
 
-function vsImage(data: {
-  challengerName: string;
-  challengedName: string;
-  score: number;
-}) {
-  const pct = Math.round((data.score / 10) * 100);
-  return {
-    type: "div" as const,
-    props: {
-      style: {
-        width: 1200,
-        height: 630,
-        display: "flex",
-        flexDirection: "column" as const,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#0A0A0A",
-        color: "#F5F5F5",
-        fontFamily: "Inter",
-      },
-      children: [
-        {
-          type: "div" as const,
-          props: {
-            style: { fontSize: 32, color: "#FF6B2B", marginBottom: 16 },
-            children: "AAYBEE VS",
-          },
-        },
-        {
-          type: "div" as const,
-          props: {
-            style: { fontSize: 64, fontWeight: 700, marginBottom: 24 },
-            children: `${data.score}/10`,
-          },
-        },
-        {
-          type: "div" as const,
-          props: {
-            style: { fontSize: 36, color: "#999999" },
-            children: `${data.challengerName} & ${data.challengedName}`,
-          },
-        },
-        {
-          type: "div" as const,
-          props: {
-            style: {
-              fontSize: 24,
-              color: "#FF6B2B",
-              marginTop: 32,
-              padding: "8px 24px",
-              border: "2px solid #FF6B2B",
-              borderRadius: 12,
-            },
-            children: `${pct}% taste match`,
-          },
-        },
-      ],
-    },
-  };
-}
 
 function challengeImage(data: {
   creatorName: string;
@@ -314,35 +254,21 @@ export default async function handler(req: Request, context: Context) {
 
   try {
     if (type === "vs" && code) {
+      // Knockout bracket (the only head-to-head format)
       const { data: challenge } = await supabase
-        .from("vs_challenges")
-        .select("score, results")
-        .eq("code", code.toUpperCase())
-        .maybeSingle();
-
-      if (challenge?.results) {
-        const r = challenge.results as any;
-        element = vsImage({
-          challengerName: r.challengerName || "Player 1",
-          challengedName: r.challengedName || "Player 2",
-          score: challenge.score || 0,
-        });
-      }
-    } else if (type === "challenge" && code) {
-      const { data: challenge } = await supabase
-        .from("friend_challenges")
+        .from("knockout_challenges")
         .select("creator_name, challenger_name, match_percent, movies, status")
         .eq("code", code.toUpperCase())
         .maybeSingle();
 
       if (challenge) {
-        const movies = challenge.movies as any[];
+        const movies = (challenge.movies as any[]) || [];
         element = challengeImage({
           creatorName: challenge.creator_name,
           challengerName: challenge.challenger_name,
           matchPercent: challenge.match_percent,
           movieTitles: movies.map((m: any) => m.title),
-          status: challenge.status,
+          status: challenge.status === "complete" ? "complete" : "pending",
         });
       }
     } else if (type === "daily" && code) {

@@ -401,18 +401,17 @@ export const friendService = {
   ): Promise<FriendRanking[]> => {
     if (!friendId) return [];
     try {
-      // Get friend's movies
-      const { data: friendMovies, error } = await supabase
-        .from('user_movies')
-        .select('movie_id, beta, total_comparisons')
-        .eq('user_id', friendId)
-        .eq('status', 'known')
-        .order('beta', { ascending: false });
+      // Get friend's movies (cross-user read goes through the scoped RPC)
+      const { data: friendMoviesData, error } = await supabase.rpc('get_known_rankings', {
+        target_ids: [friendId],
+      });
 
-      if (error || !friendMovies) {
+      if (error || !friendMoviesData) {
         console.error('[FriendService] Get friend rankings error:', error);
         return [];
       }
+
+      const friendMovies = friendMoviesData as { movie_id: string; beta: number; total_comparisons: number }[];
 
       // Get movie details
       const movieIds = friendMovies.map(m => m.movie_id);
@@ -600,34 +599,23 @@ export const friendService = {
 
       const friendIds = friends.map(f => f.friend.id);
 
-      // Get friends' rankings for this movie
-      const { data: rankings } = await supabase
-        .from('user_movies')
-        .select('user_id, beta')
-        .eq('movie_id', movieId)
-        .eq('status', 'known')
-        .in('user_id', friendIds);
+      // Get friends' betas + rank positions for this movie in one RPC call
+      const { data: rankings } = await supabase.rpc('get_movie_rankings_for_users', {
+        p_movie_id: movieId,
+        target_ids: friendIds,
+      });
 
       if (!rankings) return [];
 
-      // Get each friend's rank for this movie
       const results: { friend: FriendProfile; rank: number; beta: number }[] = [];
 
-      for (const ranking of rankings) {
+      for (const ranking of rankings as { user_id: string; beta: number; rank: number }[]) {
         const friend = friends.find(f => f.friend.id === ranking.user_id);
         if (!friend) continue;
 
-        // Get friend's rank for this movie
-        const { count } = await supabase
-          .from('user_movies')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', ranking.user_id)
-          .eq('status', 'known')
-          .gt('beta', ranking.beta);
-
         results.push({
           friend: friend.friend,
-          rank: (count || 0) + 1,
+          rank: ranking.rank,
           beta: ranking.beta,
         });
       }
@@ -657,12 +645,10 @@ export const friendService = {
 
       const friendIds = friends.map(f => f.friend.id);
 
-      // Get all friend movie rankings
-      const { data: friendMovies, error } = await supabase
-        .from('user_movies')
-        .select('movie_id, user_id, beta')
-        .eq('status', 'known')
-        .in('user_id', friendIds);
+      // Get all friend movie rankings via the scoped RPC
+      const { data: friendMovies, error } = await supabase.rpc('get_known_rankings', {
+        target_ids: friendIds,
+      });
 
       if (error || !friendMovies) {
         console.error('[FriendService] Get friend movies error:', error);
@@ -738,7 +724,97 @@ export const friendService = {
       return [];
     }
   },
+
+  // ============================================
+  // Relationship labels ("Your People")
+  // ============================================
+
+  getFriendLabels: async (userId: string): Promise<Map<string, string>> => {
+    const map = new Map<string, string>();
+    try {
+      const { data } = await supabase
+        .from('friend_labels')
+        .select('friend_id, label')
+        .eq('user_id', userId);
+      data?.forEach((row: { friend_id: string; label: string }) => map.set(row.friend_id, row.label));
+    } catch (error) {
+      console.error('[FriendService] Get friend labels error:', error);
+    }
+    return map;
+  },
+
+  setFriendLabel: async (userId: string, friendId: string, label: string | null): Promise<void> => {
+    try {
+      if (!label) {
+        await supabase.from('friend_labels').delete().eq('user_id', userId).eq('friend_id', friendId);
+      } else {
+        await supabase.from('friend_labels').upsert(
+          { user_id: userId, friend_id: friendId, label },
+          { onConflict: 'user_id,friend_id' },
+        );
+      }
+    } catch (error) {
+      console.error('[FriendService] Set friend label error:', error);
+    }
+  },
+
+  // ============================================
+  // Invite slots (ghost rows — people not on the app yet)
+  // ============================================
+
+  getFriendSlots: async (userId: string): Promise<FriendSlot[]> => {
+    try {
+      const { data } = await supabase
+        .from('friend_slots')
+        .select('id, name, invited_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+      return (data as FriendSlot[]) || [];
+    } catch (error) {
+      console.error('[FriendService] Get friend slots error:', error);
+      return [];
+    }
+  },
+
+  addFriendSlot: async (userId: string, name: string): Promise<FriendSlot | null> => {
+    try {
+      const { data } = await supabase
+        .from('friend_slots')
+        .insert({ user_id: userId, name: name.slice(0, 40) })
+        .select('id, name, invited_at')
+        .single();
+      return (data as FriendSlot) || null;
+    } catch (error) {
+      console.error('[FriendService] Add friend slot error:', error);
+      return null;
+    }
+  },
+
+  markSlotInvited: async (slotId: string): Promise<void> => {
+    try {
+      await supabase
+        .from('friend_slots')
+        .update({ invited_at: new Date().toISOString() })
+        .eq('id', slotId);
+    } catch (error) {
+      console.error('[FriendService] Mark slot invited error:', error);
+    }
+  },
+
+  removeFriendSlot: async (slotId: string): Promise<void> => {
+    try {
+      await supabase.from('friend_slots').delete().eq('id', slotId);
+    } catch (error) {
+      console.error('[FriendService] Remove friend slot error:', error);
+    }
+  },
 };
+
+export interface FriendSlot {
+  id: string;
+  name: string;
+  invited_at: string | null;
+}
 
 // Additional type for aggregated rankings
 export interface AggregatedFriendRanking {

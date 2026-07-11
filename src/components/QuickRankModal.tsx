@@ -263,9 +263,9 @@ export function QuickRankModal() {
 
     // Record the actual comparison
     if (choseTarget) {
-      recordComparison(targetMovie.id, currentOpponent.id, false);
+      recordComparison(targetMovie.id, currentOpponent.id, false, 'quickrank');
     } else {
-      recordComparison(currentOpponent.id, targetMovie.id, false);
+      recordComparison(currentOpponent.id, targetMovie.id, false, 'quickrank');
     }
 
     const nextIndex = comparisonIndex + 1;

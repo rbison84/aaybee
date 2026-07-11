@@ -17,6 +17,7 @@ import { useQuickRank } from '../contexts/QuickRankContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAlert } from '../contexts/AlertContext';
 import { watchlistService } from '../services/watchlistService';
+import { recommendationService } from '../services/recommendationService';
 import { getMovieTrailer } from '../services/tmdb';
 import { TvChannel, extractTmdbId, getAllChannelsMap, getCuratedSections } from '../data/tvChannels';
 import { ChannelSelector } from '../components/tv/ChannelSelector';
@@ -83,10 +84,46 @@ function TvStaticOverlay() {
 }
 
 export function TvScreen({ onClose }: TvScreenProps) {
-  const { movies, getRankedMovies } = useAppStore();
+  const { movies, getRankedMovies, totalComparisons, userSession } = useAppStore();
+  const { user, isGuest } = useAuth();
+
+  // FOR YOU = the rec engine's storefront window. When the user has enough
+  // data, the channel is seeded with taste-twin recommendations (movies they
+  // HAVEN'T seen) instead of a shuffle of their own ranked list, and each
+  // item carries social proof from the person it came from.
+  const [recChannelMovieIds, setRecChannelMovieIds] = useState<string[] | null>(null);
+  const recProofRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!user?.id || totalComparisons < 40) return;
+    let mounted = true;
+    recommendationService
+      .getRecommendations(user.id, 20, [], { ...(userSession as any)?.preferences })
+      .then(result => {
+        if (!mounted || !result?.recommendations?.length) return;
+        const proof = new Map<string, string>();
+        const ids: string[] = [];
+        for (const rec of result.recommendations) {
+          ids.push(rec.movieId);
+          const by = rec.recommendedBy;
+          if (by?.displayName && by.userId && by.userId !== 'stored' && by.userId !== 'global') {
+            const pct = Math.round((by.similarity || 0) * 100);
+            proof.set(
+              rec.movieId,
+              by.theirRank > 0
+                ? `${by.displayName.toLowerCase()} (${pct}% match) ranks this #${by.theirRank}`
+                : `${by.displayName.toLowerCase()} (${pct}% match) rates this highly`
+            );
+          }
+        }
+        recProofRef.current = proof;
+        setRecChannelMovieIds(ids);
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, [user?.id, totalComparisons]);
   const { openMovieDetail } = useMovieDetail();
   const { startQuickRank, isVisible: quickRankVisible } = useQuickRank();
-  const { user, isGuest } = useAuth();
   const { showAlert } = useAlert();
   const { containerWidth } = useAppDimensions();
 
@@ -104,8 +141,20 @@ export function TvScreen({ onClose }: TvScreenProps) {
 
   const rankedMovies = useMemo(() => getRankedMovies(), [getRankedMovies]);
 
-  const allChannelsMap = useMemo(() => getAllChannelsMap(movies, rankedMovies), [movies, rankedMovies]);
+  const baseChannelsMap = useMemo(() => getAllChannelsMap(movies, rankedMovies), [movies, rankedMovies]);
   const curatedSections = useMemo(() => getCuratedSections(movies, rankedMovies), [movies, rankedMovies]);
+
+  // Swap FOR YOU's contents for rec-engine output once available — trailers
+  // for movies you HAVEN'T seen convert to watch clicks; your own ranked
+  // list stays as the cold-start fallback
+  const allChannelsMap = useMemo(() => {
+    if (!recChannelMovieIds || recChannelMovieIds.length === 0) return baseChannelsMap;
+    const map = new Map(baseChannelsMap);
+    const forYou = map.get('for-you');
+    if (forYou) map.set('for-you', { ...forYou, movieIds: recChannelMovieIds });
+    return map;
+  }, [baseChannelsMap, recChannelMovieIds]);
+
   const forYouChannel = useMemo(() => allChannelsMap.get('for-you')!, [allChannelsMap]);
 
   // Dynamic filter channels created via the guide's "play N movies" button
@@ -179,6 +228,7 @@ export function TvScreen({ onClose }: TvScreenProps) {
           channelId,
           contextLine,
           isRanked,
+          socialProof: recProofRef.current.get(movieId),
         };
       })
     );
@@ -220,6 +270,7 @@ export function TvScreen({ onClose }: TvScreenProps) {
         channelId: channel.id,
         contextLine,
         isRanked,
+        socialProof: recProofRef.current.get(movieId),
       };
 
       setTrailerItems(prev => [...prev, newItem]);

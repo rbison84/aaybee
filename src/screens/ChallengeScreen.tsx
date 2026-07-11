@@ -20,15 +20,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAppStore } from '../store/useAppStore';
 import { useAppDimensions } from '../contexts/DimensionsContext';
 import { useHaptics } from '../hooks/useHaptics';
-import { challengeService, ChallengeMovie, FriendChallenge } from '../services/challengeService';
-import { shareService } from '../services/shareService';
-import { vsService, VsChallenge, VsMovie, VsPair, VsResults } from '../services/vsService';
+import { challengeService } from '../services/challengeService';
 import { friendService, FriendWithProfile, FriendRequest, UserSearchResult } from '../services/friendService';
 import { ContactInvite } from '../components/ContactInvite';
 import { TasteRadar } from '../components/TasteRadar';
 import { CinematicCard } from '../components/cinematic/CinematicCard';
 import { OnboardingProgressBar } from '../components/onboarding/OnboardingProgressBar';
 import { computeTasteAxes, generateComparisonSummary } from '../utils/tasteAxes';
+import { shareToWhatsApp } from '../utils/crossPlatform';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
 import { Movie } from '../types';
 import { CURATED_PACKS, CuratedPack } from '../data/curatedPacks';
@@ -51,13 +50,6 @@ import { knockoutService, KnockoutChallenge } from '../services/knockoutService'
 
 type ChallengeStep =
   | 'home'
-  | 'select'
-  | 'share'
-  | 'vs-name'
-  | 'vs-selecting'
-  | 'vs-comparing'
-  | 'vs-waiting'
-  | 'vs-result'
   | 'knockout-name'
   | 'knockout'
   | 'knockout-sent'
@@ -88,25 +80,12 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Create flow
-  const [availableMovies, setAvailableMovies] = useState<ChallengeMovie[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  // Active challenge
-  const [challenge, setChallenge] = useState<FriendChallenge | null>(null);
-
   // Challenger name
   const [challengerName, setChallengerName] = useState('');
 
-
-  // Copied feedback
-  const [copied, setCopied] = useState(false);
-
-  // Leaderboard
-  const [leaderboard, setLeaderboard] = useState<{ name: string; matchPercent: number; code: string; date: string }[]>([]);
-
-  // Active/pending challenges
-  const [activeChallenges, setActiveChallenges] = useState<FriendChallenge[]>([]);
+  // Directed challenge target (from props or a friend-row tap)
+  const [targetFriendId, setTargetFriendId] = useState<string | undefined>(challengedFriendId);
+  const [targetFriendName, setTargetFriendName] = useState<string | undefined>(challengedFriendName);
 
   // Friends
   const [friends, setFriends] = useState<FriendWithProfile[]>([]);
@@ -121,15 +100,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   const [showContacts, setShowContacts] = useState(false);
   const [showPacks, setShowPacks] = useState(false);
   const [friendTopMovies, setFriendTopMovies] = useState<Map<string, { title: string }[]>>(new Map());
-
-  // VS challenge state (pool-based flow)
-  const [activeVsChallenges, setActiveVsChallenges] = useState<VsChallenge[]>([]);
-  const [vsChallenge, setVsChallenge] = useState<VsChallenge | null>(null);
-  const [vsSelectedIds, setVsSelectedIds] = useState<Set<string>>(new Set());
-  const [vsPairIndex, setVsPairIndex] = useState(0);
-  const [vsGuestName, setVsGuestName] = useState('');
-  const vsPickingRef = useRef(false);
-  const vsSubscriptionRef = useRef<any>(null);
 
   // Knockout bracket state
   const [bracketMovies, setBracketMovies] = useState<BracketMovie[]>([]);
@@ -151,25 +121,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
     (async () => {
       setLoading(true);
 
-      // Try VS challenge
-      const vc = await vsService.getChallengeByCode(initialCode);
-      if (vc) {
-        setVsChallenge(vc);
-        if (vc.status === 'complete' && vc.results) {
-          setStep('vs-result');
-        } else if (user?.id) {
-          const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
-          const { challenge: joined } = await vsService.joinChallenge(initialCode, user.id, displayName);
-          if (joined) setVsChallenge(joined);
-          setStep('vs-selecting');
-        } else {
-          setStep('vs-name');
-        }
-        setLoading(false);
-        return;
-      }
-
-      // Try knockout challenge
+      // Knockout challenge (the only head-to-head format)
       const kc = await knockoutService.getChallengeByCode(initialCode);
       if (kc) {
         setKnockoutChallenge(kc);
@@ -201,19 +153,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
     })();
   }, [initialCode]);
 
-  // Load leaderboard + active challenges
-  useEffect(() => {
-    if (!user?.id) {
-      setActiveChallenges([]);
-      setActiveVsChallenges([]);
-      setLeaderboard([]);
-      return;
-    }
-    challengeService.getMyActiveChallenges(user.id).then(setActiveChallenges);
-    vsService.getMyChallenges(user.id).then(setActiveVsChallenges);
-    challengeService.getChallengeLeaderboard(user.id).then(setLeaderboard);
-  }, [user?.id]);
-
   // Load friends on mount
   useEffect(() => {
     if (!user?.id) {
@@ -230,108 +169,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
       setFriendRequests(requestsData);
     })();
   }, [user?.id]);
-
-  // ============================================
-  // CREATE FLOW
-  // ============================================
-
-  const loadMoviesForSelection = useCallback(async () => {
-    if (!user?.id) {
-      // No user — show curated packs
-      setShowPacks(true);
-      return;
-    }
-    setLoading(true);
-    const movies = await challengeService.getTopMoviesForChallenge(user.id, 30);
-    if (movies.length < 9) {
-      // Not enough ranked movies — show curated packs
-      setShowPacks(false);
-      setLoading(false);
-      setShowPacks(true);
-      return;
-    }
-    setAvailableMovies(movies);
-    const top9 = movies.slice(0, 9).map(m => m.id);
-    setSelectedIds(new Set(top9));
-    setLoading(false);
-    setStep('select');
-  }, [user?.id]);
-
-  const toggleMovie = useCallback((id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else if (next.size < 9) {
-        next.add(id);
-      }
-      return next;
-    });
-    haptics.light();
-  }, [haptics]);
-
-  const createChallenge = useCallback(async () => {
-    if (selectedIds.size < 3) return;
-    setLoading(true);
-    setError(null);
-
-    const selectedMovies = availableMovies.filter(m => selectedIds.has(m.id));
-    // Creator ranking is the order they appear in (by beta score, already sorted)
-    const creatorRanking = selectedMovies.map(m => m.id);
-
-    // Get display name — guests use challengerName or 'Guest'
-    const displayName = user?.id
-      ? (user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan')
-      : (challengerName || 'Guest');
-
-    const { challenge: c, error: err } = await challengeService.createChallenge(
-      user?.id || null,
-      displayName,
-      selectedMovies,
-      creatorRanking,
-    );
-
-    if (err || !c) {
-      setError(err || 'Failed to create challenge');
-      setLoading(false);
-      return;
-    }
-
-    setChallenge(c);
-    setStep('share');
-    setLoading(false);
-    haptics.success();
-  }, [user, selectedIds, availableMovies, haptics, challengerName]);
-
-  // ============================================
-  // PRIMARY CTA: "challenge a friend"
-  // ============================================
-
-  const handleCreateChallenge = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    if (user?.id) {
-      // Logged-in: create VS challenge (pool-based, works for anyone)
-      const { challenge: vc, error: err } = await vsService.createChallenge(user.id, null);
-      if (vc) {
-        setVsChallenge(vc);
-        setStep('share');
-        haptics.success();
-        setLoading(false);
-        return;
-      }
-      // Fallback: not enough ranked movies → show pack picker
-      if (err) {
-        setShowPacks(true);
-        setLoading(false);
-        return;
-      }
-    }
-    // Guest → show pack picker
-    setShowPacks(true);
-    setLoading(false);
-  }, [user, haptics]);
 
   // ============================================
   // KNOCKOUT BRACKET
@@ -427,7 +264,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
 
     const comparisons = extractBracketComparisons(bMovies, picks);
     for (const { winnerId, loserId } of comparisons) {
-      recordComparison(winnerId, loserId);
+      recordComparison(winnerId, loserId, false, 'vs');
     }
     pendingBracketRef.current = null;
   }, [storeMovies, recordComparison]);
@@ -487,17 +324,17 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
       winner,
       user?.id || null,
       displayName,
-      challengedFriendId || null,
+      targetFriendId || null,
     );
     if (created) setKnockoutChallenge(created);
 
     // If directed challenge, show "challenge sent" confirmation first
-    if (challengedFriendId) {
+    if (targetFriendId) {
       setStep('knockout-sent');
     } else {
       setStep('knockout-result');
     }
-  }, [knockoutChallenge, bracketMovies, knockoutSeed, user, challengerName, challengedFriendId, recordBracketInTasteGraph]);
+  }, [knockoutChallenge, bracketMovies, knockoutSeed, user, challengerName, targetFriendId, recordBracketInTasteGraph]);
 
   const handleKnockoutPackSelect = useCallback(async (pack: CuratedPack) => {
     setLoading(true);
@@ -538,21 +375,26 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
     if (cleaned.length === 6) {
       setLoading(true);
 
-      // Try VS challenge
-      const vc = await vsService.getChallengeByCode(cleaned);
-      if (vc) {
-        setVsChallenge(vc);
-        if (vc.status === 'complete' && vc.results) {
-          setStep('vs-result');
-        } else if (user?.id) {
-          // Signed-in: auto-join and go to selecting
-          const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
-          const { challenge: joined } = await vsService.joinChallenge(cleaned, user.id, displayName);
-          if (joined) setVsChallenge(joined);
-          setStep('vs-selecting');
+      // Knockout challenge lookup (previously this box only checked the
+      // retired pool-VS table, so typed knockout codes failed)
+      const kc = await knockoutService.getChallengeByCode(cleaned);
+      if (kc) {
+        setKnockoutChallenge(kc);
+        setBracketMovies(kc.movies);
+        if (kc.status === 'complete') {
+          setBracketPicks(kc.challenger_picks || kc.creator_picks || []);
+          setBracketWinner(kc.challenger_winner || kc.creator_winner || null);
+          setStep('knockout-result');
         } else {
-          // Guest: ask for name first
-          setStep('vs-name');
+          setBracketPicks([]);
+          setBracketWinner(null);
+          if (user?.id) {
+            const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
+            setChallengerName(displayName);
+            setStep('knockout');
+          } else {
+            setStep('knockout-name');
+          }
         }
         setLoading(false);
         setJoinCodeInput('');
@@ -608,73 +450,16 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   // ============================================
   // QUICK CHALLENGE FROM FRIEND ROW
   // ============================================
+  // Plays a knockout targeted at the friend — on completion the bracket is
+  // sent to them directly (same bracket, taste match on their finish).
 
   const handleQuickChallenge = useCallback(async (friend: FriendWithProfile) => {
     if (!user?.id) return;
-    setLoading(true);
-    setError(null);
-
-    // Check if both users have 9+ common ranked movies
-    const friendId = friend.friend_id;
-    const commonMovies = await challengeService.getCommonMovies(user.id, friendId, 9);
-
-    if (commonMovies && commonMovies.length >= 9) {
-      // Auto-personalized: use common movies directly
-      const selectedMovies = commonMovies.slice(0, 9);
-      const creatorRanking = selectedMovies.map(m => m.id);
-      const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Movie Fan';
-      const { challenge: c, error: err } = await challengeService.createChallenge(
-        user.id, displayName, selectedMovies, creatorRanking,
-      );
-      if (c) {
-        setChallenge(c);
-        setStep('share');
-        haptics.success();
-      } else {
-        setError(err || 'Failed');
-      }
-    } else {
-      // Not enough common movies — show collection picker
-      setShowPacks(true);
-    }
-
-    setLoading(false);
-  }, [user, haptics]);
-
-  const handleSelectPack = useCallback(async (pack: CuratedPack) => {
-    setLoading(true);
-
-    const { data: movieData } = await supabase
-      .from('movies')
-      .select('id, title, year, poster_url')
-      .in('id', pack.movieIds);
-
-    if (movieData && movieData.length >= 3) {
-      const pool: VsMovie[] = movieData.map(m => ({
-        id: m.id,
-        title: m.title,
-        year: m.year,
-        posterUrl: m.poster_url || '',
-        beta: 0,
-      }));
-
-      const { challenge: vc, error: err } = await vsService.createChallengeWithPool(
-        user?.id || null,
-        pool,
-      );
-
-      if (vc) {
-        setVsChallenge(vc);
-        setShowPacks(false);
-        setStep('share');
-        haptics.success();
-      } else {
-        setError(err || 'Failed to create challenge');
-      }
-    }
-
-    setLoading(false);
-  }, [user, haptics]);
+    setTargetFriendId(friend.friend_id);
+    setTargetFriendName(friend.friend?.display_name || undefined);
+    haptics.light();
+    await handleStartKnockout();
+  }, [user?.id, haptics, handleStartKnockout]);
 
   // ============================================
   // FRIEND ACCORDION
@@ -709,7 +494,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
   // HOME: unified VS flow
   const renderHome = () => {
     const isGuestUser = !user?.id;
-    const hasContent = friends.length > 0 || activeChallenges.length > 0 || activeVsChallenges.length > 0;
+    const hasContent = friends.length > 0;
 
     // Guest or signed-in user with no challenges/friends: focused empty state
     if (!hasContent && !showSearch && !showPacks) {
@@ -734,17 +519,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
               <Text style={styles.primaryCtaText}>KNOCKOUT</Text>
             )}
           </Pressable>
-
-          {/* Secondary: Challenge a friend (existing flow) */}
-          {!isGuestUser && (
-            <Pressable
-              style={[styles.secondaryCta, { width: '100%', maxWidth: 320, marginTop: spacing.md }]}
-              onPress={handleCreateChallenge}
-              disabled={loading}
-            >
-              <Text style={styles.secondaryCtaText}>CHALLENGE A FRIEND</Text>
-            </Pressable>
-          )}
 
           <TextInput
             style={[styles.codeInputInline, { maxWidth: 320, width: '100%' }]}
@@ -787,15 +561,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
         ) : (
           <Text style={styles.primaryCtaText}>KNOCKOUT</Text>
         )}
-      </Pressable>
-
-      {/* Secondary: Challenge a friend */}
-      <Pressable
-        style={[styles.secondaryCta, loading && styles.actionButtonDisabled]}
-        onPress={handleCreateChallenge}
-        disabled={loading}
-      >
-        <Text style={styles.secondaryCtaText}>CHALLENGE A FRIEND</Text>
       </Pressable>
 
       {/* Always-visible code input */}
@@ -856,7 +621,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
             <Animated.View entering={FadeIn.duration(200)} style={styles.qrSection}>
               {user?.id && (
                 <QRCode
-                  value={`https://aaybee.netlify.app/connect/${user.id}`}
+                  value={`https://aaybee.netlify.app/?ref=${user.id}`}
                   size={140}
                   backgroundColor="transparent"
                   color="#F5F5F5"
@@ -930,14 +695,12 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
             friends
               .map(friend => {
                 const name = friend.friend?.display_name || 'Anonymous';
-                const friendGames = leaderboard.filter(l => l.name === name);
-                const avgMatch = friendGames.length > 0
-                  ? Math.round(friendGames.reduce((s, g) => s + g.matchPercent, 0) / friendGames.length)
-                  : (friend.taste_match ? Math.round(friend.taste_match) : null);
-                return { friend, name, avgMatch, gameCount: friendGames.length, friendGames };
+                const avgMatch = friend.taste_match ? Math.round(friend.taste_match) : null;
+                const gameCount = (friend as any).games_played || 0;
+                return { friend, name, avgMatch, gameCount };
               })
               .sort((a, b) => (b.avgMatch ?? -1) - (a.avgMatch ?? -1))
-              .map(({ friend, name, avgMatch, gameCount, friendGames }, rank) => {
+              .map(({ friend, name, avgMatch, gameCount }, rank) => {
                 const isExpanded = expandedFriendId === friend.friend_id;
                 const topMovies = friendTopMovies.get(friend.friend_id);
                 const rankLabel = avgMatch !== null && rank < 3 ? `#${rank + 1}` : '';
@@ -952,7 +715,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
                       <Pressable style={styles.friendInfo} onPress={() => handleFriendTap(friend)}>
                         <Text style={styles.friendName}>{name}</Text>
                         <Text style={styles.friendMatch}>
-                          {avgMatch !== null ? `${avgMatch}% avg` : '\u2014'}
+                          {avgMatch !== null ? `${avgMatch}% match` : '\u2014'}
                           {gameCount > 0 ? `  ${gameCount} game${gameCount !== 1 ? 's' : ''}` : ''}
                         </Text>
                       </Pressable>
@@ -967,14 +730,9 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
                             top 5: {topMovies.map(m => m.title).join(', ')}
                           </Text>
                         )}
-                        {friendGames.length > 0 && (
-                          <Text style={styles.friendStat}>
-                            avg match: {avgMatch}% · last played: {friendGames[0]?.date ? new Date(friendGames[0].date).toLocaleDateString() : '\u2014'}
-                          </Text>
-                        )}
-                        {friendGames.length === 0 && (
-                          <Text style={styles.friendStat}>no challenges yet</Text>
-                        )}
+                        <Text style={styles.friendStat}>
+                          {gameCount > 0 ? `${gameCount} game${gameCount !== 1 ? 's' : ''} played` : 'no challenges yet'}
+                        </Text>
                       </Animated.View>
                     )}
                   </Animated.View>
@@ -1005,506 +763,9 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
         </Pressable>
       )}
 
-      {/* ACTIVE VS - in-progress VS challenges */}
-      {activeVsChallenges.filter(vc => vc.status !== 'complete').length > 0 && (
-        <Animated.View entering={FadeInDown.delay(250)} style={styles.sectionBlock}>
-          <Text style={styles.sectionLabel}>active</Text>
-          {activeVsChallenges.filter(vc => vc.status !== 'complete').map(vc => {
-            const isChallenger = vc.challenger_id === user?.id;
-            const opponentName = isChallenger ? (vc.challenged_name || 'waiting...') : 'someone';
-            const statusText =
-              vc.status === 'pending' ? 'waiting...'
-              : vc.status === 'selecting' ? (isChallenger ? 'they\'re picking movies' : 'select movies')
-              : vc.status === 'challenged_comparing' ? (isChallenger ? 'they\'re comparing' : 'your turn!')
-              : vc.status === 'challenger_comparing' ? (isChallenger ? 'your turn!' : 'waiting for them')
-              : 'in progress';
-            return (
-              <Pressable key={vc.id} style={styles.challengeRow} onPress={() => {
-                setVsChallenge(vc);
-                if (vc.status === 'pending' && isChallenger) {
-                  setStep('share');
-                } else if (vc.status === 'selecting' && !isChallenger) {
-                  setVsSelectedIds(new Set());
-                  setStep('vs-selecting');
-                } else if (vc.status === 'challenged_comparing' && !isChallenger) {
-                  setVsPairIndex(0);
-                  setStep('vs-comparing');
-                } else if (vc.status === 'challenger_comparing' && isChallenger) {
-                  setVsPairIndex(0);
-                  setStep('vs-comparing');
-                }
-              }}>
-                <Text style={styles.challengeRowName}>vs {opponentName}</Text>
-                <Text style={styles.challengeRowStatus}>{statusText}</Text>
-              </Pressable>
-            );
-          })}
-        </Animated.View>
-      )}
-
-      {/* COMPLETED VS challenges */}
-      {activeVsChallenges.filter(vc => vc.status === 'complete').length > 0 && (
-        <Animated.View entering={FadeInDown.delay(300)} style={styles.sectionBlock}>
-          <Text style={styles.sectionLabel}>vs results</Text>
-          {activeVsChallenges.filter(vc => vc.status === 'complete').slice(0, 5).map(vc => (
-            <Pressable key={vc.id} style={styles.challengeRow} onPress={() => {
-              setVsChallenge(vc);
-              setStep('vs-result');
-            }}>
-              <Text style={styles.challengeRowName}>
-                vs {vc.challenged_name || 'someone'}
-              </Text>
-              <Text style={styles.challengeRowStatus}>
-                {vc.score}/{vc.pairs?.length || '?'}
-              </Text>
-            </Pressable>
-          ))}
-        </Animated.View>
-      )}
 
       {error && <Text style={styles.errorText}>{error}</Text>}
     </ScrollView>
-    );
-  };
-
-  // SELECT: pick 9 movies
-  const renderSelect = () => (
-    <Animated.View entering={FadeIn} style={styles.fullContent}>
-      <Text style={styles.sectionTitle}>pick your movies</Text>
-      <Text style={styles.sectionSubtitle}>
-        {selectedIds.size}/9 selected — your friend will rank these same movies
-      </Text>
-
-      <ScrollView style={styles.movieGrid} contentContainerStyle={styles.movieGridContent}>
-        {availableMovies.map((movie) => {
-          const isSelected = selectedIds.has(movie.id);
-          return (
-            <Pressable
-              key={movie.id}
-              style={[styles.movieItem, isSelected && styles.movieItemSelected]}
-              onPress={() => toggleMovie(movie.id)}
-            >
-              {movie.posterUrl ? (
-                <Image
-                  source={{ uri: movie.posterUrl }}
-                  style={styles.moviePoster}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={[styles.moviePoster, styles.moviePosterPlaceholder]}>
-                  <Text style={styles.moviePosterText}>{movie.title[0]}</Text>
-                </View>
-              )}
-              {isSelected && (
-                <View style={styles.selectedBadge}>
-                  <Text style={styles.selectedBadgeText}>✓</Text>
-                </View>
-              )}
-              <Text style={styles.movieTitle} numberOfLines={2}>{movie.title}</Text>
-              <Text style={styles.movieYear}>{movie.year}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <Pressable
-        style={[
-          styles.actionButton,
-          styles.actionButtonPrimary,
-          selectedIds.size < 3 && styles.actionButtonDisabled,
-        ]}
-        onPress={createChallenge}
-        disabled={selectedIds.size < 3 || loading}
-      >
-        {loading ? (
-          <ActivityIndicator size="small" color={colors.background} />
-        ) : (
-          <Text style={styles.actionButtonTextPrimary}>
-            create challenge ({selectedIds.size} movies)
-          </Text>
-        )}
-      </Pressable>
-    </Animated.View>
-  );
-
-  // SHARE: waiting/share screen
-  const renderShare = () => {
-    const code = vsChallenge?.code || challenge?.code;
-    const isVs = !!vsChallenge;
-    const shareUrl = isVs
-      ? shareService.getVsShareUrl(code!, user?.id)
-      : shareService.getChallengeShareUrl(code!, user?.id);
-    const qrUrl = isVs
-      ? `https://aaybee.netlify.app/vs/${code}`
-      : `https://aaybee.netlify.app/challenge/${code}`;
-
-    return (
-      <Animated.View entering={FadeIn} style={styles.centeredContent}>
-        <Text style={styles.heroTitle}>send this to a friend</Text>
-
-        <View style={styles.qrContainer}>
-          <QRCode
-            value={qrUrl}
-            size={160}
-            backgroundColor="transparent"
-            color="#F5F5F5"
-          />
-        </View>
-
-        <View style={styles.codeDisplay}>
-          <Text style={styles.codeLabel}>CODE</Text>
-          <Text style={styles.codeDisplayText}>{code}</Text>
-        </View>
-
-        <Pressable
-          style={[styles.primaryCta, { marginTop: spacing.xl, width: '100%', maxWidth: 320 }]}
-          onPress={async () => {
-            const message = `I challenged you on aaybee — who has better taste? ${shareUrl}`;
-            try {
-              if (Platform.OS === 'web' && navigator?.share) {
-                await navigator.share({ text: message });
-              } else if (Platform.OS === 'web' && navigator?.clipboard) {
-                await navigator.clipboard.writeText(message);
-              } else {
-                await Share.share({ message });
-              }
-              haptics.success();
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            } catch {}
-          }}
-        >
-          <Text style={styles.primaryCtaText}>
-            {copied ? 'copied!' : 'share link'}
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.actionButton, { marginTop: spacing.md, backgroundColor: colors.surface }]}
-          onPress={() => { setStep('home'); setChallenge(null); setVsChallenge(null); }}
-        >
-          <Text style={styles.actionButtonText}>done</Text>
-        </Pressable>
-      </Animated.View>
-    );
-  };
-
-  // Convert ChallengeMovie to Movie for CinematicCard
-  const toMovie = useCallback((cm: ChallengeMovie): Movie => ({
-    ...cm,
-    genres: [],
-    posterColor: colors.surface,
-    beta: 0,
-    totalWins: 0,
-    totalLosses: 0,
-    totalComparisons: 0,
-    timesShown: 0,
-    lastShownAt: 0,
-    status: 'uncompared',
-  }), []);
-
-  // ============================================
-  // VS FLOW: NAME (guest)
-  // ============================================
-
-  const renderVsName = () => (
-    <Animated.View entering={FadeIn} style={styles.centeredContent}>
-      <Text style={styles.heroTitle}>what's your name?</Text>
-      <TextInput
-        style={[styles.codeInputInline, { marginTop: spacing.lg, maxWidth: 320, width: '100%' }]}
-        placeholder="your name"
-        placeholderTextColor={colors.textMuted}
-        value={vsGuestName}
-        onChangeText={setVsGuestName}
-        autoCapitalize="words"
-        autoFocus
-      />
-      <Pressable
-        style={[styles.primaryCta, { marginTop: spacing.lg, width: '100%', maxWidth: 320 }, !vsGuestName.trim() && styles.actionButtonDisabled]}
-        onPress={async () => {
-          if (!vsChallenge || !vsGuestName.trim()) return;
-          setLoading(true);
-          const { challenge: joined } = await vsService.joinChallengeAsGuest(vsChallenge.code, vsGuestName.trim());
-          if (joined) setVsChallenge(joined);
-          setStep('vs-selecting');
-          setLoading(false);
-        }}
-        disabled={!vsGuestName.trim() || loading}
-      >
-        <Text style={styles.primaryCtaText}>{loading ? 'joining...' : 'continue'}</Text>
-      </Pressable>
-    </Animated.View>
-  );
-
-  // ============================================
-  // VS FLOW: SELECTING (pick 4-10 from pool)
-  // ============================================
-
-  const handleVsToggleMovie = useCallback((movieId: string) => {
-    setVsSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(movieId)) next.delete(movieId);
-      else if (next.size < 10) next.add(movieId);
-      return next;
-    });
-  }, []);
-
-  const handleVsConfirmSelection = useCallback(async () => {
-    if (!vsChallenge || vsSelectedIds.size < 4) return;
-    setLoading(true);
-    const selectedMovies = (vsChallenge.pool || []).filter((m: VsMovie) => vsSelectedIds.has(m.id));
-    const { pairs, error: err } = await vsService.selectMovies(vsChallenge.id, selectedMovies);
-    if (err) {
-      setError(err);
-      setLoading(false);
-      return;
-    }
-    setVsChallenge(prev => prev ? { ...prev, pairs, status: 'challenged_comparing', current_pair: 0 } as VsChallenge : null);
-    setVsPairIndex(0);
-    setStep('vs-comparing');
-    setLoading(false);
-  }, [vsChallenge, vsSelectedIds]);
-
-  const renderVsSelecting = () => {
-    const pool: VsMovie[] = vsChallenge?.pool || [];
-    const count = vsSelectedIds.size;
-
-    return (
-      <Animated.View entering={FadeIn} style={styles.fullContent}>
-        <ScrollView contentContainerStyle={styles.resultsContent}>
-          <Text style={[styles.sectionTitle, { textAlign: 'center' }]}>tap the movies you've seen</Text>
-          <Text style={[styles.emptyPrompt, { textAlign: 'center', marginBottom: spacing.md }]}>
-            {count < 4 ? `select ${4 - count} more to start` : `${count} selected`}
-          </Text>
-
-          <View style={styles.movieGrid}>
-            {pool.map((movie: VsMovie) => {
-              const isSelected = vsSelectedIds.has(movie.id);
-              return (
-                <Pressable
-                  key={movie.id}
-                  style={[
-                    styles.movieItem,
-                    isSelected && styles.movieItemSelected,
-                    !isSelected && count >= 10 && { opacity: 0.3 },
-                  ]}
-                  onPress={() => handleVsToggleMovie(movie.id)}
-                >
-                  {movie.posterUrl ? (
-                    <Image source={{ uri: movie.posterUrl }} style={styles.moviePoster} resizeMode="cover" />
-                  ) : (
-                    <View style={[styles.moviePoster, { backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center' }]}>
-                      <Text style={{ fontSize: 24 }}>🎬</Text>
-                    </View>
-                  )}
-                  <Text style={styles.movieTitle} numberOfLines={2}>{movie.title}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {count >= 4 && (
-            <Pressable
-              style={[styles.primaryCta, { marginTop: spacing.lg, alignSelf: 'center', width: '100%', maxWidth: 320 }]}
-              onPress={handleVsConfirmSelection}
-              disabled={loading}
-            >
-              <Text style={styles.primaryCtaText}>{loading ? 'setting up...' : `compare ${count} movies`}</Text>
-            </Pressable>
-          )}
-        </ScrollView>
-      </Animated.View>
-    );
-  };
-
-  // ============================================
-  // VS FLOW: COMPARING (A/B pair picks)
-  // ============================================
-
-  const handleVsPick = useCallback(async (pick: 'A' | 'B') => {
-    if (!vsChallenge || vsPickingRef.current) return;
-    vsPickingRef.current = true;
-    haptics.light();
-
-    // Determine role: challenger created the challenge, challenged joined it
-    const role: 'challenged' | 'challenger' =
-      user?.id === vsChallenge.challenger_id ? 'challenger' : 'challenged';
-
-    const { isComplete, error: err } = await vsService.submitPick(
-      vsChallenge.id,
-      vsPairIndex,
-      pick,
-      role,
-    );
-
-    if (err) {
-      setError(err);
-      vsPickingRef.current = false;
-      return;
-    }
-
-    if (isComplete) {
-      // Reload challenge to get results
-      const updated = await vsService.getChallengeByCode(vsChallenge.code);
-      if (updated) {
-        setVsChallenge(updated);
-        if (updated.status === 'complete' && updated.results) {
-          setStep('vs-result');
-        } else {
-          // Waiting for challenger to finish their picks
-          setStep('vs-waiting');
-        }
-      }
-    } else {
-      setVsPairIndex(prev => prev + 1);
-    }
-
-    vsPickingRef.current = false;
-  }, [vsChallenge, vsPairIndex, haptics]);
-
-  const renderVsComparing = () => {
-    const pairs: VsPair[] = vsChallenge?.pairs || [];
-    const pair = pairs[vsPairIndex];
-    if (!pair) return null;
-
-    return (
-      <Animated.View entering={FadeIn} style={styles.fullContent}>
-        <Text style={[styles.sectionTitle, { textAlign: 'center', marginTop: spacing.lg }]}>
-          {vsPairIndex + 1} of {pairs.length}
-        </Text>
-        <Text style={[styles.emptyPrompt, { textAlign: 'center', marginBottom: spacing.lg }]}>which do you prefer?</Text>
-
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: spacing.md, flex: 1, paddingHorizontal: spacing.md }}>
-          <Pressable
-            style={{ flex: 1, alignItems: 'center' }}
-            onPress={() => handleVsPick('A')}
-          >
-            <CinematicCard
-              movie={toMovie({ id: pair.movieA.id, title: pair.movieA.title, year: pair.movieA.year, posterUrl: pair.movieA.posterUrl })}
-              onSelect={() => handleVsPick('A')}
-            />
-          </Pressable>
-          <Pressable
-            style={{ flex: 1, alignItems: 'center' }}
-            onPress={() => handleVsPick('B')}
-          >
-            <CinematicCard
-              movie={toMovie({ id: pair.movieB.id, title: pair.movieB.title, year: pair.movieB.year, posterUrl: pair.movieB.posterUrl })}
-              onSelect={() => handleVsPick('B')}
-            />
-          </Pressable>
-        </View>
-
-        <OnboardingProgressBar
-          progress={(vsPairIndex + 1) / pairs.length}
-          current={vsPairIndex}
-          total={pairs.length}
-          label=""
-        />
-      </Animated.View>
-    );
-  };
-
-  // ============================================
-  // VS FLOW: WAITING
-  // ============================================
-
-  const renderVsWaiting = () => (
-    <Animated.View entering={FadeIn} style={styles.centeredContent}>
-      <Text style={styles.heroTitle}>picks submitted</Text>
-      <Text style={[styles.emptyPrompt, { textAlign: 'center', marginTop: spacing.md }]}>
-        waiting for the challenger to make their picks
-      </Text>
-      {!user?.id && onOpenAuth && (
-        <Pressable
-          style={[styles.primaryCta, { marginTop: spacing.xl, width: '100%', maxWidth: 320 }]}
-          onPress={onOpenAuth}
-        >
-          <Text style={styles.primaryCtaText}>sign up to get notified</Text>
-        </Pressable>
-      )}
-      <Pressable
-        style={[styles.actionButton, { marginTop: spacing.md, backgroundColor: colors.surface }]}
-        onPress={() => { setStep('home'); setVsChallenge(null); }}
-      >
-        <Text style={styles.actionButtonText}>back</Text>
-      </Pressable>
-    </Animated.View>
-  );
-
-  // ============================================
-  // VS FLOW: RESULT
-  // ============================================
-
-  const renderVsResult = () => {
-    if (!vsChallenge?.results) return null;
-    const vsResults = vsChallenge.results as VsResults;
-    const score = vsChallenge.score || 0;
-    const pairs = vsChallenge.pairs || [];
-    const total = pairs.length;
-    const pct = total > 0 ? score / total : 0;
-    const label = pct === 1 ? 'perfect match' : pct >= 0.8 ? 'cinema soulmates' : pct >= 0.6 ? 'solid taste overlap' : pct >= 0.4 ? 'some common ground' : pct >= 0.2 ? 'agree to disagree' : 'polar opposites';
-    const isGuest = !user?.id;
-
-    return (
-      <Animated.View entering={FadeIn} style={styles.fullContent}>
-        <ScrollView contentContainerStyle={[styles.resultsContent, { alignItems: 'center' }]}>
-          <Text style={styles.matchPercent}>{score}/{total}</Text>
-          <Text style={styles.matchTierName}>{label}</Text>
-          <Text style={styles.matchNames}>
-            {vsResults.challengerName} vs {vsResults.challengedName}
-          </Text>
-
-          {/* CTAs */}
-          <View style={{ width: '100%', maxWidth: 320, marginTop: spacing.lg, gap: spacing.sm }}>
-            {!isGuest && (
-              <Pressable style={styles.primaryCta} onPress={handleCreateChallenge}>
-                <Text style={styles.primaryCtaText}>challenge someone else</Text>
-              </Pressable>
-            )}
-            {isGuest && onOpenAuth && (
-              <Pressable style={styles.primaryCta} onPress={onOpenAuth}>
-                <Text style={styles.primaryCtaText}>join aaybee</Text>
-              </Pressable>
-            )}
-          </View>
-
-          {/* Insights */}
-          {vsResults.biggestAgreement && (
-            <View style={[styles.resultsSection, { marginTop: spacing.lg }]}>
-              <Text style={styles.resultsSectionTitle}>biggest agreement</Text>
-              <Text style={styles.resultMovie}>{vsResults.biggestAgreement.movieA} over {vsResults.biggestAgreement.movieB}</Text>
-            </View>
-          )}
-          {vsResults.biggestDisagreement && (
-            <View style={styles.resultsSection}>
-              <Text style={styles.resultsSectionTitle}>biggest disagreement</Text>
-              <Text style={styles.resultMovie}>
-                you picked {vsResults.biggestDisagreement.challengedPick}, they picked {vsResults.biggestDisagreement.challengerPick}
-              </Text>
-            </View>
-          )}
-
-          {/* Pair breakdown */}
-          {pairs.map((pair: VsPair, i: number) => (
-            <View key={i} style={[styles.resultRow, { backgroundColor: pair.match ? 'rgba(72,187,120,0.08)' : 'rgba(245,101,101,0.06)' }]}>
-              <Text style={styles.resultMovie} numberOfLines={1}>{pair.movieA.title}</Text>
-              <Text style={{ color: colors.textMuted, marginHorizontal: spacing.xs }}>vs</Text>
-              <Text style={styles.resultMovie} numberOfLines={1}>{pair.movieB.title}</Text>
-              <Text style={{ color: pair.match ? '#48BB78' : '#F56565', fontWeight: '700', marginLeft: spacing.sm }}>
-                {pair.match ? '✓' : '✗'}
-              </Text>
-            </View>
-          ))}
-        </ScrollView>
-
-        <Pressable
-          style={[styles.actionButton, { marginTop: spacing.xs, backgroundColor: 'transparent' }]}
-          onPress={() => { setStep('home'); setVsChallenge(null); }}
-        >
-          <Text style={[styles.actionButtonText, { color: colors.textMuted }]}>back</Text>
-        </Pressable>
-      </Animated.View>
     );
   };
 
@@ -1522,13 +783,6 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
       ) : (
         <>
           {step === 'home' && renderHome()}
-          {step === 'select' && renderSelect()}
-          {step === 'share' && renderShare()}
-          {step === 'vs-name' && renderVsName()}
-          {step === 'vs-selecting' && renderVsSelecting()}
-          {step === 'vs-comparing' && renderVsComparing()}
-          {step === 'vs-waiting' && renderVsWaiting()}
-          {step === 'vs-result' && renderVsResult()}
           {step === 'knockout-name' && (
             <View style={styles.centeredContent}>
               <Text style={styles.vsTitle}>VS</Text>
@@ -1570,7 +824,7 @@ export function ChallengeScreen({ initialCode, onOpenAuth, autoStartKnockout, ch
             <View style={styles.centeredContent}>
               <Text style={styles.vsTitle}>CHALLENGE SENT</Text>
               <Text style={[styles.emptyPrompt, { textAlign: 'center', marginBottom: spacing.xl, fontSize: 13, letterSpacing: 0.5, textTransform: 'uppercase' }]}>
-                {challengedFriendName ? `${challengedFriendName.toUpperCase()} WILL SEE IT NEXT TIME THEY OPEN THE APP` : 'YOUR FRIEND WILL SEE THE CHALLENGE'}
+                {targetFriendName ? `${targetFriendName.toUpperCase()} WILL SEE IT NEXT TIME THEY OPEN THE APP` : 'YOUR FRIEND WILL SEE THE CHALLENGE'}
               </Text>
               <Pressable
                 style={[styles.primaryCta, { width: '100%', maxWidth: 320 }]}

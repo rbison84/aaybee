@@ -90,17 +90,26 @@ export const shareService = {
   },
 
   /**
-   * Get the share URL for a VS challenge (uses existing code).
+   * Look up a share code (used by the share-link landing to show context).
    */
-  getVsShareUrl: (code: string, userId?: string | null): string => {
-    return appendRef(`${BASE_URL}/vs/${code}`, userId);
+  getShareByCode: async (code: string): Promise<ShareCode | null> => {
+    try {
+      const { data } = await supabase
+        .from('share_codes')
+        .select('*')
+        .eq('code', code.toUpperCase())
+        .maybeSingle();
+      return (data as ShareCode) || null;
+    } catch {
+      return null;
+    }
   },
 
   /**
-   * Get the share URL for a friend challenge (uses existing code).
+   * Get the share URL for a knockout challenge (uses existing code).
    */
-  getChallengeShareUrl: (code: string, userId?: string | null): string => {
-    return appendRef(`${BASE_URL}/challenge/${code}`, userId);
+  getVsShareUrl: (code: string, userId?: string | null): string => {
+    return appendRef(`${BASE_URL}/vs/${code}`, userId);
   },
 };
 

@@ -3,7 +3,7 @@ import './src/polyfills';
 
 import 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, ActivityIndicator, Pressable, Platform, Modal } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator, Pressable, Platform, Modal, BackHandler } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated from 'react-native-reanimated';
@@ -15,24 +15,27 @@ import { SyncProvider } from './src/contexts/SyncContext';
 import { DimensionsProvider, useAppDimensions, DESKTOP_SIDEBAR_WIDTH } from './src/contexts/DimensionsContext';
 // OnboardingScreen removed — no mandatory onboarding gate
 import { MiniOnboardingScreen } from './src/screens/MiniOnboardingScreen';
-import { ComparisonScreen } from './src/screens/ComparisonScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
 // FriendsScreen is now accessed via ProfileScreen
-import { DailyScreen } from './src/screens/DailyScreen';
-import { DecideScreen } from './src/screens/DecideScreen';
-import { ChallengeScreen } from './src/screens/ChallengeScreen';
-import { FriendsScreen } from './src/screens/FriendsScreen';
-import { MyGamesScreen } from './src/screens/MyGamesScreen';
-import { TasteProfileScreen } from './src/screens/TasteProfileScreen';
-import { SettingsScreen } from './src/screens/SettingsScreen';
 
-// Lazy-load screens that are locked behind comparison thresholds or shown as overlays
+// Lazy-load every screen behind the landing page so the entry bundle stays
+// small — critical for invitees arriving on shared links, who bounce during
+// long first loads. Each screen becomes its own chunk on web.
+const ComparisonScreen = React.lazy(() => import('./src/screens/ComparisonScreen').then(m => ({ default: m.ComparisonScreen })));
+const DailyScreen = React.lazy(() => import('./src/screens/DailyScreen').then(m => ({ default: m.DailyScreen })));
+const DecideScreen = React.lazy(() => import('./src/screens/DecideScreen').then(m => ({ default: m.DecideScreen })));
+const ChallengeScreen = React.lazy(() => import('./src/screens/ChallengeScreen').then(m => ({ default: m.ChallengeScreen })));
+const FriendsScreen = React.lazy(() => import('./src/screens/FriendsScreen').then(m => ({ default: m.FriendsScreen })));
+const MyGamesScreen = React.lazy(() => import('./src/screens/MyGamesScreen').then(m => ({ default: m.MyGamesScreen })));
+const TasteProfileScreen = React.lazy(() => import('./src/screens/TasteProfileScreen').then(m => ({ default: m.TasteProfileScreen })));
+const SettingsScreen = React.lazy(() => import('./src/screens/SettingsScreen').then(m => ({ default: m.SettingsScreen })));
 const DiscoverScreen = React.lazy(() => import('./src/screens/DiscoverScreen').then(m => ({ default: m.DiscoverScreen })));
-const UnifiedRankingsScreen = React.lazy(() => import('./src/screens/UnifiedRankingsScreen').then(m => ({ default: m.UnifiedRankingsScreen })));
+const YourRankingTab = React.lazy(() => import('./src/components/rankings/YourRankingTab').then(m => ({ default: m.YourRankingTab })));
 const Aaybee100Screen = React.lazy(() => import('./src/screens/Aaybee100Screen').then(m => ({ default: m.Aaybee100Screen })));
 const TvScreen = React.lazy(() => import('./src/screens/TvScreen').then(m => ({ default: m.TvScreen })));
 import { GlobalHeader } from './src/components/GlobalHeader';
+import { CinematicBackground } from './src/components/cinematic';
 // SearchIcon removed — no longer used in App shell
 // TabIcon no longer needed — nav uses text labels
 import { DebugPanel } from './src/components/debug';
@@ -51,9 +54,8 @@ import { MovieSearchModal } from './src/components/MovieSearchModal';
 import { useAuth } from './src/contexts/AuthContext';
 import { parseDeepLink, clearDeepLink, captureRefParam, listenForNativeRef, DeepLinkIntent } from './src/utils/deepLink';
 import { notificationService } from './src/services/notificationService';
-import { vsService } from './src/services/vsService';
+import { shareService } from './src/services/shareService';
 import { friendService } from './src/services/friendService';
-import { challengeService } from './src/services/challengeService';
 import { knockoutService } from './src/services/knockoutService';
 import { crewService } from './src/services/crewService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -64,6 +66,34 @@ import Svg, { Path, Circle as SvgCircle, Line, Polygon, Polyline } from 'react-n
 type NavPhase = 'landing' | 'playMenu' | 'vs' | 'daily' | 'decide' | 'discover' | 'friends' | 'profile' | 'myGames' | 'rankings' | 'tasteProfile' | 'settings' | 'trailers' | 'aaybee100';
 // Keep TabType for compatibility with components that reference it
 type TabType = 'vs' | 'daily' | 'decide' | 'discover' | 'compare' | 'rankings';
+
+// Sub-nav config: label and default back target for each phase.
+// 'vs' can be entered from several places; its live back target is
+// vsReturnTo state, with this as the fallback.
+const subNavConfig: Record<NavPhase, { label: string; backTo?: NavPhase }> = {
+  landing: { label: '' },
+  playMenu: { label: 'PLAY', backTo: 'landing' },
+  vs: { label: 'VS', backTo: 'playMenu' },
+  daily: { label: 'DAILY', backTo: 'playMenu' },
+  decide: { label: 'DECIDE', backTo: 'playMenu' },
+  discover: { label: 'DISCOVER', backTo: 'playMenu' },
+  friends: { label: 'FRIENDS', backTo: 'landing' },
+  profile: { label: 'PROFILE', backTo: 'landing' },
+  myGames: { label: 'MY GAMES', backTo: 'profile' },
+  rankings: { label: 'RANKINGS', backTo: 'profile' },
+  tasteProfile: { label: 'TASTE PROFILE', backTo: 'profile' },
+  settings: { label: 'SETTINGS', backTo: 'profile' },
+  trailers: { label: 'TRAILERS', backTo: 'profile' },
+  aaybee100: { label: 'AAYBEE 100', backTo: 'profile' },
+};
+
+// Context shown on the Daily intro when someone arrives via a shared result
+interface DailyInviteContext {
+  dailyNumber: number;
+  categoryTitle: string;
+  seenCount: number;
+  topMovie: string;
+}
 
 function LoadingScreen() {
   return (
@@ -256,8 +286,9 @@ const IconCompass = () => (
 );
 
 // Landing content — logo + tagline above, stacked buttons below
-function LandingContent({ onPlay, onFriends, onSignIn, friendsBadge }: {
+function LandingContent({ onPlay, onTonight, onFriends, onSignIn, friendsBadge }: {
   onPlay: () => void;
+  onTonight: () => void;
   onFriends: () => void;
   onSignIn: () => void;
   friendsBadge?: number;
@@ -275,6 +306,14 @@ function LandingContent({ onPlay, onFriends, onSignIn, friendsBadge }: {
 
       {/* Stacked buttons */}
       <View style={landingStyles.buttons}>
+        {/* The decision moment — routes to Decide (duo/group modes work with zero history) */}
+        <Pressable style={landingStyles.bigButton} onPress={onTonight}>
+          <IconQuestion />
+          <View>
+            <Text style={landingStyles.bigButtonLabel}>WHAT SHOULD WE WATCH?</Text>
+            <Text style={landingStyles.bigButtonSub}>(decide tonight's movie.)</Text>
+          </View>
+        </Pressable>
         <Pressable style={landingStyles.bigButton} onPress={onPlay}>
           <IconPlay />
           <View>
@@ -638,6 +677,8 @@ function MainApp() {
   const [challengedFriendId, setChallengedFriendId] = useState<string | undefined>();
   const [challengedFriendName, setChallengedFriendName] = useState<string | undefined>();
   const [vsKey, setVsKey] = useState(0); // Force remount of ChallengeScreen
+  const [vsReturnTo, setVsReturnTo] = useState<NavPhase>('playMenu'); // Where BACK from VS goes
+  const [dailyInviteContext, setDailyInviteContext] = useState<DailyInviteContext | null>(null);
 
   // Deep link: parse URL on mount
   const [deepLink] = useState<DeepLinkIntent>(() => {
@@ -691,13 +732,28 @@ function MainApp() {
       setPhase('daily');
     } else if (deepLink.type === 'vs' || deepLink.type === 'challenge') {
       setChallengeInitialCode(deepLink.code);
+      setVsReturnTo('playMenu');
       setPhase('vs');
     } else if (deepLink.type === 'share') {
+      // Load the shared result so the Daily intro can show a beat-them banner
+      shareService.getShareByCode(deepLink.code).then((share) => {
+        if (share?.type === 'daily' && share.image_data?.dailyNumber) {
+          setDailyInviteContext({
+            dailyNumber: share.image_data.dailyNumber,
+            categoryTitle: share.image_data.categoryTitle || '',
+            seenCount: share.image_data.seenCount ?? 0,
+            topMovie: share.image_data.topMovie || '',
+          });
+        }
+      }).catch(() => {});
       setPhase('daily');
     } else if (deepLink.type === 'crew' && deepLink.code) {
-      // Auto-join circle and go to daily
+      // Auto-join circle and go to daily. Guests: stash the code so the
+      // join completes after sign-up (AuthContext consumes it on SIGNED_IN).
       if (user?.id) {
         crewService.joinCrew(user.id, deepLink.code).catch(() => {});
+      } else {
+        AsyncStorage.setItem('aaybee_pending_crew', deepLink.code).catch(() => {});
       }
       setPhase('daily');
     } else if (deepLink.type === 'decide' && deepLink.code) {
@@ -705,6 +761,21 @@ function MainApp() {
       setPhase('decide');
     }
   }, [deepLink, isLoading]);
+
+  // Android hardware back: close overlays first, then navigate up the
+  // phase graph; only exit the app from the landing screen
+  useEffect(() => {
+    const onHardwareBack = (): boolean => {
+      if (showAuth) { setShowAuth(false); return true; }
+      if (showGuestPrompt) { setShowGuestPrompt(false); return true; }
+      if (showSearch || showAaybee100 || showTv) { closeAllOverlays(); return true; }
+      const backTo = phase === 'vs' ? vsReturnTo : subNavConfig[phase].backTo;
+      if (backTo) { setPhase(backTo); return true; }
+      return false;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
+    return () => subscription.remove();
+  }, [phase, vsReturnTo, showAuth, showGuestPrompt, showSearch, showAaybee100, showTv, closeAllOverlays]);
 
   // Register for push notifications when user is authenticated
   useEffect(() => {
@@ -720,34 +791,23 @@ function MainApp() {
         setPhase('daily');
       } else if (data.type === 'vs' && data.code) {
         setChallengeInitialCode(data.code as string);
+        setVsReturnTo('playMenu');
         setPhase('vs');
       }
     });
   }, []);
 
-  // Check for pending notifications (VS challenges + friend requests)
+  // Check for pending notifications (knockout challenges + friend requests)
   const [pendingChallengeCount, setPendingChallengeCount] = useState(0);
   useEffect(() => {
     if (!user?.id) return;
     let mounted = true;
     const checkPending = async () => {
-      const [challenges, friendRequests, friendChallenges] = await Promise.all([
-        vsService.getMyChallenges(user.id),
+      const [friendRequests, knockoutReady] = await Promise.all([
         friendService.getPendingRequests(user.id),
-        challengeService.getMyActiveChallenges(user.id),
+        knockoutService.getReadyGamesCount(user.id),
       ]);
-      const pendingVs = challenges.filter(c =>
-        (c.status === 'selecting' && c.challenged_id === user.id) ||
-        (c.status === 'challenged_comparing' && c.challenged_id === user.id) ||
-        (c.status === 'challenger_comparing' && c.challenger_id === user.id)
-      );
-      const pendingFriendChallenges = friendChallenges.filter(c =>
-        (c.status === 'pending' && c.creator_id === user.id) ||
-        (c.status === 'active' && c.challenger_id === user.id)
-      );
-      // Also count knockout ready games
-      const knockoutReady = await knockoutService.getReadyGamesCount(user.id);
-      if (mounted) setPendingChallengeCount(pendingVs.length + friendRequests.length + pendingFriendChallenges.length + knockoutReady);
+      if (mounted) setPendingChallengeCount(friendRequests.length + knockoutReady);
     };
     checkPending();
     const interval = setInterval(checkPending, 30000);
@@ -774,6 +834,7 @@ function MainApp() {
         return (
           <LandingContent
             onPlay={() => setPhase('playMenu')}
+            onTonight={() => setPhase('decide')}
             onFriends={() => setPhase('friends')}
             onSignIn={() => setShowAuth(true)}
             friendsBadge={pendingChallengeCount}
@@ -783,7 +844,7 @@ function MainApp() {
       case 'playMenu':
         return (
           <PlayMenuContent
-            onVs={() => { setChallengedFriendId(undefined); setChallengedFriendName(undefined); setChallengeInitialCode(undefined); setPhase('vs'); }}
+            onVs={() => { setChallengedFriendId(undefined); setChallengedFriendName(undefined); setChallengeInitialCode(undefined); setVsReturnTo('playMenu'); setPhase('vs'); }}
             onDaily={() => setPhase('daily')}
             onDecide={() => setPhase('decide')}
             onDiscover={() => {
@@ -816,7 +877,12 @@ function MainApp() {
         );
 
       case 'daily':
-        return <DailyScreen onOpenAuth={() => setShowAuth(true)} />;
+        return (
+          <DailyScreen
+            onOpenAuth={() => setShowAuth(true)}
+            inviteContext={dailyInviteContext}
+          />
+        );
 
       case 'decide':
         return (
@@ -835,7 +901,7 @@ function MainApp() {
           <DiscoverWrapper
             discoverTab={discoverTab}
             onTabChange={setDiscoverTab}
-            onOpenRanking={() => setPhase('profile')}
+            onOpenRanking={() => setPhase('rankings')}
             onOpenDecide={() => setPhase('decide')}
             onOpenAuth={() => setShowAuth(true)}
             onOpenProfile={() => setPhase('profile')}
@@ -850,12 +916,14 @@ function MainApp() {
               setChallengedFriendId(friendId);
               setChallengedFriendName(friendName);
               setChallengeInitialCode(undefined);
+              setVsReturnTo('friends');
               setPhase('vs');
             }}
             onAcceptChallenge={(code) => {
               setChallengedFriendId(undefined);
               setChallengedFriendName(undefined);
               setChallengeInitialCode(code);
+              setVsReturnTo('friends');
               setPhase('vs');
             }}
           />
@@ -868,12 +936,14 @@ function MainApp() {
               setChallengeInitialCode(code);
               setChallengedFriendId(undefined);
               setChallengedFriendName(undefined);
+              setVsReturnTo('myGames');
               setPhase('vs');
             }}
             onPlayChallenge={(code) => {
               setChallengeInitialCode(code);
               setChallengedFriendId(undefined);
               setChallengedFriendName(undefined);
+              setVsReturnTo('myGames');
               setPhase('vs');
             }}
           />
@@ -898,18 +968,28 @@ function MainApp() {
       case 'rankings':
         return (
           <Suspense fallback={<LoadingScreen />}>
-            <UnifiedRankingsScreen
-              onContinueComparing={() => setPhase('discover')}
-              onOpenAaybee100={() => { closeAllOverlays(); setShowAaybee100(true); }}
-              initialTab="yours"
-              initialFilter="classic"
-            />
+            <CinematicBackground>
+              <YourRankingTab
+                onContinueComparing={() => setPhase('discover')}
+                initialFilter="classic"
+              />
+            </CinematicBackground>
           </Suspense>
         );
 
       case 'tasteProfile':
         return (
-          <TasteProfileScreen onClose={() => setPhase('profile')} />
+          <TasteProfileScreen
+            onClose={() => setPhase('profile')}
+            onChallenge={(friendId, friendName) => {
+              setChallengedFriendId(friendId);
+              setChallengedFriendName(friendName);
+              setChallengeInitialCode(undefined);
+              setVsKey(k => k + 1);
+              setVsReturnTo('tasteProfile');
+              setPhase('vs');
+            }}
+          />
         );
 
       case 'settings':
@@ -935,6 +1015,7 @@ function MainApp() {
         return (
           <LandingContent
             onPlay={() => setPhase('playMenu')}
+            onTonight={() => setPhase('decide')}
             onFriends={() => setPhase('friends')}
             onSignIn={() => setShowAuth(true)}
             friendsBadge={pendingChallengeCount}
@@ -943,28 +1024,15 @@ function MainApp() {
     }
   };
 
-  // Sub-nav config: label and back target for each phase
-  const subNavConfig: Record<NavPhase, { label: string; backTo?: NavPhase }> = {
-    landing: { label: '' },
-    playMenu: { label: 'PLAY', backTo: 'landing' },
-    vs: { label: 'VS', backTo: 'playMenu' },
-    daily: { label: 'DAILY', backTo: 'playMenu' },
-    decide: { label: 'DECIDE', backTo: 'playMenu' },
-    discover: { label: 'DISCOVER', backTo: 'playMenu' },
-    friends: { label: 'FRIENDS', backTo: 'landing' },
-    profile: { label: 'PROFILE', backTo: 'landing' },
-    myGames: { label: 'MY GAMES', backTo: 'profile' },
-    rankings: { label: 'RANKINGS', backTo: 'profile' },
-    tasteProfile: { label: 'TASTE PROFILE', backTo: 'profile' },
-    settings: { label: 'SETTINGS', backTo: 'profile' },
-    trailers: { label: 'TRAILERS', backTo: 'profile' },
-    aaybee100: { label: 'AAYBEE 100', backTo: 'profile' },
-  };
   const currentSubNav = subNavConfig[phase];
+  // VS is reachable from friends/myGames/tasteProfile — back returns there
+  const effectiveBackTo = phase === 'vs' ? vsReturnTo : currentSubNav.backTo;
 
   const screenContent = (
     <View style={styles.screenContainer}>
-      {renderPhaseContent()}
+      <Suspense fallback={<LoadingScreen />}>
+        {renderPhaseContent()}
+      </Suspense>
 
       {/* Aaybee 100 overlay */}
       {showAaybee100 && (
@@ -1021,7 +1089,7 @@ function MainApp() {
           {currentSubNav.label ? (
             <SubNavBar
               label={currentSubNav.label}
-              onBack={currentSubNav.backTo ? () => setPhase(currentSubNav.backTo!) : undefined}
+              onBack={effectiveBackTo ? () => setPhase(effectiveBackTo) : undefined}
             />
           ) : null}
 

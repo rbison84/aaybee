@@ -27,6 +27,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useQuickRank } from '../contexts/QuickRankContext';
 import { useAppStore } from '../store/useAppStore';
 import { watchlistService } from '../services/watchlistService';
+import { logWatchClick } from '../services/watchProviders';
 import {
   getFullMovieDetails,
   formatRuntime,
@@ -123,14 +124,17 @@ function ProviderSection({
   title,
   providers,
   link,
+  onLogClick,
 }: {
   title: string;
   providers: WatchProvider[];
   link: string | null;
+  onLogClick?: () => void;
 }) {
   if (providers.length === 0) return null;
 
   const handleProviderPress = async () => {
+    onLogClick?.();
     if (link) {
       try {
         await Linking.openURL(link);
@@ -715,16 +719,19 @@ export function MovieDetailModal() {
                     title="stream"
                     providers={watchProviders!.stream}
                     link={watchProviders!.link}
+                    onLogClick={() => logWatchClick(user?.id, selectedMovie.id, watchProviders!.stream[0]?.provider_name || null, 'detail')}
                   />
                   <ProviderSection
                     title="rent"
                     providers={watchProviders!.rent}
                     link={watchProviders!.link}
+                    onLogClick={() => logWatchClick(user?.id, selectedMovie.id, watchProviders!.rent[0]?.provider_name || null, 'detail')}
                   />
                   <ProviderSection
                     title="buy"
                     providers={watchProviders!.buy}
                     link={watchProviders!.link}
+                    onLogClick={() => logWatchClick(user?.id, selectedMovie.id, watchProviders!.buy[0]?.provider_name || null, 'detail')}
                   />
                 </>
               ) : (

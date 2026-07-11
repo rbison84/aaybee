@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -15,6 +15,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import Svg, { Path, Line } from 'react-native-svg';
 import ViewShot from 'react-native-view-shot';
 import { useAppStore } from '../store/useAppStore';
+import { globalRankingsService } from '../services/globalRankingsService';
 import { Movie } from '../types';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
 
@@ -260,13 +261,32 @@ export function Aaybee100Screen({ onClose }: Aaybee100ScreenProps) {
 
   // ---- Data ----
 
-  // Tier 1 movies sorted by global consensus (voteAverage)
+  // The 100: community consensus (Bradley-Terry global betas) once enough
+  // users have ranked enough movies; TMDB vote average as the cold-start
+  // fallback so the grid is never empty.
+  const [communityRanking, setCommunityRanking] = useState<string[] | null>(null);
+  useEffect(() => {
+    globalRankingsService.getGlobalRankings(100).then(rankings => {
+      // Only trust the community list once it can fill the grid
+      if (rankings.length >= 100) {
+        setCommunityRanking(rankings.map(r => r.movie_id));
+      }
+    }).catch(() => {});
+  }, []);
+
   const tier1 = useMemo(() => {
+    if (communityRanking) {
+      const fromCommunity = communityRanking
+        .map(id => movies.get(id))
+        .filter((m): m is Movie => !!m)
+        .slice(0, 100);
+      if (fromCommunity.length >= 100) return fromCommunity;
+    }
     return Array.from(movies.values())
       .filter(m => (m.sourceTier || m.tier || 99) === 1)
       .sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0))
       .slice(0, 100);
-  }, [movies]);
+  }, [movies, communityRanking]);
 
   // User's ranked tier1 movies (beta-sorted, same criteria as getRankedMovies)
   const userRankedTier1 = useMemo(() => {

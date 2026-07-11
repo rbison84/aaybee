@@ -33,13 +33,14 @@ export async function signUp(email: string, password: string, referredBy?: strin
       };
     }
 
-    // Log joined activity + set referral and email on profile
+    // Log joined activity + set referral on profile (email stays in auth.users;
+    // contact matching uses the match_users_by_email RPC)
     if (data.user?.id) {
       activityService.logJoined(data.user.id).catch(console.error);
 
-      const profileUpdate: Record<string, string> = { email };
-      if (referredBy) profileUpdate.referred_by = referredBy;
-      supabase.from('user_profiles').update(profileUpdate).eq('id', data.user.id).then();
+      if (referredBy) {
+        supabase.from('user_profiles').update({ referred_by: referredBy }).eq('id', data.user.id).then();
+      }
 
       // Close the referral loop: auto-connect with the person who invited them
       if (referredBy) {

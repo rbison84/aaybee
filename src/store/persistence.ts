@@ -65,6 +65,8 @@ export interface ComparisonRecord {
   movieAId: string;
   movieBId: string;
   choice: 'A' | 'B' | 'skip';
+  /** Which surface produced this comparison (daily/vs/decide/discover/onboarding/quickrank) */
+  context?: string;
   movieABetaBefore: number;
   movieABetaAfter: number;
   movieBBetaBefore: number;

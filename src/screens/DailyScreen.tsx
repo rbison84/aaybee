@@ -23,6 +23,7 @@ import {
 } from '../data/dailyCategories';
 import {
   dailyStreakService,
+  getLocalToday,
   DailyStreakData,
   DailyStep,
   DailySessionData,
@@ -39,6 +40,8 @@ import {
   DailySwissState,
   DeviationCell,
 } from '../utils/dailySwiss';
+import { shareToWhatsApp, copyToClipboard } from '../utils/crossPlatform';
+import { EngineProgressLine } from '../components/EngineProgress';
 import { shareService } from '../services/shareService';
 import { crewService, Crew, CrewMember, CrewDailyResult } from '../services/crewService';
 import { notificationService } from '../services/notificationService';
@@ -52,15 +55,21 @@ import { QRCode } from '../components/QRCode';
 interface DailyScreenProps {
   onNavigateToCompare?: () => void;
   onOpenAuth?: () => void;
+  /** Set when the user arrived via a friend's shared result — shows a beat-them banner */
+  inviteContext?: {
+    dailyNumber: number;
+    categoryTitle: string;
+    seenCount: number;
+    topMovie: string;
+  } | null;
 }
 
-// Simple event for debug reset to trigger data reload
-let _dailyRefreshListeners: Array<() => void> = [];
-export function triggerDailyRefresh() {
-  _dailyRefreshListeners.forEach(fn => fn());
-}
+// Debug-reset refresh event lives in utils/dailyRefresh so the debug panel
+// doesn't statically import this (lazy-loaded) screen
+import { addDailyRefreshListener } from '../utils/dailyRefresh';
+export { triggerDailyRefresh } from '../utils/dailyRefresh';
 
-export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProps) {
+export function DailyScreen({ onNavigateToCompare, onOpenAuth, inviteContext }: DailyScreenProps) {
   // Crew navigation
   const [crewView, setCrewView] = useState<'home' | 'detail'>('home');
   const [selectedCrew, setSelectedCrew] = useState<Crew | null>(null);
@@ -86,10 +95,7 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
       setSeenSelection(new Set());
       setFullRanking(null);
     };
-    _dailyRefreshListeners.push(listener);
-    return () => {
-      _dailyRefreshListeners = _dailyRefreshListeners.filter(fn => fn !== listener);
-    };
+    return addDailyRefreshListener(listener);
   }, []);
 
   // Data
@@ -121,6 +127,7 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
   const [crewResults, setCrewResults] = useState<Map<string, CrewDailyResult>>(new Map());
   const [crewMembers, setCrewMembers] = useState<Map<string, CrewMember[]>>(new Map());
   const [crewCreateMode, setCrewCreateMode] = useState(false);
+  const [copiedResult, setCopiedResult] = useState(false);
   const [crewJoinMode, setCrewJoinMode] = useState(false);
   const [crewName, setCrewName] = useState('');
   const [crewJoinCode, setCrewJoinCode] = useState('');
@@ -139,7 +146,10 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
   useEffect(() => {
     if (step !== 'intro' || activeCategoryId) return;
     const init = async () => {
-      const streak = await dailyStreakService.getStreakData();
+      // Merge the server copy first so streaks survive device switches
+      const streak = user?.id
+        ? await dailyStreakService.mergeStreakFromServer(user.id)
+        : await dailyStreakService.getStreakData();
       setStreakData(streak);
 
       const completed = await dailyStreakService.getTodayCompletedCategories();
@@ -149,7 +159,7 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
       setCollections(cols);
     };
     init();
-  }, [step, activeCategoryId, refreshKey]);
+  }, [step, activeCategoryId, refreshKey, user?.id]);
 
   // Load crews and members on mount
   useEffect(() => {
@@ -286,7 +296,7 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
       categoryId: activeCategoryId,
       championId,
       dailyNumber,
-      completedDate: new Date().toISOString().split('T')[0],
+      completedDate: getLocalToday(),
       userRanking: ranking,
       globalMatchPercent: matchPercent,
       seenCount: seenIds.length,
@@ -294,8 +304,11 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
 
     await dailyStreakService.addCollectionEntry(entry);
     await dailyStreakService.clearSession(activeCategoryId);
-    const updatedStreak = await dailyStreakService.completeToday();
+    const updatedStreak = await dailyStreakService.completeToday(user?.id);
     setStreakData(updatedStreak);
+
+    // Schedule the local evening reminder to protect the streak
+    notificationService.scheduleDailyReminder().catch(() => {});
 
     const updatedCompleted = await dailyStreakService.getTodayCompletedCategories();
     setCompletedCategoryIds(updatedCompleted);
@@ -357,7 +370,7 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
   // Handle comparison selection
   const handleSelect = useCallback((winnerId: string, loserId: string) => {
     if (!swissState) return;
-    recordComparison(winnerId, loserId);
+    recordComparison(winnerId, loserId, false, 'daily');
     haptics.success();
 
     const newState = recordDailyChoice(swissState, winnerId);
@@ -387,9 +400,9 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
     setSwissState(newState);
   }, [swissState, undoLastComparison]);
 
-  // Handle copy from results
-  const handleShareResult = useCallback(async () => {
-    if (!activeCategory || !fullRanking || !swissState) return;
+  // Build the emoji-grid share text (used by share, WhatsApp and copy)
+  const buildResultShareText = useCallback(async (): Promise<string | null> => {
+    if (!activeCategory || !fullRanking || !swissState) return null;
 
     const globalRanking = activeCategory.movieIds;
     const grid = computeDeviationGrid(fullRanking, globalRanking, swissState.seenIds);
@@ -461,6 +474,13 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
       }
     }
 
+    return shareText;
+  }, [activeCategory, fullRanking, swissState, dailyNumber, movies, crews, crewResults, user?.id]);
+
+  const handleShareResult = useCallback(async () => {
+    const shareText = await buildResultShareText();
+    if (!shareText) return;
+
     try {
       if (Platform.OS === 'web' && navigator?.share) {
         await navigator.share({ text: shareText });
@@ -476,7 +496,27 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
         console.error('Share failed:', err);
       }
     }
-  }, [activeCategory, fullRanking, swissState, dailyNumber, movies, haptics, crews, crewResults, user?.id]);
+  }, [buildResultShareText, haptics]);
+
+  // One-tap WhatsApp share — the dominant group-chat channel
+  const handleWhatsAppShare = useCallback(async () => {
+    const shareText = await buildResultShareText();
+    if (!shareText) return;
+    const ok = await shareToWhatsApp(shareText);
+    if (ok) haptics.success();
+  }, [buildResultShareText, haptics]);
+
+  // Wordle-style paste: copy the emoji grid without opening a share sheet
+  const handleCopyResult = useCallback(async () => {
+    const shareText = await buildResultShareText();
+    if (!shareText) return;
+    const ok = await copyToClipboard(shareText);
+    if (ok) {
+      setCopiedResult(true);
+      haptics.success();
+      setTimeout(() => setCopiedResult(false), 2000);
+    }
+  }, [buildResultShareText, haptics]);
 
   // Back to intro from results
   const handleBackToIntro = useCallback(() => {
@@ -517,6 +557,25 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
         <Animated.View style={styles.introInner} entering={FadeIn.duration(300)}>
           <Text style={styles.dailyLabel}>Daily #{dailyNumber}</Text>
           <Text style={styles.introTitle}>{category.title}</Text>
+
+          {/* Beat-them banner when arriving via a friend's shared result */}
+          {inviteContext && (
+            <View style={{
+              backgroundColor: colors.card,
+              borderWidth: 1,
+              borderColor: colors.accent,
+              borderRadius: borderRadius.xl,
+              paddingVertical: spacing.sm,
+              paddingHorizontal: spacing.lg,
+              marginBottom: spacing.md,
+            }}>
+              <Text style={{ fontSize: 11, color: colors.textPrimary, letterSpacing: 0.5, textAlign: 'center' as const }}>
+                {inviteContext.dailyNumber === dailyNumber
+                  ? `your friend went ${inviteContext.seenCount}/9 with "${inviteContext.topMovie}" at #1 — beat them`
+                  : `your friend played daily #${inviteContext.dailyNumber} — here's today's`}
+              </Text>
+            </View>
+          )}
 
           {/* 3x3 poster grid */}
           <View style={styles.posterGrid}>
@@ -1086,6 +1145,28 @@ export function DailyScreen({ onNavigateToCompare, onOpenAuth }: DailyScreenProp
               </View>
             );
           })()}
+
+          {/* Game → data → recs, made visible */}
+          <EngineProgressLine added={swissState?.comparisons?.length || 0} />
+          <View style={{ height: spacing.md }} />
+
+          {/* WhatsApp + copy — zero-friction paths into group chats */}
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm }}>
+            <Pressable
+              style={{ flex: 1, backgroundColor: '#25D366', borderRadius: 20, paddingVertical: 14, alignItems: 'center' as const }}
+              onPress={handleWhatsAppShare}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '800', color: '#000', letterSpacing: 1 }}>WHATSAPP</Text>
+            </Pressable>
+            <Pressable
+              style={{ flex: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingVertical: 14, alignItems: 'center' as const }}
+              onPress={handleCopyResult}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '700', color: copiedResult ? colors.accent : colors.textPrimary, letterSpacing: 1 }}>
+                {copiedResult ? 'COPIED!' : 'COPY RESULT'}
+              </Text>
+            </Pressable>
+          </View>
 
           {/* Generic share — always available as secondary */}
           {crews.length > 0 && (

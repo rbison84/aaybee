@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from './supabase';
 import type { DailySwissState } from '../utils/dailySwiss';
 
 // ============================================
@@ -41,15 +42,28 @@ export interface DailyCollectionEntry {
 
 // ---- Helpers ----
 
+// LOCAL date, not UTC — toISOString() rolls the day over at UTC midnight,
+// which breaks streaks for anyone playing in the evening outside UTC.
+function toLocalDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function getTodayDateString(): string {
-  const today = new Date();
-  return today.toISOString().split('T')[0]; // YYYY-MM-DD
+  return toLocalDateString(new Date());
+}
+
+/** Local YYYY-MM-DD for "today" — use everywhere a daily date is recorded. */
+export function getLocalToday(): string {
+  return getTodayDateString();
 }
 
 function getYesterdayDateString(): string {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  return yesterday.toISOString().split('T')[0];
+  return toLocalDateString(yesterday);
 }
 
 // ---- Service ----
@@ -82,7 +96,7 @@ export const dailyStreakService = {
     return data.lastCompletedDate === getTodayDateString();
   },
 
-  async completeToday(): Promise<DailyStreakData> {
+  async completeToday(userId?: string | null): Promise<DailyStreakData> {
     const today = getTodayDateString();
     const yesterday = getYesterdayDateString();
     const data = await this.getStreakData();
@@ -115,7 +129,66 @@ export const dailyStreakService = {
       console.error('[DailyStreak] Error saving streak data:', error);
     }
 
+    // Best-effort server sync so streaks survive device switches
+    if (userId) {
+      this.pushStreakToServer(userId, updatedData).catch(() => {});
+    }
+
     return updatedData;
+  },
+
+  // ============================================
+  // Server Sync (streaks survive reinstall/device switch)
+  // ============================================
+
+  async pushStreakToServer(userId: string, data?: DailyStreakData): Promise<void> {
+    try {
+      const streak = data || (await this.getStreakData());
+      await supabase
+        .from('user_profiles')
+        .update({
+          streak_current: streak.currentStreak,
+          streak_longest: streak.longestStreak,
+          streak_last_date: streak.lastCompletedDate,
+          streak_total_days: streak.totalDaysCompleted,
+        })
+        .eq('id', userId);
+    } catch (error) {
+      console.error('[DailyStreak] Error pushing streak to server:', error);
+    }
+  },
+
+  /**
+   * Merge the server copy into local storage (called on sign-in / app start).
+   * Takes the stronger of the two records so neither device loses progress.
+   */
+  async mergeStreakFromServer(userId: string): Promise<DailyStreakData> {
+    const local = await this.getStreakData();
+    try {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('streak_current, streak_longest, streak_last_date, streak_total_days')
+        .eq('id', userId)
+        .single();
+
+      if (!profile || !profile.streak_last_date) return local;
+
+      const serverIsNewer =
+        !local.lastCompletedDate || profile.streak_last_date > local.lastCompletedDate;
+
+      const merged: DailyStreakData = {
+        lastCompletedDate: serverIsNewer ? profile.streak_last_date : local.lastCompletedDate,
+        currentStreak: serverIsNewer ? (profile.streak_current || 0) : local.currentStreak,
+        longestStreak: Math.max(local.longestStreak, profile.streak_longest || 0),
+        totalDaysCompleted: Math.max(local.totalDaysCompleted, profile.streak_total_days || 0),
+      };
+
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      return merged;
+    } catch (error) {
+      console.error('[DailyStreak] Error merging streak from server:', error);
+      return local;
+    }
   },
 
   async getCurrentStreak(): Promise<number> {

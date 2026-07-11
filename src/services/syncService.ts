@@ -207,7 +207,8 @@ export async function syncComparison(
   movieABetaAfter: number,
   movieBBetaBefore: number,
   movieBBetaAfter: number,
-  comparisonNumber: number
+  comparisonNumber: number,
+  context?: string
 ): Promise<boolean> {
   const isOnline = await checkIsOnline();
 
@@ -220,6 +221,7 @@ export async function syncComparison(
     movie_b_beta_before: movieBBetaBefore,
     movie_b_beta_after: movieBBetaAfter,
     comparison_number: comparisonNumber,
+    context: context || null,
   };
 
   if (!isOnline) {

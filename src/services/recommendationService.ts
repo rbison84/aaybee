@@ -430,16 +430,12 @@ export const recommendationService = {
         chunks.push(candidateIds.slice(i, i + CHUNK_SIZE));
       }
       const chunkResults = await Promise.all(
-        chunks.map(chunk => {
-          const rowLimit = chunk.length * 30;
-          return supabase
-            .from('user_movies')
-            .select('user_id, movie_id, beta')
-            .in('user_id', chunk)
-            .eq('status', 'known')
-            .order('beta', { ascending: false })
-            .limit(rowLimit);
-        })
+        chunks.map(chunk =>
+          supabase.rpc('get_known_rankings', {
+            target_ids: chunk,
+            per_user_limit: 30,
+          })
+        )
       );
       for (const { data: chunkMovies, error: chunkError } of chunkResults) {
         if (chunkError) {
@@ -579,16 +575,18 @@ export const recommendationService = {
       const recommendations = new Map<string, MovieRecommendation>();
 
       for (const similarUser of similarUsers) {
-        // Get similar user's top movies
-        const { data: theirMovies, error: theirError } = await supabase
-          .from('user_movies')
-          .select('movie_id, beta, total_comparisons')
-          .eq('user_id', similarUser.userId)
-          .gt('beta', HIGH_BETA_THRESHOLD)
-          .order('beta', { ascending: false })
-          .limit(30);
+        // Get similar user's top movies via the scoped RPC, then filter to
+        // high-beta rows client-side
+        const { data: theirRows, error: theirError } = await supabase.rpc('get_known_rankings', {
+          target_ids: [similarUser.userId],
+          per_user_limit: 60,
+        });
 
-        if (theirError || !theirMovies) continue;
+        if (theirError || !theirRows) continue;
+
+        const theirMovies = (theirRows as { movie_id: string; beta: number; total_comparisons: number }[])
+          .filter(m => m.beta > HIGH_BETA_THRESHOLD)
+          .slice(0, 30);
 
         // Get their rankings to find shared high-rated movies
         const theirHighRated = new Set(theirMovies.map(m => m.movie_id));

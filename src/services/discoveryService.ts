@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
-import { calculateSmartCorrelation, getUserTopMovies } from '../utils/correlationUtils';
 import { Movie } from '../types';
+import { recommendationService } from './recommendationService';
 
 // ============================================
 // TYPES
@@ -65,46 +65,48 @@ export const discoveryService = {
   },
 
   /**
-   * Find top 5 similar users for discovery
+   * Find top 5 similar users for discovery.
+   * Reuses recommendationService.findSimilarUsers (batched + cached)
+   * then fetches top movies only for the few matching users.
    */
   findSimilarUsersForDiscovery: async (
     userId: string
   ): Promise<SimilarUser[]> => {
     try {
-      // Get all other users with enough comparisons
-      const { data: otherUsers, error } = await supabase
-        .from('user_profiles')
-        .select('id, display_name, total_comparisons')
-        .neq('id', userId)
-        .gte('total_comparisons', 20);
+      const allSimilar = await recommendationService.findSimilarUsers(userId, 50);
 
-      if (error || !otherUsers?.length) {
-        return [];
-      }
+      const highMatch = allSimilar
+        .filter(u => u.rSquared >= MIN_RSQUARED_FOR_DISCOVERY)
+        .slice(0, 5);
 
-      // Calculate similarity and collect results
-      const similarUsers: SimilarUser[] = [];
+      if (highMatch.length === 0) return [];
 
-      for (const otherUser of otherUsers) {
-        const result = await calculateSmartCorrelation(userId, otherUser.id);
+      const userIds = highMatch.map(u => u.userId);
+      const { data: movieRows, error } = await supabase.rpc('get_known_rankings', {
+        target_ids: userIds,
+        per_user_limit: 15,
+      });
 
-        if (result && result.rSquared >= MIN_RSQUARED_FOR_DISCOVERY) {
-          // Get their top 15 movies
-          const topMovies = await getUserTopMovies(otherUser.id, 15);
+      if (error || !movieRows) return [];
 
-          similarUsers.push({
-            userId: otherUser.id,
-            displayName: otherUser.display_name || 'User',
-            rSquared: result.rSquared,
-            topMovies,
-          });
+      const moviesByUser = new Map<string, Array<{ movie_id: string; beta: number; rank: number }>>();
+      for (const row of movieRows) {
+        let arr = moviesByUser.get(row.user_id);
+        if (!arr) {
+          arr = [];
+          moviesByUser.set(row.user_id, arr);
+        }
+        if (arr.length < 15) {
+          arr.push({ movie_id: row.movie_id, beta: row.beta, rank: arr.length + 1 });
         }
       }
 
-      // Sort by R² and return top 5
-      return similarUsers
-        .sort((a, b) => b.rSquared - a.rSquared)
-        .slice(0, 5);
+      return highMatch.map(u => ({
+        userId: u.userId,
+        displayName: u.displayName || 'User',
+        rSquared: u.rSquared,
+        topMovies: moviesByUser.get(u.userId) || [],
+      }));
     } catch (error) {
       console.error('[Discovery] Error finding similar users:', error);
       return [];

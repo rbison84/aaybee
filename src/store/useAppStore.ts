@@ -57,7 +57,7 @@ interface AppActions {
   setHasSeenGoBackTooltip: () => void;
 
   // Comparisons
-  recordComparison: (winnerId: string, loserId: string, skipped?: boolean) => void;
+  recordComparison: (winnerId: string, loserId: string, skipped?: boolean, context?: string) => void;
   undoLastComparison: () => ComparisonRecord | null;
 
   // Data access
@@ -543,7 +543,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Comparisons
   // ============================================
 
-  const recordComparison = useCallback((winnerId: string, loserId: string, skipped = false) => {
+  const recordComparison = useCallback((winnerId: string, loserId: string, skipped = false, context?: string) => {
     // Get current movies
     const movieA = movies.get(winnerId);
     const movieB = movies.get(loserId);
@@ -602,6 +602,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       movieAId: winnerId,
       movieBId: loserId,
       choice: skipped ? 'skip' : 'A',
+      context,
       movieABetaBefore: betaABefore,
       movieABetaAfter: finalA.beta,
       movieBBetaBefore: betaBBefore,
@@ -664,7 +665,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         finalA.beta,
         betaBBefore,
         finalB.beta,
-        comparisonNumber
+        comparisonNumber,
+        context
       );
 
       // Sync updated movies

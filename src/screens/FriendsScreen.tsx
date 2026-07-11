@@ -18,15 +18,18 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useAuth } from '../contexts/AuthContext';
-import { friendService, FriendWithProfile, FriendRequest, UserSearchResult } from '../services/friendService';
+import { friendService, FriendWithProfile, FriendRequest, UserSearchResult, FriendSlot, FriendComparison } from '../services/friendService';
 import { crewService, Crew, CrewMember } from '../services/crewService';
-import { challengeService } from '../services/challengeService';
 import { knockoutService, KnockoutChallenge } from '../services/knockoutService';
 import { QRCode } from '../components/QRCode';
 import { ContactInvite } from '../components/ContactInvite';
 import { TasteRadar } from '../components/TasteRadar';
 import { computeTasteAxes } from '../utils/tasteAxes';
+import { shareToWhatsApp, copyToClipboard } from '../utils/crossPlatform';
 import { colors, spacing, borderRadius, typography } from '../theme/cinematic';
+
+// Relationship labels — what turns a % into a screenshot-worthy claim
+const LABEL_OPTIONS = ['SPOUSE', 'PARTNER', 'BEST FRIEND', 'FAMILY', 'FRIEND', 'COWORKER'];
 
 type FriendsTabType = 'friends' | 'circles';
 
@@ -56,6 +59,15 @@ export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew, onOp
   const [removing, setRemoving] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
+  // Your People: labels, ghost slots, narrative comparisons
+  const [labels, setLabels] = useState<Map<string, string>>(new Map());
+  const [slots, setSlots] = useState<FriendSlot[]>([]);
+  const [newSlotName, setNewSlotName] = useState('');
+  const [addSlotMode, setAddSlotMode] = useState(false);
+  const [comparisons, setComparisons] = useState<Map<string, FriendComparison>>(new Map());
+  const [loadingComparison, setLoadingComparison] = useState<string | null>(null);
+  const [familyCopied, setFamilyCopied] = useState(false);
+
   // Knockout challenges state
   const [pendingKnockouts, setPendingKnockouts] = useState<KnockoutChallenge[]>([]);
 
@@ -69,7 +81,7 @@ export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew, onOp
   const [crewError, setCrewError] = useState('');
   const [creatingCrew, setCreatingCrew] = useState(false);
 
-  // Load friends + pending knockout challenges
+  // Load friends + pending knockout challenges + labels + invite slots
   useEffect(() => {
     if (!user?.id) return;
     setLoading(true);
@@ -77,13 +89,97 @@ export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew, onOp
       friendService.getFriends(user.id),
       friendService.getPendingRequests(user.id),
       knockoutService.getPendingChallengesForUser(user.id),
-    ]).then(([friendsData, requestsData, knockoutsData]) => {
+      friendService.getFriendLabels(user.id),
+      friendService.getFriendSlots(user.id),
+    ]).then(([friendsData, requestsData, knockoutsData, labelsData, slotsData]) => {
       setFriends(friendsData);
       setFriendRequests(requestsData);
       setPendingKnockouts(knockoutsData);
+      setLabels(labelsData);
+      setSlots(slotsData);
       setLoading(false);
     });
   }, [user?.id]);
+
+  // Lazy-load the narrative comparison when a friend row expands
+  useEffect(() => {
+    if (!expandedFriendId || !user?.id || comparisons.has(expandedFriendId)) return;
+    setLoadingComparison(expandedFriendId);
+    friendService.getFriendComparison(user.id, expandedFriendId).then((comparison) => {
+      if (comparison) {
+        setComparisons(prev => new Map(prev).set(expandedFriendId, comparison));
+      }
+      setLoadingComparison(null);
+    });
+  }, [expandedFriendId, user?.id]);
+
+  const handleSetLabel = useCallback(async (friendId: string, label: string | null) => {
+    if (!user?.id) return;
+    setLabels(prev => {
+      const next = new Map(prev);
+      if (label) next.set(friendId, label);
+      else next.delete(friendId);
+      return next;
+    });
+    await friendService.setFriendLabel(user.id, friendId, label);
+  }, [user?.id]);
+
+  // Ghost-slot invite: personal ask + ref link (auto-friends on signup)
+  const buildSlotInviteText = useCallback((name: string) => {
+    const displayName = user?.user_metadata?.display_name || 'A friend';
+    return `hey ${name} — it's ${displayName}. i need 2 minutes of your movie takes to finish my taste map on aaybee. where do you land? https://aaybee.netlify.app/?ref=${user?.id}`;
+  }, [user?.id, user?.user_metadata?.display_name]);
+
+  const handleAddSlot = useCallback(async () => {
+    const name = newSlotName.trim();
+    if (!user?.id || !name) return;
+    const slot = await friendService.addFriendSlot(user.id, name);
+    if (slot) {
+      setSlots(prev => [...prev, slot]);
+      setNewSlotName('');
+      setAddSlotMode(false);
+    }
+  }, [user?.id, newSlotName]);
+
+  const handleInviteSlot = useCallback(async (slot: FriendSlot) => {
+    await shareToWhatsApp(buildSlotInviteText(slot.name));
+    friendService.markSlotInvited(slot.id).catch(() => {});
+    setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, invited_at: new Date().toISOString() } : s));
+  }, [buildSlotInviteText]);
+
+  const handleRemoveSlot = useCallback(async (slotId: string) => {
+    setSlots(prev => prev.filter(s => s.id !== slotId));
+    friendService.removeFriendSlot(slotId).catch(() => {});
+  }, []);
+
+  // Podium share card — the screenshot-to-group-chat artifact
+  const buildFamilyShareText = useCallback(() => {
+    const ranked = friends.filter(f => f.taste_match);
+    if (ranked.length < 2) return null;
+    const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+    const top = ranked.slice(0, 3);
+    const lines = top.map((f, i) => {
+      const label = labels.get(f.friend_id);
+      const labelPart = label ? ` (${label.toLowerCase()})` : '';
+      const wince = i === top.length - 1 && (f.taste_match || 0) < 70 ? ' \u{1F62C}' : '';
+      return `${medals[i]} ${f.friend.display_name}${labelPart} — ${f.taste_match}%${wince}`;
+    });
+    return `my taste family on aaybee:\n${lines.join('\n')}\nwhere do you land? https://aaybee.netlify.app/?ref=${user?.id}`;
+  }, [friends, labels, user?.id]);
+
+  const handleShareFamily = useCallback(async (channel: 'whatsapp' | 'copy') => {
+    const text = buildFamilyShareText();
+    if (!text) return;
+    if (channel === 'whatsapp') {
+      await shareToWhatsApp(text);
+    } else {
+      const ok = await copyToClipboard(text);
+      if (ok) {
+        setFamilyCopied(true);
+        setTimeout(() => setFamilyCopied(false), 2000);
+      }
+    }
+  }, [buildFamilyShareText]);
 
   // Load crews
   useEffect(() => {
@@ -218,7 +314,7 @@ export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew, onOp
       {showQr && (
         <Animated.View entering={FadeIn.duration(200)} style={styles.qrSection}>
           <QRCode
-            value={`https://aaybee.netlify.app/connect/${user.id}`}
+            value={`https://aaybee.netlify.app/?ref=${user.id}`}
             size={140}
             backgroundColor="transparent"
             color="#FFFFFF"
@@ -313,18 +409,41 @@ export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew, onOp
         </View>
       )}
 
+      {/* Taste-family share — the podium screenshot for group chats */}
+      {friends.filter(f => f.taste_match).length >= 2 && (
+        <View style={styles.familyShareRow}>
+          <Pressable
+            style={[styles.familyShareButton, { backgroundColor: '#25D366' }]}
+            onPress={() => handleShareFamily('whatsapp')}
+          >
+            <Text style={[styles.familyShareText, { color: '#000' }]}>SHARE MY TASTE FAMILY</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.familyShareButton, styles.familyCopyButton]}
+            onPress={() => handleShareFamily('copy')}
+          >
+            <Text style={[styles.familyShareText, familyCopied && { color: colors.accent }]}>
+              {familyCopied ? 'COPIED!' : 'COPY'}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* Friends list */}
       {loading ? (
         <ActivityIndicator size="small" color={colors.textMuted} style={{ marginTop: spacing.xxl }} />
       ) : friends.length === 0 ? (
         <View style={styles.emptySection}>
           <Text style={styles.emptyTitle}>NO FRIENDS YET</Text>
-          <Text style={styles.emptySubtitle}>TAP + ADD TO FIND PEOPLE</Text>
+          <Text style={styles.emptySubtitle}>TAP + ADD TO FIND PEOPLE — OR ADD SOMEONE TO YOUR MAP BELOW</Text>
         </View>
       ) : (
         friends.map((friend, idx) => {
           const isTop = idx === 0;
           const isExpanded = expandedFriendId === friend.friend_id;
+          const label = labels.get(friend.friend_id);
+          const comparison = comparisons.get(friend.friend_id);
+          const hasMatch = !!friend.taste_match;
           return (
             <Pressable
               key={friend.friend_id}
@@ -334,13 +453,18 @@ export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew, onOp
               <View style={styles.friendRow}>
                 <View style={styles.friendLeft}>
                   <Text style={[styles.friendRank, isTop && styles.friendRankTop]}>#{idx + 1}</Text>
-                  <Text style={[styles.friendName, isTop && styles.friendNameTop]} numberOfLines={1}>
-                    {friend.friend.display_name}
-                  </Text>
+                  <View style={{ flexShrink: 1 }}>
+                    <Text style={[styles.friendName, isTop && styles.friendNameTop]} numberOfLines={1}>
+                      {friend.friend.display_name}
+                    </Text>
+                    {!!label && (
+                      <Text style={[styles.friendLabel, isTop && { color: 'rgba(0,0,0,0.55)' }]}>{label}</Text>
+                    )}
+                  </View>
                 </View>
                 <View style={styles.friendRight}>
-                  <Text style={[styles.friendPercent, isTop && styles.friendPercentTop]}>
-                    {friend.taste_match ? `${friend.taste_match}%` : '--'}
+                  <Text style={[styles.friendPercent, isTop && styles.friendPercentTop, !hasMatch && styles.friendPercentLocked]}>
+                    {hasMatch ? `${friend.taste_match}%` : 'PLAY TO UNLOCK'}
                   </Text>
                   {(friend as any).games_played > 0 && (
                     <Text style={[styles.friendGames, isTop && { color: colors.background }]}>
@@ -350,29 +474,114 @@ export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew, onOp
                 </View>
               </View>
 
-              {/* Expanded actions */}
+              {/* Expanded: narrative + label picker + actions */}
               {isExpanded && (
-                <View style={styles.friendActions}>
-                  {onChallenge && (
-                    <Pressable
-                      style={[styles.challengeButton, isTop && styles.challengeButtonTop]}
-                      onPress={() => onChallenge(friend.friend_id, friend.friend.display_name)}
-                    >
-                      <Text style={[styles.challengeText, isTop && styles.challengeTextTop]}>CHALLENGE</Text>
+                <View>
+                  {/* Narrative comparison */}
+                  {loadingComparison === friend.friend_id ? (
+                    <ActivityIndicator size="small" color={colors.textMuted} style={{ marginVertical: spacing.sm }} />
+                  ) : comparison ? (
+                    <View style={styles.narrativeSection}>
+                      {comparison.total_common_movies > 0 && (
+                        <Text style={[styles.narrativeConfidence, isTop && { color: 'rgba(0,0,0,0.5)' }]}>
+                          BASED ON {comparison.total_common_movies} SHARED MOVIES
+                        </Text>
+                      )}
+                      {comparison.biggest_agreement && (
+                        <Text style={[styles.narrativeLine, isTop && { color: 'rgba(0,0,0,0.75)' }]}>
+                          YOU BOTH LOVE: {comparison.biggest_agreement.title.toUpperCase()}
+                        </Text>
+                      )}
+                      {comparison.biggest_disagreement && (
+                        <Text style={[styles.narrativeLine, isTop && { color: 'rgba(0,0,0,0.75)' }]}>
+                          BIGGEST FIGHT: {comparison.biggest_disagreement.title.toUpperCase()} — YOU #{comparison.biggest_disagreement.your_rank}, THEM #{comparison.biggest_disagreement.friend_rank}
+                        </Text>
+                      )}
+                    </View>
+                  ) : null}
+
+                  {/* Relationship label picker */}
+                  <View style={styles.labelRow}>
+                    {LABEL_OPTIONS.map(option => (
+                      <Pressable
+                        key={option}
+                        style={[styles.labelChip, label === option && styles.labelChipActive]}
+                        onPress={() => handleSetLabel(friend.friend_id, label === option ? null : option)}
+                      >
+                        <Text style={[styles.labelChipText, label === option && styles.labelChipTextActive]}>
+                          {option}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  <View style={styles.friendActions}>
+                    {onChallenge && (
+                      <Pressable
+                        style={[styles.challengeButton, isTop && styles.challengeButtonTop]}
+                        onPress={() => onChallenge(friend.friend_id, friend.friend.display_name)}
+                      >
+                        <Text style={[styles.challengeText, isTop && styles.challengeTextTop]}>
+                          {hasMatch ? 'CHALLENGE' : 'PLAY A BRACKET TO UNLOCK'}
+                        </Text>
+                      </Pressable>
+                    )}
+                    <Pressable onPress={() => handleRemoveFriend(friend.friend_id)}>
+                      <Text style={styles.removeText}>
+                        {removing === friend.friend_id ? '...' :
+                         confirmRemove === friend.friend_id ? 'REMOVE?' : 'x'}
+                      </Text>
                     </Pressable>
-                  )}
-                  <Pressable onPress={() => handleRemoveFriend(friend.friend_id)}>
-                    <Text style={styles.removeText}>
-                      {removing === friend.friend_id ? '...' :
-                       confirmRemove === friend.friend_id ? 'REMOVE?' : 'x'}
-                    </Text>
-                  </Pressable>
+                  </View>
                 </View>
               )}
             </Pressable>
           );
         })
       )}
+
+      {/* Ghost rows — people who should be on your map but aren't here yet */}
+      <View style={styles.slotsSection}>
+        <Text style={styles.sectionLabel}>NOT ON YOUR MAP YET</Text>
+        {slots.map(slot => (
+          <View key={slot.id} style={styles.slotRow}>
+            <View style={styles.slotLeft}>
+              <Text style={styles.slotRank}>#?</Text>
+              <Text style={styles.slotName} numberOfLines={1}>{slot.name}</Text>
+            </View>
+            <View style={styles.slotActions}>
+              <Pressable style={styles.slotInviteButton} onPress={() => handleInviteSlot(slot)}>
+                <Text style={styles.slotInviteText}>{slot.invited_at ? 'INVITE AGAIN' : 'INVITE'}</Text>
+              </Pressable>
+              <Pressable onPress={() => handleRemoveSlot(slot.id)} hitSlop={8}>
+                <Text style={styles.removeText}>x</Text>
+              </Pressable>
+            </View>
+          </View>
+        ))}
+
+        {addSlotMode ? (
+          <View style={styles.slotAddRow}>
+            <TextInput
+              style={styles.slotInput}
+              placeholder="THEIR NAME..."
+              placeholderTextColor={colors.textMuted}
+              value={newSlotName}
+              onChangeText={setNewSlotName}
+              autoFocus
+              maxLength={40}
+              onSubmitEditing={handleAddSlot}
+            />
+            <Pressable style={styles.slotInviteButton} onPress={handleAddSlot}>
+              <Text style={styles.slotInviteText}>ADD</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable style={styles.slotAddButton} onPress={() => setAddSlotMode(true)}>
+            <Text style={styles.slotAddText}>+ WHERE DOES YOUR PERSON LAND?</Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 
@@ -460,9 +669,26 @@ export function FriendsScreen({ onChallenge, onAcceptChallenge, onViewCrew, onOp
             </Pressable>
             <View style={styles.crewShareRow}>
               <Pressable
+                style={[styles.crewShareButton, styles.crewWhatsAppButton]}
+                onPress={() => {
+                  const url = user?.id
+                    ? `https://aaybee.netlify.app/crew/${crew.code}?ref=${user.id}`
+                    : `https://aaybee.netlify.app/crew/${crew.code}`;
+                  // Aimed at the whole group chat, not one person — crews work
+                  // when they arrive pre-dense
+                  shareToWhatsApp(
+                    `our group chat needs a movie circle. join "${crew.name}" on aaybee — play the daily ranking, see who has the worst taste:\n\n${url}`
+                  );
+                }}
+              >
+                <Text style={[styles.crewShareText, { color: '#000' }]}>INVITE GROUP CHAT</Text>
+              </Pressable>
+              <Pressable
                 style={styles.crewShareButton}
                 onPress={async () => {
-                  const url = `https://aaybee.netlify.app/crew/${crew.code}`;
+                  const url = user?.id
+                    ? `https://aaybee.netlify.app/crew/${crew.code}?ref=${user.id}`
+                    : `https://aaybee.netlify.app/crew/${crew.code}`;
                   const msg = `JOIN MY CIRCLE "${crew.name}" ON AAYBEE\n\n${url}`;
                   try {
                     if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
@@ -814,6 +1040,179 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
+  // Your People: locked rows, labels, narrative
+  friendPercentLocked: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.accent,
+    letterSpacing: 1,
+  },
+  friendLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: colors.accent,
+    letterSpacing: 1,
+    marginTop: 2,
+  },
+  narrativeSection: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 4,
+  },
+  narrativeConfidence: {
+    fontSize: 8,
+    fontWeight: '500',
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+  },
+  narrativeLine: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    letterSpacing: 0.5,
+    lineHeight: 15,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  labelChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.round,
+    paddingVertical: 3,
+    paddingHorizontal: spacing.sm,
+  },
+  labelChipActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  labelChipText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+  },
+  labelChipTextActive: {
+    color: colors.background,
+  },
+
+  // Taste-family share
+  familyShareRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  familyShareButton: {
+    flex: 1,
+    borderRadius: borderRadius.xl,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  familyCopyButton: {
+    flex: 0.5,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  familyShareText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: 1,
+  },
+
+  // Ghost slots
+  slotsSection: {
+    marginTop: spacing.xl,
+  },
+  slotRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    borderRadius: borderRadius.xl,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.xs,
+  },
+  slotLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
+  },
+  slotRank: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.textMuted,
+    letterSpacing: 1,
+  },
+  slotName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    letterSpacing: 0.5,
+    flexShrink: 1,
+  },
+  slotActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  slotInviteButton: {
+    backgroundColor: '#25D366',
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  slotInviteText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#000',
+    letterSpacing: 1,
+  },
+  slotAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  slotInput: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.xl,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    fontSize: 11,
+    color: colors.textPrimary,
+    letterSpacing: 0.5,
+  },
+  slotAddButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    borderRadius: borderRadius.xl,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  slotAddText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textMuted,
+    letterSpacing: 1,
+  },
+
   // Crews
   crewButtonsRow: {
     flexDirection: 'row',
@@ -897,6 +1296,7 @@ const styles = StyleSheet.create({
   crewShareRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    gap: spacing.sm,
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
@@ -907,6 +1307,9 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.lg,
+  },
+  crewWhatsAppButton: {
+    backgroundColor: '#25D366',
   },
   crewShareText: {
     fontSize: 10,

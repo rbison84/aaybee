@@ -44,6 +44,7 @@ export interface DBComparison {
   movie_b_beta_before: number;
   movie_b_beta_after: number;
   comparison_number: number;
+  context: string | null;
   created_at: string;
 }
 

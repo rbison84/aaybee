@@ -5,6 +5,7 @@ import { Movie } from '../../types';
 import { MovieTrailer } from '../../services/tmdb';
 import { getYouTubeThumbnailUrl } from '../../services/tmdb';
 import { useAppDimensions } from '../../contexts/DimensionsContext';
+import { WhereToWatch } from '../WhereToWatch';
 import { colors, spacing, typography, borderRadius } from '../../theme/cinematic';
 
 let YoutubePlayer: any = null;
@@ -21,6 +22,8 @@ export interface TvItem {
   channelId: string;
   contextLine: string;
   isRanked: boolean;
+  /** Social proof line, e.g. "priya (89% match) ranks this #4" */
+  socialProof?: string;
 }
 
 interface TrailerCardProps {
@@ -35,7 +38,7 @@ interface TrailerCardProps {
 }
 
 export function TrailerCard({ item, isActive, paused, itemHeight, onOpenDetail, onTrailerEnd, onAddWatchlist, onRankIt }: TrailerCardProps) {
-  const { movie, trailer, contextLine, isRanked } = item;
+  const { movie, trailer, contextLine, isRanked, socialProof } = item;
   const { containerWidth } = useAppDimensions();
 
   const playerWidth = containerWidth;
@@ -93,9 +96,17 @@ export function TrailerCard({ item, isActive, paused, itemHeight, onOpenDetail, 
               <Text style={styles.movieTitle} numberOfLines={2}>
                 {movie.title} <Text style={styles.movieYear}>({movie.year})</Text>
               </Text>
+              {socialProof ? (
+                <Text style={styles.socialProofLine} numberOfLines={1}>
+                  {socialProof}
+                </Text>
+              ) : null}
               <Text style={styles.contextLine} numberOfLines={1}>
                 {contextLine}
               </Text>
+              <View style={{ marginTop: 4 }}>
+                <WhereToWatch compact movieId={movie.id} tmdbId={movie.tmdbId} source="trailer" />
+              </View>
             </View>
           </Pressable>
 
@@ -422,6 +433,12 @@ const styles = StyleSheet.create({
   contextLine: {
     ...typography.caption,
     color: colors.accent,
+    marginTop: 2,
+  },
+  socialProofLine: {
+    ...typography.caption,
+    color: colors.textPrimary,
+    fontWeight: '700',
     marginTop: 2,
   },
   actionButtons: {

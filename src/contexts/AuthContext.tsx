@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import * as authService from '../services/authService';
 import { friendService } from '../services/friendService';
 import { notificationService } from '../services/notificationService';
 import { activityService } from '../services/activityService';
+import { crewService } from '../services/crewService';
 import { getStoredRefParam, clearStoredRefParam } from '../utils/deepLink';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -58,14 +60,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Handle referral loop for OAuth signups (Google, etc.)
         if (event === 'SIGNED_IN' && session?.user?.id && !referralProcessed.has(session.user.id)) {
           referralProcessed.add(session.user.id);
+
+          // Complete a crew join stashed by a pre-signup /crew/CODE deep link
+          try {
+            const pendingCrew = await AsyncStorage.getItem('aaybee_pending_crew');
+            if (pendingCrew) {
+              await crewService.joinCrew(session.user.id, pendingCrew).catch(() => {});
+              await AsyncStorage.removeItem('aaybee_pending_crew');
+            }
+          } catch {}
+
           try {
             const ref = await getStoredRefParam();
             if (ref && ref !== session.user.id) {
-              // Update profile with referral
+              // Update profile with referral (email lives in auth.users only;
+              // contact matching uses the match_users_by_email RPC)
               const email = session.user.email || '';
               await supabase.from('user_profiles').update({
                 referred_by: ref,
-                email,
               }).eq('id', session.user.id);
 
               // Auto-connect with referrer

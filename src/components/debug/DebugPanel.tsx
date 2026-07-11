@@ -18,7 +18,7 @@ import { useAlert } from '../../contexts/AlertContext';
 import { useDevSettings } from '../../contexts/DevSettingsContext';
 import { useAppDimensions } from '../../contexts/DimensionsContext';
 import { getCurrentTier } from '../../utils/pairSelector';
-import { triggerDailyRefresh } from '../../screens/DailyScreen';
+import { triggerDailyRefresh } from '../../utils/dailyRefresh';
 
 // Conditionally import Accelerometer only on native
 let Accelerometer: any = null;

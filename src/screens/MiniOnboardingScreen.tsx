@@ -44,7 +44,7 @@ export function MiniOnboardingScreen({ onComplete }: MiniOnboardingScreenProps) 
   }, [setBirthDecade, haptics, completeOnboarding, onComplete]);
 
   const handlePick = useCallback((winnerId: string, loserId: string) => {
-    recordComparison(winnerId, loserId);
+    recordComparison(winnerId, loserId, false, 'onboarding');
     haptics.light();
 
     if (pairIndex + 1 >= SEED_PAIRS.length) {

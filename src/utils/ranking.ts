@@ -11,8 +11,8 @@ export const K_DECAY = 0.05;
 
 /**
  * Adaptive K-factor: decreases as movie gets more comparisons
- * - Early: High K (0.625) for quick positioning
- * - Late: Low K (0.125) for stability, but never zero
+ * - Early: High K (K_BASE * (1 + K_FLOOR)) for quick positioning
+ * - Late: Low K (K_BASE * K_FLOOR) for stability, but never zero
  */
 export function getAdaptiveK(movieComparisons: number): number {
   const decay = Math.exp(-K_DECAY * movieComparisons);

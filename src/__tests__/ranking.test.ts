@@ -11,8 +11,7 @@ import {
 describe('getAdaptiveK', () => {
   it('returns maximum K for 0 comparisons', () => {
     const k = getAdaptiveK(0);
-    // K_BASE * (1 + K_FLOOR) = 0.5 * 1.25 = 0.625
-    expect(k).toBeCloseTo(0.625);
+    expect(k).toBeCloseTo(K_BASE * (1 + K_FLOOR));
   });
 
   it('decreases K as comparisons increase', () => {
@@ -25,7 +24,7 @@ describe('getAdaptiveK', () => {
   });
 
   it('never goes below minimum K', () => {
-    const kMin = K_BASE * K_FLOOR; // 0.5 * 0.25 = 0.125
+    const kMin = K_BASE * K_FLOOR;
     const k100 = getAdaptiveK(100);
     const k1000 = getAdaptiveK(1000);
 

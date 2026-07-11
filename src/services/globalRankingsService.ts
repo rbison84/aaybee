@@ -42,72 +42,17 @@ export const globalRankingsService = {
    */
   calculateMovieGlobalStats: async (movieId: string): Promise<boolean> => {
     try {
-      // 1. Get all user data for this movie
-      const { data: userMovies, error } = await supabase
-        .from('user_movies')
-        .select('beta, total_wins, total_losses, total_comparisons, user_id')
-        .eq('movie_id', movieId);
+      // Aggregation runs server-side (SECURITY DEFINER RPC) so clients can
+      // trigger a recalculation but never write arbitrary stats
+      const { error } = await supabase.rpc('recalculate_movie_global_stats', {
+        p_movie_id: movieId,
+      });
 
       if (error) {
-        console.error('[GlobalRankings] Failed to fetch user movies:', error);
+        console.error('[GlobalRankings] Recalculation RPC failed:', error);
         return false;
       }
 
-      if (!userMovies || userMovies.length === 0) {
-        console.log(`[GlobalRankings] No user data for movie ${movieId}`);
-        return true;
-      }
-
-      // 2. Calculate weighted global beta
-      // Users with more comparisons contribute more weight
-      let weightedSum = 0;
-      let totalWeight = 0;
-      let totalWins = 0;
-      let totalLosses = 0;
-      const betas: number[] = [];
-
-      for (const um of userMovies) {
-        const weight = Math.sqrt((um.total_comparisons || 0) + 1);
-        weightedSum += (um.beta || 0) * weight;
-        totalWeight += weight;
-        totalWins += um.total_wins || 0;
-        totalLosses += um.total_losses || 0;
-        betas.push(um.beta || 0);
-      }
-
-      const globalBeta = totalWeight > 0 ? weightedSum / totalWeight : 0;
-
-      // 3. Calculate percentiles
-      betas.sort((a, b) => a - b);
-      const n = betas.length;
-      const p25 = betas[Math.floor(n * 0.25)] ?? 0;
-      const median = betas[Math.floor(n * 0.5)] ?? 0;
-      const p75 = betas[Math.floor(n * 0.75)] ?? 0;
-      const average = n > 0 ? betas.reduce((a, b) => a + b, 0) / n : 0;
-
-      // 4. Save to database
-      const { error: upsertError } = await supabase
-        .from('global_movie_stats')
-        .upsert({
-          movie_id: movieId,
-          global_beta: globalBeta,
-          total_global_wins: totalWins,
-          total_global_losses: totalLosses,
-          total_global_comparisons: totalWins + totalLosses,
-          unique_users_count: userMovies.length,
-          average_user_beta: average,
-          median_user_beta: median,
-          percentile_25: p25,
-          percentile_75: p75,
-          last_calculated_at: new Date().toISOString(),
-        }, { onConflict: 'movie_id' });
-
-      if (upsertError) {
-        console.error('[GlobalRankings] Failed to upsert stats:', upsertError);
-        return false;
-      }
-
-      console.log(`[GlobalRankings] Updated stats for ${movieId}: beta=${globalBeta.toFixed(2)}, users=${userMovies.length}`);
       return true;
     } catch (error) {
       console.error('[GlobalRankings] Error calculating movie stats:', error);

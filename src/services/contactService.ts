@@ -59,15 +59,13 @@ export const contactService = {
 
     try {
       const results: MatchedUser[] = [];
-      // Batch in chunks of 50 (Supabase IN clause limit)
-      for (let i = 0; i < emails.length; i += 50) {
-        const chunk = emails.slice(i, i + 50);
-        const { data } = await supabase
-          .from('user_profiles')
-          .select('id, display_name, email')
-          .in('email', chunk);
+      // RPC matches against auth emails server-side and only returns rows
+      // for addresses the caller already has (batched at the RPC's cap)
+      for (let i = 0; i < emails.length; i += 500) {
+        const chunk = emails.slice(i, i + 500);
+        const { data } = await supabase.rpc('match_users_by_email', { p_emails: chunk });
         if (data) {
-          results.push(...data.filter((d: any) => d.email && d.display_name) as MatchedUser[]);
+          results.push(...(data as MatchedUser[]).filter(d => d.email && d.display_name));
         }
       }
       return results;

@@ -1,7 +1,5 @@
 // Core components
 export { ErrorBoundary } from './ErrorBoundary';
-export { WelcomeBackToast } from './WelcomeBackToast';
-export { Confetti } from './Confetti';
 export { WebContainer } from './WebContainer';
 
 // Debug

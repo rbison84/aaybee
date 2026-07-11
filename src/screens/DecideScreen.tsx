@@ -22,6 +22,8 @@ import { useDevSettings } from '../contexts/DevSettingsContext';
 import { useHaptics } from '../hooks/useHaptics';
 import { decideService, DecideWeights, PoolCandidate } from '../services/decideService';
 import { CURATED_PACKS, CuratedPack } from '../data/curatedPacks';
+import { WhereToWatch } from '../components/WhereToWatch';
+import { tmdbIdFromMovieId } from '../services/watchProviders';
 
 import { watchlistService } from '../services/watchlistService';
 import { recommendationService, getEffectiveTier } from '../services/recommendationService';
@@ -2518,6 +2520,11 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
             {duoSession.person1_name.toUpperCase()} & {(duoSession.person2_name || 'PARTNER').toUpperCase()} DECIDED
           </Text>
 
+          {/* Click-through to streaming — the decision → watch moment */}
+          <View style={{ width: '100%', maxWidth: 320 }}>
+            <WhereToWatch movieId={winner.id} tmdbId={tmdbIdFromMovieId(winner.id)} source="decide" />
+          </View>
+
           <Pressable
             style={{ backgroundColor: '#FFFFFF', borderRadius: borderRadius.xxl, paddingVertical: spacing.lg, paddingHorizontal: spacing.xxxl, marginTop: spacing.xxl }}
             onPress={() => setStep('mode-select')}
@@ -2557,6 +2564,9 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
               />
             </View>
           </View>
+          <Text style={{ fontSize: 9, color: colors.textMuted, letterSpacing: 1, textAlign: 'center' as const, marginBottom: spacing.sm }}>
+            THE MORE YOU RANK, THE SMARTER YOUR PICKS GET
+          </Text>
           <OnboardingProgressBar progress={progress} current={preferenceIndex} total={TOTAL_PREFERENCES} label="Setting your preferences" />
         </View>
       </CinematicBackground>
@@ -2650,17 +2660,14 @@ export function DecideScreen({ onNavigateToCompare }: DecideScreenProps) {
               {resultDetails?.runtime && ` · ${resultDetails.runtime}`}
             </Text>
 
-            {/* Streaming providers */}
-            {resultDetails?.streamingProviders && resultDetails.streamingProviders.length > 0 && (
-              <View style={styles.streamingSection}>
-                <Text style={styles.streamingLabel}>Streaming on</Text>
-                <View style={styles.providerLogos}>
-                  {resultDetails.streamingProviders.map((p, i) => (
-                    <Image key={i} source={{ uri: p.logoUrl }} style={styles.providerLogo} />
-                  ))}
-                </View>
-              </View>
-            )}
+            {/* Streaming click-through — logged as watch intent */}
+            <View style={{ width: '100%', maxWidth: 320 }}>
+              <WhereToWatch
+                movieId={champion.id}
+                tmdbId={(champion as any).tmdbId ?? tmdbIdFromMovieId(champion.id)}
+                source="decide"
+              />
+            </View>
 
             {/* Actions */}
             <View style={styles.resultActions}>

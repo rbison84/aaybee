@@ -16,6 +16,59 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Push delivery goes through the send-push Netlify function: the server
+// verifies the caller's JWT, builds the message from a template allowlist,
+// and reads the target's token with the service role. Clients cannot read
+// other users' tokens or send arbitrary content.
+const SEND_PUSH_URL =
+  Platform.OS === 'web'
+    ? '/.netlify/functions/send-push'
+    : 'https://aaybee.netlify.app/.netlify/functions/send-push';
+
+type PushTemplate =
+  | 'knockout_challenge'
+  | 'knockout_completed'
+  | 'friend_request'
+  | 'decide_turn'
+  | 'circle_daily'
+  | 'circle_results'
+  | 'referral';
+
+interface PushParams {
+  code?: string;
+  matchPercent?: number;
+  movieTitle?: string;
+  crewId?: string;
+  playedCount?: number;
+  totalCount?: number;
+}
+
+/**
+ * Ask the server to deliver a push to another user.
+ * Silently no-ops when there is no session (guests can't send pushes).
+ */
+async function requestPush(
+  targetUserId: string,
+  template: PushTemplate,
+  params: PushParams = {},
+): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+
+    await fetch(SEND_PUSH_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ targetUserId, template, params }),
+    });
+  } catch (error) {
+    console.error('[Notifications] Failed to request push:', error);
+  }
+}
+
 /**
  * Get the Expo push token for this device.
  */
@@ -55,65 +108,20 @@ async function getExpoPushToken(): Promise<string | null> {
   return tokenData.data;
 }
 
-/**
- * Send a push notification via Expo's push API.
- */
-async function sendPushNotification(
-  pushToken: string,
-  title: string,
-  body: string,
-  data?: Record<string, unknown>,
-): Promise<void> {
-  try {
-    await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        to: pushToken,
-        sound: 'default',
-        title,
-        body,
-        data,
-      }),
-    });
-  } catch (error) {
-    console.error('[Notifications] Failed to send push notification:', error);
-  }
-}
-
-/**
- * Fetch a user's push token from user_profiles.
- */
-async function getUserPushToken(userId: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('user_profiles')
-    .select('push_token')
-    .eq('id', userId)
-    .single();
-
-  if (error || !data?.push_token) {
-    return null;
-  }
-
-  return data.push_token;
-}
-
 export const notificationService = {
   /**
-   * Register for push notifications and save the token to user_profiles.
+   * Register for push notifications and save the token (owner-only table).
    */
   async registerForPushNotifications(userId: string): Promise<string | null> {
     const token = await getExpoPushToken();
     if (!token) return null;
 
     const { error } = await supabase
-      .from('user_profiles')
-      .update({ push_token: token })
-      .eq('id', userId);
+      .from('user_push_tokens')
+      .upsert(
+        { user_id: userId, token, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' },
+      );
 
     if (error) {
       console.error('[Notifications] Failed to save push token:', error);
@@ -123,83 +131,14 @@ export const notificationService = {
   },
 
   /**
-   * Notify a user that they've been challenged.
-   */
-  async notifyChallenge(
-    challengedUserId: string,
-    challengerName: string,
-    challengeCode: string,
-  ): Promise<void> {
-    const pushToken = await getUserPushToken(challengedUserId);
-    if (!pushToken) return;
-
-    await sendPushNotification(
-      pushToken,
-      'New Challenge!',
-      `${challengerName} challenged you! Tap to play.`,
-      { type: 'vs', code: challengeCode },
-    );
-  },
-
-  /**
-   * Notify the challenger that someone joined their challenge.
-   */
-  async notifyChallengeJoined(
-    challengerId: string,
-    challengedName: string,
-    challengeCode: string,
-  ): Promise<void> {
-    const pushToken = await getUserPushToken(challengerId);
-    if (!pushToken) return;
-
-    await sendPushNotification(
-      pushToken,
-      'Challenge Accepted!',
-      `${challengedName} joined your challenge!`,
-      { type: 'vs', code: challengeCode },
-    );
-  },
-
-  /**
-   * Notify the challenger that the challenged user has made their picks.
-   */
-  async notifyChallengerReady(
-    challengerId: string,
-    challengedName: string,
-    challengeCode: string,
-  ): Promise<void> {
-    const pushToken = await getUserPushToken(challengerId);
-    if (!pushToken) return;
-
-    await sendPushNotification(
-      pushToken,
-      'Your Turn!',
-      `${challengedName} made their picks! Your turn.`,
-      { type: 'vs', code: challengeCode },
-    );
-  },
-
-  /**
    * Notify a user that someone sent them a knockout challenge.
    */
   async notifyKnockoutChallenge(
     challengedUserId: string,
-    challengerName: string,
+    _challengerName: string,
     challengeCode: string,
   ): Promise<void> {
-    try {
-      const token = await getUserPushToken(challengedUserId);
-      if (token) {
-        await sendPushNotification(
-          token,
-          `${challengerName} challenged you!`,
-          '16 movies. One standing. Tap to play.',
-          { type: 'vs', code: challengeCode },
-        );
-      }
-    } catch (err) {
-      console.error('[NotificationService] notifyKnockoutChallenge error:', err);
-    }
+    await requestPush(challengedUserId, 'knockout_challenge', { code: challengeCode });
   },
 
   /**
@@ -207,23 +146,14 @@ export const notificationService = {
    */
   async notifyKnockoutCompleted(
     creatorId: string,
-    challengerName: string,
+    _challengerName: string,
     matchPercent: number,
     challengeCode: string,
   ): Promise<void> {
-    try {
-      const token = await getUserPushToken(creatorId);
-      if (token) {
-        await sendPushNotification(
-          token,
-          `${challengerName} played your challenge!`,
-          `${matchPercent}% taste match — see the results`,
-          { type: 'vs', code: challengeCode },
-        );
-      }
-    } catch (err) {
-      console.error('[NotificationService] notifyKnockoutCompleted error:', err);
-    }
+    await requestPush(creatorId, 'knockout_completed', {
+      code: challengeCode,
+      matchPercent,
+    });
   },
 
   /**
@@ -231,21 +161,9 @@ export const notificationService = {
    */
   async notifyFriendRequest(
     targetUserId: string,
-    fromUserName: string,
+    _fromUserName: string,
   ): Promise<void> {
-    try {
-      const token = await getUserPushToken(targetUserId);
-      if (token) {
-        await sendPushNotification(
-          token,
-          'New friend request',
-          `${fromUserName} wants to connect on Aaybee`,
-          { type: 'friend_request' },
-        );
-      }
-    } catch (err) {
-      console.error('[NotificationService] notifyFriendRequest error:', err);
-    }
+    await requestPush(targetUserId, 'friend_request');
   },
 
   /**
@@ -253,29 +171,20 @@ export const notificationService = {
    */
   async notifyDecideTurn(
     targetUserId: string,
-    proposerName: string,
+    _proposerName: string,
     movieTitle: string,
     sessionCode: string,
   ): Promise<void> {
-    try {
-      const token = await getUserPushToken(targetUserId);
-      if (token) {
-        await sendPushNotification(
-          token,
-          `${proposerName} picked ${movieTitle}`,
-          'Agree or disagree?',
-          { type: 'decide', code: sessionCode },
-        );
-      }
-    } catch (err) {
-      console.error('[NotificationService] notifyDecideTurn error:', err);
-    }
+    await requestPush(targetUserId, 'decide_turn', {
+      code: sessionCode,
+      movieTitle,
+    });
   },
 
   /**
    * Notify circle members who haven't played today that others have.
    */
-  async notifyCircleDaily(crewId: string, crewName: string, playedCount: number, totalCount: number): Promise<void> {
+  async notifyCircleDaily(crewId: string, _crewName: string, playedCount: number, totalCount: number): Promise<void> {
     try {
       // Fetch crew members who haven't played today
       const { data: members } = await supabase
@@ -297,15 +206,11 @@ export const notificationService = {
       const unplayedMembers = members.filter(m => !playedUserIds.has(m.user_id));
 
       for (const member of unplayedMembers) {
-        const token = await getUserPushToken(member.user_id);
-        if (token) {
-          await sendPushNotification(
-            token,
-            crewName,
-            `${playedCount}/${totalCount} have played today — don't be last`,
-            { type: 'daily', crewId },
-          );
-        }
+        await requestPush(member.user_id, 'circle_daily', {
+          crewId,
+          playedCount,
+          totalCount,
+        });
       }
     } catch (err) {
       console.error('[NotificationService] notifyCircleDaily error:', err);
@@ -315,7 +220,7 @@ export const notificationService = {
   /**
    * Notify all circle members that everyone has played.
    */
-  async notifyCircleResults(crewId: string, crewName: string): Promise<void> {
+  async notifyCircleResults(crewId: string, _crewName: string): Promise<void> {
     try {
       const { data: members } = await supabase
         .from('crew_members')
@@ -325,15 +230,7 @@ export const notificationService = {
       if (!members) return;
 
       for (const member of members) {
-        const token = await getUserPushToken(member.user_id);
-        if (token) {
-          await sendPushNotification(
-            token,
-            crewName,
-            "everyone's played — see how your circle ranked",
-            { type: 'daily', crewId },
-          );
-        }
+        await requestPush(member.user_id, 'circle_results', { crewId });
       }
     } catch (err) {
       console.error('[NotificationService] notifyCircleResults error:', err);
@@ -343,20 +240,8 @@ export const notificationService = {
   /**
    * Notify a user that someone they invited just joined.
    */
-  async notifyNewReferral(referrerId: string, newUserName: string): Promise<void> {
-    try {
-      const token = await getUserPushToken(referrerId);
-      if (token) {
-        await sendPushNotification(
-          token,
-          'Your friend joined!',
-          `${newUserName} just joined Aaybee — challenge them to see who has better taste`,
-          { type: 'referral' },
-        );
-      }
-    } catch (err) {
-      console.error('[NotificationService] notifyNewReferral error:', err);
-    }
+  async notifyNewReferral(referrerId: string, _newUserName: string): Promise<void> {
+    await requestPush(referrerId, 'referral');
   },
 
   /**
@@ -375,5 +260,34 @@ export const notificationService = {
     );
 
     return () => subscription.remove();
+  },
+
+  /**
+   * Schedule (or reschedule) the local evening reminder for the daily.
+   * Local notification only — no server involved. No-op on web.
+   */
+  async scheduleDailyReminder(hour: number = 19): Promise<void> {
+    if (Platform.OS === 'web' || !Device.isDevice) return;
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== 'granted') return;
+
+      await Notifications.cancelScheduledNotificationAsync('daily-reminder').catch(() => {});
+      await Notifications.scheduleNotificationAsync({
+        identifier: 'daily-reminder',
+        content: {
+          title: "Today's Aaybee Daily is up",
+          body: 'Keep your streak alive — rank today\'s 9 movies',
+          data: { type: 'daily' },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour,
+          minute: 0,
+        },
+      });
+    } catch (err) {
+      console.error('[NotificationService] scheduleDailyReminder error:', err);
+    }
   },
 };

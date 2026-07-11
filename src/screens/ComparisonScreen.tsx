@@ -317,7 +317,7 @@ export function ComparisonScreen({ onOpenRanking, onOpenDiscover, onOpenDecide, 
 
     // Record the comparison
     const previousTotal = totalComparisons;
-    recordComparison(winnerMovie.id, loserMovie.id, false);
+    recordComparison(winnerMovie.id, loserMovie.id, false, 'discover');
 
     // Update session
     const newSession = updateSession(

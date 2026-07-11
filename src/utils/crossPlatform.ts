@@ -114,3 +114,42 @@ export async function shareContent(content: { message: string; title?: string })
 export function getStorageKeyPrefix(): string {
   return Platform.OS === 'web' ? 'web_' : 'native_';
 }
+
+/**
+ * Open WhatsApp with a prefilled message. wa.me works on web, iOS and
+ * Android (falls back to WhatsApp Web on desktop). Returns false if the
+ * URL couldn't be opened so callers can fall back to the generic share.
+ */
+export async function shareToWhatsApp(message: string): Promise<boolean> {
+  const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  try {
+    if (Platform.OS === 'web') {
+      window.open(url, '_blank', 'noopener');
+      return true;
+    }
+    const { Linking } = require('react-native');
+    await Linking.openURL(url);
+    return true;
+  } catch (error) {
+    console.error('WhatsApp share failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Copy text to the clipboard on web and native.
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (Platform.OS === 'web') {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    const Clipboard = require('expo-clipboard');
+    await Clipboard.setStringAsync(text);
+    return true;
+  } catch (error) {
+    console.error('Clipboard copy failed:', error);
+    return false;
+  }
+}

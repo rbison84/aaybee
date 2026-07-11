@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -23,6 +23,7 @@ import { calculateTopGenres } from '../services/directorService';
 import { computeGenreAffinity } from '../utils/genreAffinity';
 import { TasteRadar } from '../components/TasteRadar';
 import { computeTasteAxes, getArchetype, TasteAxes, AXIS_LABELS } from '../utils/tasteAxes';
+import { shareToWhatsApp } from '../utils/crossPlatform';
 import { Movie, Genre } from '../types';
 
 // ============================================
@@ -31,6 +32,8 @@ import { Movie, Genre } from '../types';
 
 interface TasteProfileScreenProps {
   onClose: () => void;
+  /** Navigate to the VS flow with a preselected opponent */
+  onChallenge?: (friendId: string, friendName: string) => void;
 }
 
 interface RarePick {
@@ -44,7 +47,7 @@ interface RarePick {
 // MAIN COMPONENT
 // ============================================
 
-export function TasteProfileScreen({ onClose }: TasteProfileScreenProps) {
+export function TasteProfileScreen({ onClose, onChallenge }: TasteProfileScreenProps) {
   const { getRankedMovies, totalComparisons, userSession, postOnboardingComparisons } = useAppStore();
   const { user } = useAuth();
   const haptics = useHaptics();
@@ -215,31 +218,35 @@ export function TasteProfileScreen({ onClose }: TasteProfileScreenProps) {
     return strengths.length >= 3 ? strengths : null;
   }, [rankedMovies, globalRankings, userSession.preferences.vibes, postOnboardingComparisons]);
 
-  // Handle share
-  const handleShare = async () => {
-    haptics.medium();
-
+  // The Taste DNA artifact — identity card for group chats
+  const buildTasteCardText = useCallback((): string => {
     const genreLabels: Record<string, string> = {
       action: 'Action', comedy: 'Comedy', drama: 'Drama', scifi: 'Sci-Fi',
       romance: 'Romance', thriller: 'Thriller', animation: 'Animation',
       horror: 'Horror', adventure: 'Adventure', fantasy: 'Fantasy',
     };
-    const genreNames = tasteDNA.topGenreNames.map(g => genreLabels[g] || g).join(', ');
+    const genreNames = tasteDNA.topGenreNames.map(g => genreLabels[g] || g).join(' · ');
 
-    const topStrength = genreStrengths?.[0];
-    const strengthLine = topStrength
-      ? `\nTop Strength: ${topStrength.genre} (${topStrength.delta > 0 ? 'above' : 'below'} avg)\n`
-      : '';
+    const lines = [
+      `my taste dna on aaybee: ${archetype.name.toUpperCase()}`,
+      `\u{1F3AC} era: ${tasteDNA.eraLabel}${tasteDNA.avgYear ? ` (${tasteDNA.avgYear})` : ''}`,
+      `\u{1F30A} crowd: ${tasteDNA.crowdLabel} (${tasteDNA.crowdPct}% mainstream)`,
+      `\u{1F3AD} genres: ${genreNames}`,
+    ];
+    if (rarePick) {
+      lines.push(`\u{1F48E} rarest pick: ${rarePick.movie.title} (my #${rarePick.userRank})`);
+    }
+    if (tasteTwin?.displayName) {
+      lines.push(`\u{1F9EC} taste twin: ${tasteTwin.displayName} (${Math.round(tasteTwin.rSquared * 100)}%)`);
+    }
+    lines.push(`#1: ${top4[0]?.title || '???'}`);
+    lines.push(`where do you land? https://aaybee.netlify.app${user?.id ? `/?ref=${user.id}` : ''}`);
+    return lines.join('\n');
+  }, [tasteDNA, archetype, rarePick, tasteTwin, top4, user?.id]);
 
-    const shareText = `My Taste DNA: ${archetype.name}
-Era: ${tasteDNA.eraLabel}${tasteDNA.avgYear ? ` (avg. ${tasteDNA.avgYear})` : ''}
-Crowd: ${tasteDNA.crowdLabel} (${tasteDNA.crowdPct}%)
-Focus: ${genreNames}${strengthLine}
-My Top 4:
-${top4.map((m, i) => `${i + 1}. ${m.title}`).join('\n')}
-
-Find your taste profile at aaybee.netlify.app`;
-
+  const handleShare = async () => {
+    haptics.medium();
+    const shareText = buildTasteCardText();
     try {
       if (Platform.OS === 'web') {
         if (navigator.share) {
@@ -253,6 +260,11 @@ Find your taste profile at aaybee.netlify.app`;
     } catch (error) {
       console.error('Share error:', error);
     }
+  };
+
+  const handleWhatsAppShare = () => {
+    haptics.medium();
+    shareToWhatsApp(buildTasteCardText());
   };
 
   if (isLoading) {
@@ -297,12 +309,18 @@ Find your taste profile at aaybee.netlify.app`;
         </Animated.View>
 
         {/* SHARE TASTE PROFILE */}
-        <Animated.View entering={FadeInDown.delay(30)}>
+        <Animated.View entering={FadeInDown.delay(30)} style={{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginBottom: 16 }}>
           <Pressable
-            style={{ backgroundColor: '#FFFFFF', borderRadius: 20, paddingVertical: 16, marginHorizontal: 16, marginBottom: 16, alignItems: 'center' as const, flexDirection: 'row' as const, justifyContent: 'center' as const, gap: 8 }}
+            style={{ flex: 1, backgroundColor: '#25D366', borderRadius: 20, paddingVertical: 16, alignItems: 'center' as const }}
+            onPress={handleWhatsAppShare}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '800', color: '#000', letterSpacing: 1.5, textTransform: 'uppercase' as const }}>WHATSAPP</Text>
+          </Pressable>
+          <Pressable
+            style={{ flex: 1, backgroundColor: '#FFFFFF', borderRadius: 20, paddingVertical: 16, alignItems: 'center' as const }}
             onPress={handleShare}
           >
-            <Text style={{ fontSize: 14, fontWeight: '800', color: '#000', letterSpacing: 2, textTransform: 'uppercase' as const }}>SHARE YOUR TASTE</Text>
+            <Text style={{ fontSize: 12, fontWeight: '800', color: '#000', letterSpacing: 1.5, textTransform: 'uppercase' as const }}>SHARE YOUR TASTE</Text>
           </Pressable>
         </Animated.View>
 
@@ -453,6 +471,17 @@ Find your taste profile at aaybee.netlify.app`;
                   {Math.round(tasteTwin.rSquared * 100)}% taste match
                 </Text>
               </View>
+              {onChallenge && (
+                <Pressable
+                  style={styles.tasteTwinChallengeButton}
+                  onPress={() => {
+                    haptics.light();
+                    onChallenge(tasteTwin.userId, tasteTwin.displayName || 'Taste Twin');
+                  }}
+                >
+                  <Text style={styles.tasteTwinChallengeText}>CHALLENGE</Text>
+                </Pressable>
+              )}
             </View>
           </Animated.View>
         )}
@@ -776,6 +805,18 @@ const styles = StyleSheet.create({
     ...typography.tiny,
     color: colors.accent,
     marginTop: 2,
+  },
+  tasteTwinChallengeButton: {
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.round,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  tasteTwinChallengeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.background,
+    letterSpacing: 1,
   },
 
   // Genre Strengths

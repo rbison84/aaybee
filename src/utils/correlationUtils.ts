@@ -134,31 +134,21 @@ export async function calculateSmartCorrelation(
   userBId: string
 ): Promise<SmartCorrelationResult | null> {
   try {
-    // Fetch top 25 movies for both users (we might need to expand)
-    const [userAResult, userBResult] = await Promise.all([
-      supabase
-        .from('user_movies')
-        .select('movie_id, beta')
-        .eq('user_id', userAId)
-        .eq('status', 'known')
-        .order('beta', { ascending: false })
-        .limit(TOP_25_LIMIT),
-      supabase
-        .from('user_movies')
-        .select('movie_id, beta')
-        .eq('user_id', userBId)
-        .eq('status', 'known')
-        .order('beta', { ascending: false })
-        .limit(TOP_25_LIMIT),
-    ]);
+    // Fetch top 25 movies for both users via scoped RPC (cross-user reads
+    // of user_movies go through get_known_rankings)
+    const { data: rankingRows, error: rankingError } = await supabase.rpc('get_known_rankings', {
+      target_ids: [userAId, userBId],
+      per_user_limit: TOP_25_LIMIT,
+    });
 
-    if (userAResult.error || userBResult.error) {
+    if (rankingError) {
       console.error('[SmartCorrelation] Failed to fetch user movies');
       return null;
     }
 
-    const userAMovies = userAResult.data || [];
-    const userBMovies = userBResult.data || [];
+    const rows = (rankingRows || []) as { user_id: string; movie_id: string; beta: number }[];
+    const userAMovies = rows.filter(r => r.user_id === userAId);
+    const userBMovies = rows.filter(r => r.user_id === userBId);
 
     if (userAMovies.length < 10 || userBMovies.length < 10) {
       // Not enough ranked movies for meaningful correlation
@@ -396,19 +386,16 @@ export async function getUserTopMovies(
   userId: string,
   limit: number = TOP_15_LIMIT
 ): Promise<TopMovieData[]> {
-  const { data, error } = await supabase
-    .from('user_movies')
-    .select('movie_id, beta')
-    .eq('user_id', userId)
-    .eq('status', 'known')
-    .order('beta', { ascending: false })
-    .limit(limit);
+  const { data, error } = await supabase.rpc('get_known_rankings', {
+    target_ids: [userId],
+    per_user_limit: limit,
+  });
 
   if (error || !data) {
     return [];
   }
 
-  return data.map((m, i) => ({
+  return (data as { movie_id: string; beta: number }[]).map((m, i) => ({
     movie_id: m.movie_id,
     beta: m.beta,
     rank: i + 1,

@@ -57,7 +57,7 @@ export function AuthScreen({ onClose, onSuccess, initialMode = 'signup' }: AuthS
       // Update user metadata and profile with name
       if (result.user) {
         await supabase.auth.updateUser({ data: { display_name: name } });
-        await supabase.from('user_profiles').update({ display_name: name, email }).eq('id', result.user.id);
+        await supabase.from('user_profiles').update({ display_name: name }).eq('id', result.user.id);
       }
       clearStoredRefParam();
       handleSuccess();

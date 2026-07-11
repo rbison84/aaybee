@@ -24,6 +24,10 @@ import { colors, spacing, borderRadius } from '../theme/cinematic';
 import { QRCode } from './QRCode';
 import { friendService, FriendWithProfile } from '../services/friendService';
 import { knockoutService, KnockoutChallenge } from '../services/knockoutService';
+import { storeLastDisagreement } from '../services/shareService';
+import { shareToWhatsApp, copyToClipboard } from '../utils/crossPlatform';
+import { EngineProgressLine } from './EngineProgress';
+import { buildHotTake, HotTakeResult } from '../utils/hotTake';
 import {
   BracketMovie,
   BracketPick,
@@ -69,6 +73,7 @@ export function BracketResults({
   const haptics = useHaptics();
   const { user } = useAuth();
   const [copied, setCopied] = useState(false);
+  const [chainCopied, setChainCopied] = useState(false);
   const [friends, setFriends] = useState<FriendWithProfile[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [friendSearch, setFriendSearch] = useState('');
@@ -82,7 +87,28 @@ export function BracketResults({
   const shareUrl = user?.id ? (baseShareUrl.includes('?') ? `${baseShareUrl}&ref=${user.id}` : `${baseShareUrl}?ref=${user.id}`) : baseShareUrl;
   const displayName = playerName || user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'Someone';
 
-  const shareMessage = `I just ranked 16 movies on Aaybee. Think we have the same taste? Play the same bracket and find out:\n\n${shareUrl}`;
+  // Hot take: winner vs the movie it beat in the final, backed by global data
+  const [hotTake, setHotTake] = useState<HotTakeResult | null>(null);
+  useEffect(() => {
+    const finalPick = picks.find(p => p.round === 3);
+    if (!finalPick) return;
+    const semiWinners = picks.filter(p => p.round === 2).map(p => p.winnerIdx);
+    const runnerUpIdx = semiWinners.find(idx => idx !== finalPick.winnerIdx);
+    const runnerUp = runnerUpIdx !== undefined ? movies[runnerUpIdx] : null;
+    if (!runnerUp || runnerUp.id === winnerMovie.id) return;
+
+    buildHotTake(winnerMovie.id, winnerMovie.title, runnerUp.id, runnerUp.title)
+      .then((take) => {
+        setHotTake(take);
+        // Seed the SMS invite hook — contactService reads this for invite text
+        if (take) storeLastDisagreement(take.line).catch(() => {});
+      })
+      .catch(() => {});
+  }, [picks, movies, winnerMovie.id, winnerMovie.title]);
+
+  const shareMessage = hotTake
+    ? `${hotTake.line} think you can beat my bracket?\n\n${shareUrl}`
+    : `I just ranked 16 movies on Aaybee. Think we have the same taste? Play the same bracket and find out:\n\n${shareUrl}`;
 
   // Load friends for the picker
   useEffect(() => {
@@ -133,7 +159,45 @@ export function BracketResults({
           {winnerMovie.year && (
             <Text style={styles.winnerYear}>{winnerMovie.year}</Text>
           )}
+          {/* Game → data → recs, made visible: a 16-bracket adds 15 rankings */}
+          <EngineProgressLine added={15} />
         </Animated.View>
+
+        {/* Hot take — identity-flex card when the winner pick is contrarian */}
+        {hotTake && (
+          <Animated.View entering={FadeInDown.delay(150).duration(400)} style={styles.hotTakeCard}>
+            <Text style={styles.hotTakeLabel}>HOT TAKE</Text>
+            <Text style={styles.hotTakeText}>{hotTake.line}</Text>
+          </Animated.View>
+        )}
+
+        {/* Guest chain: pass the bracket on BEFORE the signup ask — each new
+            player recruiting the next is what makes invite cohorts compound */}
+        {isGuest && (
+          <Animated.View entering={FadeInDown.delay(200).duration(400)} style={styles.chainCard}>
+            <Text style={styles.chainTitle}>THINK SOMEONE WILL DISAGREE?</Text>
+            <Text style={styles.chainSub}>SEND THEM THIS EXACT BRACKET — SEE HOW YOUR PICKS COMPARE</Text>
+            <Pressable
+              style={[styles.shareButton, styles.whatsAppButton, { marginTop: spacing.md }]}
+              onPress={() => shareToWhatsApp(shareMessage)}
+            >
+              <Text style={styles.shareButtonText}>SEND ON WHATSAPP</Text>
+            </Pressable>
+            <Pressable
+              style={styles.chainCopyButton}
+              onPress={async () => {
+                const ok = await copyToClipboard(shareMessage);
+                if (ok) {
+                  setChainCopied(true);
+                  haptics.success();
+                  setTimeout(() => setChainCopied(false), 2000);
+                }
+              }}
+            >
+              <Text style={styles.chainCopyText}>{chainCopied ? 'COPIED!' : 'COPY LINK'}</Text>
+            </Pressable>
+          </Animated.View>
+        )}
 
         {/* 2. Taste match (shown when challenger completes) */}
         {hasMatch && (
@@ -220,6 +284,13 @@ export function BracketResults({
 
           <Pressable style={styles.shareButton} onPress={handleShare}>
             <Text style={styles.shareButtonText}>{copied ? 'COPIED' : 'SHARE LINK'}</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.shareButton, styles.whatsAppButton]}
+            onPress={() => shareToWhatsApp(shareMessage)}
+          >
+            <Text style={styles.shareButtonText}>SEND ON WHATSAPP</Text>
           </Pressable>
         </Animated.View>
 
@@ -321,6 +392,19 @@ const styles = StyleSheet.create({
   qrUrl: { fontSize: 10, fontWeight: '400', color: colors.textMuted, letterSpacing: 0.5, marginTop: spacing.lg, textAlign: 'center' },
   shareButton: { backgroundColor: colors.textPrimary, borderRadius: borderRadius.xxl, paddingVertical: spacing.lg, alignItems: 'center', width: '100%' },
   shareButtonText: { fontSize: 14, fontWeight: '800', color: colors.background, letterSpacing: 2 },
+  whatsAppButton: { backgroundColor: '#25D366', marginTop: spacing.sm },
+
+  // Hot take
+  hotTakeCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.accent, borderRadius: borderRadius.xxl, padding: spacing.xl, alignItems: 'center', marginBottom: spacing.xxl },
+  hotTakeLabel: { fontSize: 10, fontWeight: '700', color: colors.accent, letterSpacing: 2, marginBottom: spacing.sm },
+  hotTakeText: { fontSize: 13, fontWeight: '600', color: colors.textPrimary, letterSpacing: 0.5, textAlign: 'center', lineHeight: 20 },
+
+  // Guest chain
+  chainCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: borderRadius.xxl, padding: spacing.xl, alignItems: 'center', marginBottom: spacing.xxl },
+  chainTitle: { fontSize: 14, fontWeight: '800', color: colors.textPrimary, letterSpacing: 2, marginBottom: spacing.xs, textAlign: 'center' },
+  chainSub: { fontSize: 9, fontWeight: '400', color: colors.textMuted, letterSpacing: 0.5, textAlign: 'center', lineHeight: 14 },
+  chainCopyButton: { paddingVertical: spacing.md, alignItems: 'center' },
+  chainCopyText: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, letterSpacing: 1 },
 
   // Bracket
   bracketSection: { marginBottom: spacing.xxl },
