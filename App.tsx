@@ -22,18 +22,44 @@ import { AuthScreen } from './src/screens/AuthScreen';
 // Lazy-load every screen behind the landing page so the entry bundle stays
 // small — critical for invitees arriving on shared links, who bounce during
 // long first loads. Each screen becomes its own chunk on web.
-const ComparisonScreen = React.lazy(() => import('./src/screens/ComparisonScreen').then(m => ({ default: m.ComparisonScreen })));
-const DailyScreen = React.lazy(() => import('./src/screens/DailyScreen').then(m => ({ default: m.DailyScreen })));
-const DecideScreen = React.lazy(() => import('./src/screens/DecideScreen').then(m => ({ default: m.DecideScreen })));
-const ChallengeScreen = React.lazy(() => import('./src/screens/ChallengeScreen').then(m => ({ default: m.ChallengeScreen })));
-const FriendsScreen = React.lazy(() => import('./src/screens/FriendsScreen').then(m => ({ default: m.FriendsScreen })));
-const MyGamesScreen = React.lazy(() => import('./src/screens/MyGamesScreen').then(m => ({ default: m.MyGamesScreen })));
-const TasteProfileScreen = React.lazy(() => import('./src/screens/TasteProfileScreen').then(m => ({ default: m.TasteProfileScreen })));
-const SettingsScreen = React.lazy(() => import('./src/screens/SettingsScreen').then(m => ({ default: m.SettingsScreen })));
-const DiscoverScreen = React.lazy(() => import('./src/screens/DiscoverScreen').then(m => ({ default: m.DiscoverScreen })));
-const YourRankingTab = React.lazy(() => import('./src/components/rankings/YourRankingTab').then(m => ({ default: m.YourRankingTab })));
-const Aaybee100Screen = React.lazy(() => import('./src/screens/Aaybee100Screen').then(m => ({ default: m.Aaybee100Screen })));
-const TvScreen = React.lazy(() => import('./src/screens/TvScreen').then(m => ({ default: m.TvScreen })));
+//
+// If a chunk fails to load (a deploy happened mid-session, so the cached
+// shell points at purged chunk files), reload once to pick up the new
+// version instead of stranding the user on "requiring unknown module".
+const CHUNK_RELOAD_KEY = 'aaybee_chunk_reloaded';
+function lazyScreen<T extends React.ComponentType<any>>(factory: () => Promise<{ default: T }>) {
+  return React.lazy(() =>
+    factory().then(mod => {
+      if (Platform.OS === 'web') {
+        try { sessionStorage.removeItem(CHUNK_RELOAD_KEY); } catch {}
+      }
+      return mod;
+    }).catch(err => {
+      if (Platform.OS === 'web') {
+        try {
+          if (!sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+            sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
+            window.location.reload();
+            return new Promise<never>(() => {}); // reloading — never resolve
+          }
+        } catch {}
+      }
+      throw err;
+    })
+  );
+}
+const ComparisonScreen = lazyScreen(() => import('./src/screens/ComparisonScreen').then(m => ({ default: m.ComparisonScreen })));
+const DailyScreen = lazyScreen(() => import('./src/screens/DailyScreen').then(m => ({ default: m.DailyScreen })));
+const DecideScreen = lazyScreen(() => import('./src/screens/DecideScreen').then(m => ({ default: m.DecideScreen })));
+const ChallengeScreen = lazyScreen(() => import('./src/screens/ChallengeScreen').then(m => ({ default: m.ChallengeScreen })));
+const FriendsScreen = lazyScreen(() => import('./src/screens/FriendsScreen').then(m => ({ default: m.FriendsScreen })));
+const MyGamesScreen = lazyScreen(() => import('./src/screens/MyGamesScreen').then(m => ({ default: m.MyGamesScreen })));
+const TasteProfileScreen = lazyScreen(() => import('./src/screens/TasteProfileScreen').then(m => ({ default: m.TasteProfileScreen })));
+const SettingsScreen = lazyScreen(() => import('./src/screens/SettingsScreen').then(m => ({ default: m.SettingsScreen })));
+const DiscoverScreen = lazyScreen(() => import('./src/screens/DiscoverScreen').then(m => ({ default: m.DiscoverScreen })));
+const YourRankingTab = lazyScreen(() => import('./src/components/rankings/YourRankingTab').then(m => ({ default: m.YourRankingTab })));
+const Aaybee100Screen = lazyScreen(() => import('./src/screens/Aaybee100Screen').then(m => ({ default: m.Aaybee100Screen })));
+const TvScreen = lazyScreen(() => import('./src/screens/TvScreen').then(m => ({ default: m.TvScreen })));
 import { GlobalHeader } from './src/components/GlobalHeader';
 import { CinematicBackground } from './src/components/cinematic';
 // SearchIcon removed — no longer used in App shell
