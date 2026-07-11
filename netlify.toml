@@ -2,6 +2,14 @@
   publish = "dist"
   command = "npm install && npx expo export --platform web && cp public/_redirects dist/_redirects"
 
+# These EXPO_PUBLIC_* values are client keys by design — they are compiled
+# into the web bundle so the app can call Supabase (anon key, protected by
+# RLS) and TMDB from the browser. They are NOT secrets, so the scanner is
+# told to ignore them. The service-role key is deliberately NOT listed here:
+# it must never appear in any build output.
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "EXPO_PUBLIC_SUPABASE_URL,EXPO_PUBLIC_SUPABASE_ANON_KEY,EXPO_PUBLIC_TMDB_API_TOKEN"
+
 # SPA fallback — serve index.html for all routes
 [[redirects]]
   from = "/*"

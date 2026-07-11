@@ -7,8 +7,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const SUPABASE_URL = 'https://mudhuegqmvlibsutbbqh.supabase.co';
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11ZGh1ZWdxbXZsaWJzdXRiYnFoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTU2NTU5OSwiZXhwIjoyMDg1MTQxNTk5fQ.p3ztxTCnXQvc8TfJjJ10s9CyNp46dNOk6JuAAx7ztTE';
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // Read the migration SQL
 const migrationPath = path.join(__dirname, '..', 'supabase', 'migrations', '20240205_group_decide.sql');

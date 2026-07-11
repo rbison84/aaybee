@@ -9,7 +9,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const TMDB_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3NmE0M2IyZDRjNzczYjIwNTk2ZWM2M2Q4OWE4MzM4NiIsIm5iZiI6MTc0MDI1NjE1MS4wNjA5OTk5LCJzdWIiOiI2N2JhMzM5NzU1ZTM5OTRiYmQ0NjY5OWQiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.AkPI68pg5yxF79_qmR6xv9h2f_UHqKNi_mv_MiSg8WY';
+const TMDB_TOKEN = process.env.EXPO_PUBLIC_TMDB_API_TOKEN;
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
 
